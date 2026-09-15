@@ -769,6 +769,49 @@ finding's plane is the difference between "someone's deploy broke" and "the mode
 difficult". **Mobile is out of scope** — a desktop analysis tool, and pretending otherwise
 spends the budget on a layout no reviewer opens on a phone.
 
+### What Angular 22 offers that this app does not use, and why
+
+Checked against the installed 22.1.6 typings and the migration manifests the CLI ships — what
+the toolchain bundles as a migration is what it considers superseded; a blog post is not
+evidence. Adopted: signals-only authoring everywhere, including the last classic component
+(`input()`, `viewChild.required`, `effect`, `DestroyRef`, `afterNextRender` for first paint);
+built-in control flow, now enforced by a test; the Material configuration API (`mat.theme((…
+theme-type: dark …))`) with none of the pre-v18 theming surface. Rejected, each for a reason
+specific to this app:
+
+- **`@defer` blocks.** The only payload worth deferring is ECharts, and it is already behind
+  route-level `loadComponent`: measured this session, initial is 307.51 kB raw / 82.07 kB
+  transferred while the overview chunk sits at 552.62 kB / 159.19 kB and loads only when that
+  route opens. The chart is above the fold at 1280 px, so a viewport trigger would fire
+  immediately — the net effect would be a placeholder state to design, test and flash in place
+  of a boundary the router already provides. Deferred views pay off below the fold or behind a
+  condition; this one is neither.
+- **`resource()`, and `httpResource()` which this version does not export from
+  `@angular/common/http` (verified against the installed typings).** `resource()` was evaluated
+  for the cached per-id finding detail and rejected: its state reloads on a parameter change and
+  has no reset, so an id-keyed cache plus the global `busy` counter and the single
+  human-readable error sentence would need a parameter-generation trick and status-watching
+  effects to reproduce the fifteen lines `track()` already carries.
+- **`linkedSignal()`.** Nothing here needs write-triggered derived state. Every derived value is
+  a read-time computation — `preset`, `totalCount`, `canPrev`/`canNext`, the page slice — which
+  is what `computed()` is for.
+- **Zoneless configuration.** There is nothing to configure: 22 defaults to zoneless, the core's
+  `ZONELESS_ENABLED` token has factory `() => true`, and `zone.js` is not a dependency. Stated
+  because it inverts the usual migration advice — opting *out* is the explicit act.
+- **`model()` and `output()`.** No component needs two-way binding, because the store owns state
+  and children call methods on it; and `output()` replaced nothing, since no `@Output` or
+  `EventEmitter` ever existed here.
+- **SSR, hydration, incremental hydration.** Excluded by the product, not by effort: a localhost
+  dashboard over a local SQLite index has no crawlable or shareable URL to hydrate.
+  `provideBrowserGlobalErrorListeners()` is used because it costs nothing.
+- **Signal forms.** The rail's controls are native `<select>` and `<button>`, and every value
+  they can write comes from the vocabulary the server published; anything else is a 400 that
+  names the allowed set. A validation library earns its place on typed user input, which this
+  screen does not have.
+- **Removing the now-redundant `standalone: true`.** Standalone is the default since v19 and the
+  flag is not deprecated in 22.1. It stays: a reviewer reading one file should not have to
+  recall which default applies, and it costs nothing at runtime.
+
 ## 9. Open points, in priority order
 
 1. **Cross-stream causality.** Correlate `parentSession`/`origin` so a subagent's write
