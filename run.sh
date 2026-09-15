@@ -55,6 +55,14 @@ if [ ! -d frontend/node_modules ]; then
   ( cd frontend && npm install )
 fi
 
+# The Angular CLI asks, once per machine, whether to share pseudonymous usage data.
+# In a terminal it can ask; with stdin on /dev/null it reads an immediate EOF and aborts
+# with "An unhandled exception occurred: User force closed the prompt with 0 null".
+# `cli.analytics: false` in angular.json does NOT suppress that question — only a
+# recorded answer or this variable does. Set here so a reviewer on a clean machine is
+# never greeted by a telemetry prompt from this project, and never crashes on it.
+export NG_CLI_ANALYTICS=false
+
 ( cd frontend && npm start ) < /dev/null &
 FE=$!
 
