@@ -531,7 +531,8 @@ step       (session_id, source_file, turn, step, started_at, ended_at,
             input_tokens, output_tokens, decode_tps, ttft_ms,
             timing_source)              -- 'chunk-events' | 'embedded-stream'
 tool_call  (id, session_id, source_file, turn, step, seq, name, started_at, ended_at,
-            duration_ms, error_code, plane, path_hint)
+            duration_ms, error_code, plane, path_hint,
+            outcome_only)                 -- 1 for a tool/result whose tool/call never appeared
 finding    (id, session_id, source_file, detector, plane, category, code,
             confidence NULL when unattributed, path_hint, seq, stale_seq, cause_seq,
             occurred_at, summary)          -- occurred_at is the EVENT time, not the index time;
@@ -552,6 +553,11 @@ is what a real install would branch on when a `V2` exists.
 
 `(session_id, source_file)` is the stream key everywhere (§3.2); no seq-based comparison is
 ever performed across streams.
+
+A `tool/result` whose `tool/call` event is absent is stored but marked
+(`outcome_only = 1`): no outcome is lost, but such a row is not an observed call, so marked
+rows are excluded from every rate denominator (§7) — and `name` stays `NULL` as a *consequence*
+of the missing call; the column is the marker, never the null name.
 
 `step.timing_source` records which extractor produced the two derived columns. It is the
 provenance label §3.3 argues for, stored per row rather than inferred from a join back to
@@ -628,9 +634,18 @@ install**, so grouping by version yields a single row. Its value on real data is
 only axis with more than one row to compare. Grouping by schema is still offered and is
 informative for a different reason than expected: §3.3 measured the two conventions as
 **equivalent** on throughput, so a schema cohort showing a violation-rate gap is evidence about
-behaviour rather than an artifact of what the log happens to record. Rates are **findings per 1,000 tool
-calls**, and deltas are shown in percentage points against the chosen baseline cohort — raw counts
-would just report which machine has been running longer. A harness-version demo requires
+behaviour rather than an artifact of what the log happens to record. Rates are **findings per 1,000
+observed tool calls**, and deltas are shown in percentage points against the chosen baseline cohort —
+raw counts would just report which machine has been running longer. Every denominator counts
+`outcome_only = 0` rows only, and the table deliberately holds more rows than the rates use: the
+measured corpus carries 16,450 `tool/call` events but 17,244 `tool_call` rows, because 794
+`tool/result` events arrived without their `tool/call` ever appearing in the stream — 4.2% of V0's
+rows, 5.5% of V3's (§6). A result without a call is stored so no outcome is lost, but it is not a
+call, and counting it in the denominators would bias the cross-convention comparison in the direction
+this tool exists to measure — the convention that drops more calls looks relatively cleaner, and the
+bias is non-uniform (4.2% vs 5.5%), so a gap read off raw row counts is not the gap that exists.
+This is a trade-off the reviewer should see, not a footnote: the table keeps rows the rates do not
+count. A harness-version demo requires
 the fixture corpus, which ships two synthetic versions. The screen states which basis it is
 showing. A tool that silently presents a one-row comparison as a regression analysis has
 answered a question it was not asked.
