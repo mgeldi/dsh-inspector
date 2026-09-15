@@ -732,9 +732,17 @@ browser test harness in three hours; a real gap, named rather than omitted silen
 ## 12. Running it
 
 ```bash
-./run.sh                     # backend :8080, Angular dev server proxying /api
-java -jar backend/target/*.jar --inspector.dsh-home=$HOME/.dsh   # real sessions
+./run.sh                     # backend :8091, Angular dev server :4300 proxying /api
+java -jar backend/target/*.jar --inspector.corpus=$HOME/.dsh/sessions   # real sessions
 ```
+
+**Ports are a design constraint, not a default.** The inspector runs *beside* the tool it
+observes, on a machine already serving a web UI, an inference endpoint and whatever else a
+developer has started — on the build machine all three of the obvious choices were occupied.
+So the backend defaults to **8091** and the dev server to **4300**, both configurable, and a
+collided port fails at startup with the port named in the message rather than an ambiguous
+connection error. Silently failing to bind, or binding something already owned, is precisely
+the failure you do not want in a tool whose whole job is reporting on another process.
 
 Default data source is the committed synthetic corpus, so a reviewer sees a populated
 dashboard — with real-looking violations and both schema conventions represented — on first
