@@ -531,7 +531,8 @@ tool_call  (id, session_id, source_file, turn, step, seq, name, started_at, ende
             duration_ms, error_code, plane, path_hint)
 finding    (id, session_id, source_file, detector, plane, category, code,
             confidence NULL when unattributed, path_hint, seq, stale_seq, cause_seq,
-            created_at, summary)          -- summary: generated sentence, no user text
+            occurred_at, summary)          -- occurred_at is the EVENT time, not the index time;
+                                           -- summary is a generated sentence, no user text
 shell_evidence (finding_id, seq, verb_class, path_hint, excerpt_redacted)   -- config-gated §4.1
 meta       (key, value)   -- schema_version, and nothing else
 ```
@@ -574,7 +575,7 @@ different justification from speculative machinery — the cost is paid once at 
 repeatedly in complexity — but it is still a call against the rule in §2.2 and it is labelled as
 one.
 
-Indexes on `finding(plane, category, created_at)`, `tool_call(name, error_code)`,
+Indexes on `finding(plane, category, occurred_at)`, `tool_call(name, error_code)`,
 `step(session_id, source_file, turn, step)`. There is deliberately **no index on
 `path_hint`**: Detector 1 builds its touched-set while streaming during ingest, so no SQL
 query looks up by path. Indexing for a query that does not exist costs write throughput for a
@@ -920,6 +921,14 @@ informative than the prose.
    as a reason to distrust schema cohorts. This is the only correction in the list that made the
    product better rather than merely correct, and it came from reading an event rather than from
    searching for one.
+
+7. **Two more, found by writing the SQL rather than the prose.** Planning the queries showed
+   that §6's `created_at` was ambiguous between event time and index time — read as the latter,
+   the 24h/7d/30d filter would have ranged over *when the scan ran*, so the column is now
+   `occurred_at` and holds the event timestamp. And the code table in §5.1 omitted `ASK_ABORTED`
+   and `ABORTED`, which belong on the guard plane: a human saying no is another case where the
+   harness worked and the model paid the cost. Neither defect was visible while reading the
+   document; both were visible the moment something had to *use* the definition.
 
 Both directions of that loop matter. A reviewer model with fresh context caught errors I had
 committed to prose, and I caught errors it had committed to a report. Nothing entered this
