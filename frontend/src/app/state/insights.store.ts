@@ -46,6 +46,15 @@ export class InsightsStore {
    */
   readonly indexing = signal(false);
 
+  /**
+   * Which axis the cohorts screen is currently grouping by, or null when that screen is not
+   * open. The rail needs it because the grouping axis and a filter on the same facet are
+   * mutually exclusive in effect: filter harness version V0 while grouping by harness version
+   * and the comparison table has exactly one row, whose delta against itself is zero. Better to
+   * dim the control and say why than to offer a button whose only product is a degenerate table.
+   */
+  readonly cohortAxis = signal<string | null>(null);
+
   /** The human sentence from the last rejected request; a later success clears it. */
   readonly error = signal<string | null>(null);
 
@@ -164,6 +173,13 @@ export class InsightsStore {
       this.lastIndex.set(v);
       this.loadOverview();
       this.loadFindings();
+      // A cohorts table that is on screen must not survive a re-index as a photograph of the
+      // previous index. The axis signal doubles as "is anyone looking at it", so no request is
+      // spent on a route nobody is on.
+      const axis = this.cohortAxis();
+      if (axis !== null) {
+        this.loadCohorts(axis);
+      }
     // Settled on both paths: a failed index must not leave the button claiming work that
     // stopped happening two seconds ago.
     }, () => this.indexing.set(false));

@@ -70,6 +70,23 @@
   }
 }
 
+// Two different absences, two different looks. A dashed border says "this index holds one value
+// for this facet, there is nothing to choose"; the dimmed solid border says "this page is using
+// that facet as its grouping axis". Collapsing them into one disabled state is what makes a
+// rail unreadable — every dimmed control then means something different from what it looks like.
+.facet-select.facet-inert:disabled {
+  border-style: solid;
+  opacity: 0.55;
+}
+
+.facet-note {
+  margin: 5px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: color-mix(in srgb, $text-lo 85%, $surface-raised);
+  text-wrap: pretty;
+}
+
 .chips {
   display: flex;
   flex-wrap: wrap;

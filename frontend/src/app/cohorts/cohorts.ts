@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import type { CohortRow } from '../api/types';
 import { InsightsStore } from '../state/insights.store';
 
@@ -46,19 +46,37 @@ export class Cohorts {
   readonly baselineKeys = computed<string[]>(() => this.rows().map(r => r.key));
 
   constructor() {
-    // The shell loads overview and findings for the rail; the cohorts screen
-    // owns its own one request, and only fires it when the route is entered.
-    this.store.loadCohorts(this.groupBy());
+    // The axis is published to the store because it changes what the rail means: on this screen
+    // one of the four facets is the grouping axis, and filtering by the axis you are grouping on
+    // always leaves exactly one cohort. The rail dims that facet rather than offering a control
+    // whose only outcome is a degenerate table. Cleared on teardown, so the overview's rail is
+    // not left missing a facet nobody is grouping by.
+    this.store.cohortAxis.set(this.groupBy());
+    inject(DestroyRef).onDestroy(() => this.store.cohortAxis.set(null));
+
+    // The shell loads overview and findings for the rail; this screen owns its own request.
+    // Reading filters() inside the effect is what subscribes it to the rail: the cohorts
+    // endpoints now honour the shared filter contract, so a filter change has to re-ask, and a
+    // table that quietly kept the unfiltered numbers would be the same lie in a new place.
+    // The baseline is deliberately not carried across a filter change — the cohort it named may
+    // no longer exist in the selection, which the backend answers with a 400 — so the backend
+    // re-picks the busiest cohort and the basis note says it did.
+    effect(() => {
+      this.store.filters();
+      this.store.loadCohorts(this.groupBy());
+    });
   }
 
   /**
-   * Axis change: one request, no baseline. The backend re-chooses the default
-   * for the new axis and the baseline select follows the response — a stale
-   * baseline key from the old axis is a 400 the UI must not send.
+   * Axis change: set the signals and let the effect fetch. It reads `groupBy` as well as the
+   * filters, so a second explicit `loadCohorts` here would fire the same request twice — the
+   * effect is this screen's only load trigger, which is also what makes a filter change and an
+   * axis change behave identically. No baseline: a stale key from the previous axis is a 400 the
+   * UI must not send, so the backend re-picks and the basis note says it did.
    */
   changeGroup(key: string): void {
     this.groupBy.set(key);
-    this.store.loadCohorts(key);
+    this.store.cohortAxis.set(key);
   }
 
   changeBaseline(key: string): void {

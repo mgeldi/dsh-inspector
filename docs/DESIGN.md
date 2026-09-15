@@ -609,9 +609,18 @@ GET  /api/overview?from&to&schema&model&preset&harnessVersion
        and the filter vocabulary the rail needs
 GET  /api/findings?plane&detector&session&code&from&to&sort&page&size
 GET  /api/findings/{id}      finding + evidence chain (only endpoint that returns text)
-GET  /api/cohorts?groupBy=harnessVersion|model|schema|preset&baseline=<key>
+GET  /api/cohorts?groupBy=harnessVersion|model|schema|preset&baseline=<key>&from&to&schema&model&preset&harnessVersion
 POST /api/index/run          synchronous scan, returns the summary
 ```
+
+`/api/cohorts` carries the same shared filter parameters as the other two reads, and its rates
+are computed over the filtered population: four aggregates, four different time columns, one
+WHERE contract. Values are validated against the vocabulary like everywhere else, so a stale
+filter is a 400 that names the allowed set rather than an empty table that reads as "this
+cohort is clean". Two consequences for the screen: the facet used as the grouping axis is dimmed
+with a stated reason, because filtering by the axis you group on always leaves one row whose
+delta against itself is zero; and a filter change re-picks the baseline instead of resending the
+previous key, since the cohort it named may no longer exist in the selection.
 
 There is no `/api/timeseries?metric=…` and no `/api/meta`. A metric-keyed generic series
 endpoint is a framework, and there are exactly two series, both owned by `/api/overview`; a

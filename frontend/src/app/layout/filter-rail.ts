@@ -82,6 +82,16 @@ export class FilterRail {
     return this.facetValues(facet).length === 1;
   }
 
+  /**
+   * The facet the cohorts screen is currently grouping by, if it is open. Grouping by a facet
+   * and filtering by that same facet always yields a one-row table whose delta against itself is
+   * zero — a result that looks like a finding and means nothing. The control is dimmed with a
+   * reason instead, because "disabled" without a reason is indistinguishable from broken.
+   */
+  facetIsInert(facet: Facet): boolean {
+    return this.store.cohortAxis() === facet.key;
+  }
+
   /** What the select displays: the single value for a fixed facet, else the active filter. */
   facetShownValue(facet: Facet): string {
     if (this.facetIsSingle(facet)) {

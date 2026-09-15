@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.zaxxer.hikari.HikariDataSource;
 import inspector.api.FindingFilters;
+import inspector.api.InsightFilter;
 import inspector.api.dto.FindingDetailDto;
 import inspector.detect.Category;
 import inspector.detect.Finding;
@@ -291,7 +292,10 @@ final class IndexWriterTest {
         // excluded from the rate denominators: the cohort's toolCalls is exactly the value the
         // controller divides findings by — one observed call, not two rows. With the orphan
         // counted the rate would read 500.0 instead of 1000.0.
-        assertThat(new CohortRepository(client).cohorts("harness_version").cohorts())
+        assertThat(new CohortRepository(client)
+                .cohorts("harness_version", new FindingFilters(
+                        new InsightFilter(null, null, null, null, null, null)))
+                .cohorts())
                 .singleElement()
                 .satisfies(cohort -> {
                     assertThat(cohort.toolCalls()).as("the rate denominator").isEqualTo(1);

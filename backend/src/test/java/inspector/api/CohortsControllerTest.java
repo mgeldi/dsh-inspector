@@ -216,6 +216,95 @@ class CohortsControllerTest {
         assertThat(bySchema.get("V0").path("sessions").asLong()).isEqualTo(11);
     }
 
+    /**
+     * Why this endpoint carries the shared filter contract at all: a rate on this screen has to
+     * be computed over the population the rail says it is computed over. The table is four
+     * separate aggregates with four different time columns, so one forgotten WHERE is invisible
+     * until the table is compared against something independent — here, the same population
+     * read off a different axis through the same endpoint. Until §7 was wired through, this is
+     * the assertion that failed: the endpoint accepted the parameters and ignored them.
+     */
+    @Test
+    void aFacetFilterNarrowsEveryAggregateInTheTableNotOnlyTheSessionList() throws Exception {
+        final Map<String, JsonNode> byModel = cohortsByKey(asJson(get("/api/cohorts?groupBy=model")));
+        final String model = byModel.entrySet().stream()
+                .filter(entry -> entry.getValue().path("findings").asLong() > 0
+                        && entry.getValue().path("guardFindings").asLong() > 0)
+                .map(Map.Entry::getKey)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("the fixture has no model carrying guard findings"));
+        final JsonNode expected = byModel.get(model);
+
+        final JsonNode root = asJson(get("/api/cohorts")
+                .param("groupBy", "harnessVersion")
+                .param("model", model));
+
+        // Sessions, calls, findings and guard findings each come from their own query: all four
+        // have to agree with the model axis or one of them kept counting the whole index.
+        assertThat(sum(root, "sessions")).as("distinct sessions under the filter")
+                .isEqualTo(expected.path("sessions").asLong());
+        assertThat(sum(root, "toolCalls")).as("observed calls under the filter")
+                .isEqualTo(expected.path("toolCalls").asLong());
+        assertThat(sum(root, "findings")).as("findings under the filter")
+                .isEqualTo(expected.path("findings").asLong());
+        assertThat(sum(root, "guardFindings")).as("guard findings under the filter")
+                .isEqualTo(expected.path("guardFindings").asLong());
+
+        // and the screen admits the numbers are a subset: a filtered rate and an accidentally
+        // filtered rate are otherwise indistinguishable in a screenshot
+        assertThat(root.path("basisNote").asText()).contains("shared filters are active");
+    }
+
+    /**
+     * The window applies per root — finding event time, session start, call start — which is
+     * the part a single WHERE cannot express. A midpoint window must narrow both the numerator
+     * and the denominator while leaving sessions on the screen; a repository that applied the
+     * filter to the session list only would still report every finding.
+     */
+    @Test
+    void aTimeWindowNarrowsTheNumeratorAndTheDenominatorTogether() throws Exception {
+        final long first = count("select min(occurred_at) from finding");
+        final long last = count("select max(occurred_at) from finding");
+        assertThat(first).as("the fixture spans a window worth cutting").isLessThan(last);
+
+        final JsonNode root = asJson(get("/api/cohorts")
+                .param("groupBy", "harnessVersion")
+                .param("to", String.valueOf(first + (last - first) / 2)));
+
+        assertThat(sum(root, "findings")).as("some findings fall outside the window")
+                .isPositive()
+                .isLessThan(12);
+        assertThat(sum(root, "guardFindings")).as("so does the numerator of the headline rate")
+                .isLessThan(6);
+        assertThat(sum(root, "toolCalls")).as("and so does the denominator")
+                .isLessThan(41);
+        assertThat(sum(root, "sessions")).as("the sessions themselves are still listed")
+                .isPositive();
+    }
+
+    /**
+     * A value outside the vocabulary is a 400 that names the allowed values, not an empty table.
+     * The difference is the whole difference between "your filter is wrong" and "this cohort
+     * has no findings" — the second one is a finding about the code, and it is false.
+     */
+    @Test
+    void aFilterValueOutsideTheVocabularyIsRejectedRatherThanAnsweredWithAnEmptyTable() throws Exception {
+        mockMvc.perform(get("/api/cohorts").param("groupBy", "model").param("model", "no-such-model"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.filter").value("model"))
+                .andExpect(jsonPath("$.value").value("no-such-model"))
+                .andExpect(jsonPath("$.allowed[0]").exists());
+    }
+
+    private long sum(final JsonNode root, final String field) {
+        long total = 0;
+        for (final JsonNode row : root.path("cohorts")) {
+            total += row.path(field).asLong();
+        }
+        return total;
+    }
+
     /** Distinct sessions summed over every cohort of an axis: a session that belongs to two cohorts counts twice. */
     private long distinctSessionsPerCohortSum(final String axisColumn) {
         return count("select count(distinct coalesce(" + axisColumn + ", 'unknown') || '#' || id) from session");

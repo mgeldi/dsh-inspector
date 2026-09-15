@@ -23,7 +23,8 @@
         class="facet-select"
         [id]="'facet-' + facet.key"
         [value]="facetShownValue(facet)"
-        [disabled]="facetIsSingle(facet)"
+        [disabled]="facetIsSingle(facet) || facetIsInert(facet)"
+        [class.facet-inert]="facetIsInert(facet)"
         (change)="changeFacet(facet, $any($event.target).value)"
       >
         <option value="" [disabled]="facetIsSingle(facet)">(any)</option>
@@ -31,6 +32,11 @@
           <option [value]="v">{{ v }}</option>
         }
       </select>
+      @if (facetIsInert(facet)) {
+        <!-- Stated rather than implied: a dimmed control with no reason reads as a bug, and
+             the reason here is a property of the page, not of the data. -->
+        <p class="facet-note">Cohorts are grouped by this — filtering it would leave one row.</p>
+      }
     </section>
   }
 

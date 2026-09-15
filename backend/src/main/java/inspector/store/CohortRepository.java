@@ -1,5 +1,7 @@
 package inspector.store;
 
+import inspector.api.FindingFilters;
+
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
@@ -40,26 +42,40 @@ public final class CohortRepository {
 
     /**
      * @param axisColumn the whitelisted bare session column, e.g. {@code harness_version}
+     * @param filters    the shared filter contract of §7, applied to <i>every</i> aggregate in
+     *                   this table. A cohort rate that ignored the rail would describe a
+     *                   different population than the dashboard above it, and the screen would
+     *                   show two truths at once — which is the failure this endpoint shipped
+     *                   with until the rail and the endpoint were finally connected.
      */
-    public Result cohorts(final String axisColumn) {
+    public Result cohorts(final String axisColumn, final FindingFilters filters) {
+        // One filter shape, four roots. The clause is built per root because the time column
+        // differs — finding event time, session start, call time — while every aggregate joins
+        // `session s`, so the facet predicates apply unchanged.
+        final FindingFilters.Sql bySession = filters.forSession();
+        final FindingFilters.Sql byFinding = filters.forFinding();
+        // Observed calls only: the rate denominator must not count outcome-only rows
+        final FindingFilters.Sql observed = filters.forToolCall().with("t.outcome_only = 0");
+        final FindingFilters.Sql byGuard = byFinding.with("f.plane = 'GUARD'");
+
         // Distinct ids, not rows: `session` is keyed (id, source file), so a session stored
         // under both conventions is two rows. Counting rows here reports a session twice in
         // any cohort whose axis value both files share, and contradicts the Overview tile.
         final Map<String, Long> sessions = groupCount(
                 "select coalesce(s." + axisColumn + ", 'unknown') as key, count(distinct s.id) as n "
-                        + "from session s group by 1");
-        // Observed calls only: the rate denominator must not count outcome-only rows
+                        + "from session s " + bySession.asWhere() + " group by 1", bySession.params());
         final Map<String, Long> toolCalls = groupCount(
                 "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n from tool_call t "
                         + "join session s on s.id = t.session_id and s.source_file = t.source_file "
-                        + "where t.outcome_only = 0 group by 1");
+                        + observed.asWhere() + " group by 1", observed.params());
         final Map<String, Long> findings = groupCount(
                 "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n from finding f "
-                        + "join session s on s.id = f.session_id and s.source_file = f.source_file group by 1");
+                        + "join session s on s.id = f.session_id and s.source_file = f.source_file "
+                        + byFinding.asWhere() + " group by 1", byFinding.params());
         final Map<String, Long> guardFindings = groupCount(
                 "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n from finding f "
                         + "join session s on s.id = f.session_id and s.source_file = f.source_file "
-                        + "where f.plane = 'GUARD' group by 1");
+                        + byGuard.asWhere() + " group by 1", byGuard.params());
 
         final TreeSet<String> keys = new TreeSet<>(sessions.keySet());
         keys.addAll(toolCalls.keySet());
@@ -76,15 +92,20 @@ public final class CohortRepository {
                     guardFindings.getOrDefault(key, 0L)));
         }
 
-        final int allInferred = jdbc.sql("select coalesce(min(version_inferred), 1) from session")
+        // The "is the version declared?" claim is made about the selection on screen, not
+        // about the whole index: filtered down to one cohort, an all-inferred index would be a
+        // sentence about data nobody is looking at.
+        final int allInferred = jdbc.sql("select coalesce(min(s.version_inferred), 1) from session s "
+                        + bySession.asWhere())
+                .params(bySession.params())
                 .query((RowMapper<Integer>) (rs, rowNum) -> rs.getInt(1))
                 .single();
         return new Result(List.copyOf(cohorts), allInferred == 1);
     }
 
-    private Map<String, Long> groupCount(final String sql) {
+    private Map<String, Long> groupCount(final String sql, final List<Object> params) {
         final Map<String, Long> out = new HashMap<>();
-        for (final Map<String, Object> row : jdbc.sql(sql).query().listOfRows()) {
+        for (final Map<String, Object> row : jdbc.sql(sql).params(params).query().listOfRows()) {
             out.put((String) row.get("key"), ((Number) row.get("n")).longValue());
         }
         return out;

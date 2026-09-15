@@ -1,9 +1,12 @@
 package inspector.api;
 
 import inspector.api.dto.CohortDto;
+import inspector.api.dto.Vocabulary;
 import inspector.store.CohortRepository;
+import inspector.store.VocabularyService;
 
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,6 +30,11 @@ import java.util.Map;
  *
  * <p>{@code groupBy} is a fixed whitelist — the session column comes from
  * a map, so a SQL-ish value is a 400, not a second statement.
+ *
+ * <p>The endpoint also carries the shared {@link InsightFilter} contract of §7:
+ * a cohort rate has to be computed over the population the rail says it is
+ * computed over, or the comparison answers a different question than the
+ * dashboard above it. Comparing a rollout inside a time window is the point.
  */
 @RestController
 @RequestMapping("/api/cohorts")
@@ -42,23 +50,35 @@ public final class CohortsController {
     private static final List<String> GROUP_KEYS = List.copyOf(GROUP_COLUMNS.keySet());
 
     private final CohortRepository cohortRepository;
+    private final VocabularyService vocabularyService;
 
-    public CohortsController(final CohortRepository cohortRepository) {
+    public CohortsController(final CohortRepository cohortRepository,
+                             final VocabularyService vocabularyService) {
         this.cohortRepository = cohortRepository;
+        this.vocabularyService = vocabularyService;
     }
 
     @GetMapping
     public CohortDto.Page cohorts(
+            @ModelAttribute final InsightFilter filter,
             @RequestParam final String groupBy, @RequestParam(required = false) final String baseline) {
 
         final String axisColumn = GROUP_COLUMNS.get(groupBy);
         if (axisColumn == null) {
             throw new UnknownFilterValueException("groupBy", groupBy, GROUP_KEYS);
         }
+        // The same validation every read endpoint runs. A filter value outside the vocabulary
+        // is a 400 that names the allowed values — not an empty table that reads as
+        // "this cohort has no findings".
+        final Vocabulary vocabulary = vocabularyService.vocabulary();
+        filter.validate(vocabulary);
 
-        final CohortRepository.Result result = cohortRepository.cohorts(axisColumn);
+        final FindingFilters filters = new FindingFilters(filter);
+        final CohortRepository.Result result = cohortRepository.cohorts(axisColumn, filters);
         if (result.cohorts().isEmpty()) {
-            return new CohortDto.Page(groupBy, null, "the index is empty", List.of());
+            return new CohortDto.Page(groupBy, null,
+                    filters.isActive() ? "no sessions match the current filters" : "the index is empty",
+                    List.of());
         }
 
         final String baselineKey = baseline != null ? baseline : defaultBaseline(result.cohorts());
@@ -89,7 +109,8 @@ public final class CohortsController {
                     delta(violation, baselineViolation)));
         }
 
-        return new CohortDto.Page(groupBy, baselineKey, basisNote(groupBy, baseline, result, baselineKey), rows);
+        return new CohortDto.Page(groupBy, baselineKey,
+                basisNote(groupBy, baseline, result, baselineKey, filters.isActive()), rows);
     }
 
     /** Default baseline: highest tool-call count, key ascending on ties. */
@@ -109,10 +130,18 @@ public final class CohortsController {
             final String groupBy,
             final String requestedBaseline,
             final CohortRepository.Result result,
-            final String baselineKey) {
+            final String baselineKey,
+            final boolean filtered) {
         final List<String> notes = new ArrayList<>();
+        if (filtered) {
+            // The screen says so whenever the numbers are a subset: a rate that happens to be
+            // filtered and a rate that was asked to be filtered look identical otherwise, and
+            // a screenshot of the former gets forwarded as evidence for the latter.
+            notes.add("shared filters are active, every rate below is for the filtered subset");
+        }
         if (result.cohorts().size() == 1) {
-            notes.add("one-row cohort: " + groupBy + " is single-valued in this index, so this is a description, "
+            notes.add("one-row cohort: " + groupBy + " is single-valued in "
+                    + (filtered ? "this selection" : "this index") + ", so this is a description, "
                     + "not a comparison");
         }
         if (result.allVersionInferred()) {

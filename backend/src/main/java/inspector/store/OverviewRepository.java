@@ -69,7 +69,7 @@ public final class OverviewRepository {
      */
     public long toolCallCount(final FindingFilters.Sql where) {
         return singleLong("select count(*) " + TOOL_CALL_JOIN + " "
-                + whereExtra(where, "t.outcome_only = 0"), where.params());
+                + where.with("t.outcome_only = 0").asWhere(), where.params());
     }
 
     public long stepCount(final FindingFilters.Sql where) {
@@ -112,7 +112,7 @@ public final class OverviewRepository {
      */
     public List<SeriesPointRow> toolCallSeries(final FindingFilters.Sql where) {
         final String sql = "select date(t.started_at/1000.0, 'unixepoch') as day, count(*) as n " + TOOL_CALL_JOIN + " "
-                + whereExtra(where, "t.outcome_only = 0 and t.started_at is not null")
+                + where.with("t.outcome_only = 0 and t.started_at is not null").asWhere()
                 + " group by day order by day";
         return jdbc.sql(sql).params(where.params())
                 .query((RowMapper<SeriesPointRow>) (rs, rowNum) ->
@@ -167,10 +167,6 @@ public final class OverviewRepository {
         final List<Double> sorted = values.stream().sorted().toList();
         final int mid = sorted.size() / 2;
         return sorted.size() % 2 == 1 ? sorted.get(mid) : (sorted.get(mid - 1) + sorted.get(mid)) / 2.0;
-    }
-
-    private static String whereExtra(final FindingFilters.Sql where, final String extra) {
-        return where.isEmpty() ? "where " + extra : "where " + where.where() + " and " + extra;
     }
 
     private static Double asDouble(final Object value) {

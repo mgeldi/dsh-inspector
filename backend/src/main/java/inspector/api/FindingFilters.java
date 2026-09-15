@@ -31,6 +31,16 @@ public final class FindingFilters {
         public String asWhere() {
             return isEmpty() ? "" : "where " + where;
         }
+
+        /**
+         * The same clause with one more fixed predicate appended, so a query-specific
+         * condition composes with the shared filter instead of replacing it. The extra text
+         * is a compile-time fragment chosen by the repository — the same rule as the clause
+         * itself, never user input — and it binds nothing, so the parameter list is unchanged.
+         */
+        public Sql with(final String extra) {
+            return new Sql(isEmpty() ? extra : where + " and " + extra, params);
+        }
     }
 
     private final Long from;

@@ -127,6 +127,25 @@ describe('Cohorts', () => {
     }
   });
 
+  /**
+   * The rail's contract seen from this screen: the request carries the shared filters, and a
+   * facet change re-asks. The fake cannot catch the original bug — it answered whatever it was
+   * handed, so a server that ignored the parameters looked identical from here. That gap is the
+   * reason the backend grew a test that compares the filtered table against a second axis.
+   */
+  it('re-requests with the shared filters when a facet changes', () => {
+    load(page({ groupBy: 'harnessVersion' }));
+
+    store.setFilters({ model: 'demo-flash-8b' });
+    fixture.detectChanges();
+
+    const req = http.expectOne(
+      r => r.url === '/api/cohorts' && r.params.get('model') === 'demo-flash-8b');
+    expect(req.request.params.get('groupBy')).toBe('harnessVersion');
+    req.flush(page({ groupBy: 'harnessVersion' }));
+    fixture.detectChanges();
+  });
+
   it('re-requests through the store when groupBy changes', () => {
     load(page());
 
