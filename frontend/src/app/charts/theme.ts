@@ -20,6 +20,22 @@ export const PLANE_PALETTE: readonly string[] = [
   PLANE_COLOURS.INFRASTRUCTURE,
 ];
 
+/**
+ * The axis and label tokens a chart option needs, by value — the same keep-in-sync
+ * contract as the rest of this file, so no component hardcodes a hex of its own.
+ */
+export const CHART_AXIS = {
+  hairline: HAIRLINE,
+  textLo: TEXT_LO,
+} as const;
+
+/**
+ * The daily findings volume bar: the muted text tone, plane-agnostic on purpose —
+ * a day's activity is not one plane, so painting it with a plane hue would argue
+ * with the plane mix next to it.
+ */
+export const DAILY_BAR_COLOUR = TEXT_LO;
+
 /** One chart theme for the app: dark surface, grid padding, hairline axes. */
 export const CHART_BASE: EChartsCoreOption = {
   backgroundColor: 'transparent',

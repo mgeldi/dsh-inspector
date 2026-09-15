@@ -2,9 +2,47 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideHttpClient, withFetch } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { Router, provideRouter } from '@angular/router';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { App } from './app';
 import { routes } from './app.routes';
 import type { OverviewDto } from './api/types';
+
+// jsdom has no ResizeObserver; the chart wrapper only needs the API surface.
+class FakeResizeObserver {
+  observe(): void {}
+  unobserve(): void {}
+  disconnect(): void {}
+}
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  (globalThis as { ResizeObserver?: unknown }).ResizeObserver = FakeResizeObserver;
+}
+
+// The Overview route is lazy and real, and it carries the chart: jsdom cannot host a
+// canvas, so the charting library is mocked at its four entry points, the way
+// chart.spec.ts does.
+const echartsMocks = vi.hoisted(() => {
+  const charts: Array<{
+    option: unknown | null;
+    setOption(option: unknown, _replace?: boolean): void;
+    resize(): void;
+    dispose(): void;
+  }> = [];
+  const init = () => {
+    const chart = {
+      option: null as unknown | null,
+      setOption(option: unknown): void { chart.option = option; },
+      resize(): void {},
+      dispose(): void {},
+    };
+    charts.push(chart);
+    return chart;
+  };
+  return { charts, use: (): void => {}, init };
+});
+vi.mock('echarts/core', () => echartsMocks);
+vi.mock('echarts/charts', () => ({ BarChart: {}, LineChart: {} }));
+vi.mock('echarts/components', () => ({ GridComponent: {}, LegendComponent: {}, TooltipComponent: {} }));
+vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
 
 // Invented test data: the model name and session vocabulary are not from any real corpus.
 const overview: OverviewDto = {
@@ -60,7 +98,9 @@ describe('App', () => {
     const compiled = fixture.nativeElement as HTMLElement;
     expect(compiled.querySelector('.app-name')?.textContent).toContain('DSH Inspector');
     expect(compiled.querySelector('app-filter-rail'), 'filter rail').toBeTruthy();
-    // The empty outlet now shows the placeholder Overview route.
-    expect(compiled.querySelector('h1')?.textContent).toBe('Overview');
+    // The outlet renders the real Overview: its tiles are fed by the one shared load.
+    expect(compiled.querySelector('app-overview'), 'overview screen').toBeTruthy();
+    expect(compiled.querySelectorAll('.tile').length).toBe(4);
+    expect(compiled.textContent).toContain('sessions in the index');
   });
 });

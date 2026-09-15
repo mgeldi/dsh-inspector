@@ -1,0 +1,116 @@
+<section class="page">
+  @if (tiles()) {
+    <div class="tiles">
+      @for (t of tiles(); track t.key) {
+        <div class="tile">
+          <span class="tile-value num">{{ t.value | number }}</span>
+          <span class="tile-context">{{ t.context }}</span>
+        </div>
+      }
+    </div>
+
+    @if (isEmpty()) {
+      <section class="empty" aria-label="No findings">
+        <p class="empty-title">No findings in this range</p>
+        <p class="empty-text">
+          No findings in the current time range — the range is probably narrower than the
+          indexed data. Widen it to All time, or re-run the indexer.
+        </p>
+        <div class="empty-actions">
+          <button type="button" class="ghost" (click)="useAllTime()">Use All time</button>
+          <button type="button" class="ghost" [disabled]="busy()" (click)="runIndexer()">Run indexer</button>
+        </div>
+      </section>
+    } @else {
+      <div class="row">
+        <div class="card">
+          <h3 class="card-title">Plane mix</h3>
+          <div class="mixbar" role="img" [attr.aria-label]="mixAria()">
+            @for (r of planeRows(); track r.plane) {
+              @if (r.share > 0) {
+                <span
+                  class="mix-seg"
+                  [style.width.%]="r.share * 100"
+                  [style.background]="PLANE_COLOURS[r.plane]"
+                  [title]="planeName(r.plane) + ': ' + r.count"
+                ></span>
+              }
+            }
+          </div>
+          <ul class="mix-legend">
+            @for (r of planeRows(); track r.plane) {
+              <li class="mix-row" [attr.data-plane]="r.plane">
+                <span class="mix-dot" [style.background]="PLANE_COLOURS[r.plane]"></span>
+                <span class="mix-name">{{ planeName(r.plane) }}</span>
+                <span class="mix-count num">{{ r.count | number }}</span>
+                <span class="mix-share num muted">{{ r.shareText }}</span>
+              </li>
+            }
+          </ul>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Findings per day</h3>
+          @if (seriesOption()) {
+            <app-chart class="daily" [option]="seriesOption()"></app-chart>
+          } @else {
+            <p class="muted card-fallback">No days in range.</p>
+          }
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="card">
+          <h3 class="card-title">Top detectors</h3>
+          <ol class="detectors">
+            @for (d of detectors(); track d.detector; let i = $index) {
+              <li>
+                <span class="rank num">{{ i + 1 }}</span>
+                <span class="det-name">{{ d.detector }}</span>
+                <span class="det-count num">{{ d.count | number }}</span>
+              </li>
+            }
+          </ol>
+        </div>
+
+        <div class="card">
+          <h3 class="card-title">Throughput by convention</h3>
+          <table class="tput">
+            <thead>
+              <tr>
+                <th scope="col">Convention</th>
+                <th scope="col">Timing source</th>
+                <th scope="col" class="r">Steps</th>
+                <th scope="col" class="r">Median decode</th>
+                <th scope="col" class="r">Median TTFT</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (r of throughput(); track r.schema + '|' + r.timingSource) {
+                <tr>
+                  <td>{{ r.schema }}</td>
+                  <td>
+                    <span class="src" [class.src-none]="r.timingSource === 'none'">{{ r.timingSource }}</span>
+                  </td>
+                  <td class="num r">{{ r.steps | number }}</td>
+                  <td
+                    class="num r"
+                    [class.na]="r.medianDecodeTps === null"
+                    [attr.title]="r.medianDecodeTps === null ? medianTip(r.timingSource) : null"
+                  >{{ tps(r.medianDecodeTps) }}</td>
+                  <td
+                    class="num r"
+                    [class.na]="r.medianTtftMs === null"
+                    [attr.title]="r.medianTtftMs === null ? medianTip(r.timingSource) : null"
+                  >{{ ttft(r.medianTtftMs) }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      </div>
+    }
+  } @else if (busy()) {
+    <p class="muted page-fallback">Loading the overview…</p>
+  }
+</section>

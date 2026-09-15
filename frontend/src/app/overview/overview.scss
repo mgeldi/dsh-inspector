@@ -1,0 +1,226 @@
+// Variables-only import: theme-tokens emits no CSS, so the compiled Material theme never
+// rides into this component's 4 kB style budget.
+@use '../../theme-tokens' as *;
+
+:host { display: block; }
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 20px 28px;
+  max-width: 1120px;
+}
+
+.page-fallback { margin: 8px 0; }
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 14px;
+  background: $surface-raised;
+  border: 1px solid $hairline;
+  border-radius: 8px;
+}
+
+.tile-value {
+  font-size: 26px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: $text-hi;
+}
+
+.tile-context {
+  font-size: 12px;
+  color: $text-lo;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  padding: 14px 16px;
+  background: $surface-raised;
+  border: 1px solid $hairline;
+  border-radius: 8px;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: $text-lo;
+}
+
+.card-fallback { margin: 0; padding: 24px 0; }
+
+// ---- plane mix: one hue per plane, the legend is the readable record ----
+
+.mixbar {
+  display: flex;
+  height: 14px;
+  overflow: hidden;
+  background: $surface;
+  border: 1px solid $hairline;
+  border-radius: 4px;
+}
+
+.mix-seg { display: block; height: 100%; }
+
+.mix-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.mix-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.mix-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+.mix-name { flex: 1; }
+.mix-count { font-weight: 600; color: $text-hi; }
+.mix-share { min-width: 52px; text-align: right; }
+
+.daily { height: 250px; min-height: 250px; }
+
+// ---- detectors ----
+
+.detectors {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.detectors li {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.rank {
+  width: 16px;
+  text-align: right;
+  color: $text-lo;
+}
+
+.det-count {
+  margin-left: auto;
+  font-weight: 600;
+  color: $text-hi;
+}
+
+// ---- throughput ----
+
+.tput {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tput th {
+  padding: 4px 8px;
+  border-bottom: 1px solid $hairline;
+  text-align: left;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: $text-lo;
+  white-space: nowrap;
+}
+
+.tput td {
+  padding: 7px 8px;
+  border-bottom: 1px solid color-mix(in srgb, $hairline 60%, transparent);
+  white-space: nowrap;
+}
+
+.tput tr:last-child td { border-bottom: none; }
+
+.r { text-align: right; }
+
+.src { font-size: 12.5px; }
+.src-none { color: $text-lo; font-style: italic; }
+
+// A null median: n/a in the muted tone, never 0.
+.na { color: $text-lo; font-style: italic; }
+
+// ---- empty state ----
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 620px;
+  padding: 22px 24px;
+  border: 1px dashed $hairline;
+  border-radius: 8px;
+}
+
+.empty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: $text-hi;
+}
+
+.empty-text {
+  margin: 0;
+  font-size: 13px;
+  color: $text-lo;
+}
+
+.empty-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+button.ghost {
+  padding: 5px 13px;
+  background: none;
+  border: 1px solid $hairline;
+  border-radius: 6px;
+  color: $text-lo;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+
+  &:hover:not(:disabled) {
+    border-color: $text-lo;
+    color: $text-hi;
+  }
+
+  &:disabled { opacity: 0.45; cursor: default; }
+}
+
+// Single column at ≤900px, per the plan's layout line.
+@media (max-width: 900px) {
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .row { grid-template-columns: 1fr; }
+}
