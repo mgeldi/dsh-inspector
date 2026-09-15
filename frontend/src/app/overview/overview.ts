@@ -2,7 +2,7 @@ import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import type { EChartsCoreOption } from 'echarts/core';
 import { ChartComponent } from '../charts/chart';
-import { CHART_AXIS, DAILY_BAR_COLOUR, PLANE_COLOURS } from '../charts/theme';
+import { CHART_AXIS, CHART_BASE, DAILY_BAR_COLOUR, PLANE_COLOURS } from '../charts/theme';
 import { InsightsStore } from '../state/insights.store';
 import type { Plane } from '../api/types';
 
@@ -88,11 +88,14 @@ export class Overview {
     const byDay = new Map<string, number>(series.map(s => [s.day, s.findings]));
     const days = dayRange(series.map(s => s.day));
     const data: Array<number | null> = days.map(d => byDay.get(d) ?? null);
+    // CHART_BASE carries the app's dark tooltip and the short settle animation. The option
+    // below only adds what is specific to this series; without the base, ECharts merges
+    // this option with its *default theme* and the tooltip renders as the default white box.
     return {
+      ...CHART_BASE,
       backgroundColor: 'transparent',
       textStyle: { color: CHART_AXIS.textLo },
       grid: { left: 8, right: 16, top: 24, bottom: 8, containLabel: true },
-      tooltip: { trigger: 'axis' },
       xAxis: {
         type: 'category',
         data: days.map(d => d.slice(5)), // 'MM-dd' labels: the year is constant inside one range

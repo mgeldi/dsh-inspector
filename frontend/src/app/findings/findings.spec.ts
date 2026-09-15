@@ -92,10 +92,16 @@ describe('Findings', () => {
     req.flush({ total: 3, page: 0, size: 20, items: [finding7, restore8, external9] });
     fixture.detectChanges();
 
-    // the header now carries the sort it asked for
+    // the header now carries the sort it asked for: the class, the ARIA sort state and
+    // the inline SVG caret all agree on the direction. (The previous assertion pinned a
+    // unicode glyph as the direction indicator; the design contract forbids glyph-based
+    // direction, so the equivalent fact — "this header shows desc" — is now checked on
+    // the aria-sort / data-dir state and the caret's presence.)
     const sorted = el.querySelector('th[data-field="confidence"]');
     expect(sorted?.classList.contains('sorted')).toBe(true);
-    expect(sorted?.textContent).toContain('↓');
+    expect(sorted?.getAttribute('aria-sort')).toBe('descending');
+    expect(sorted?.getAttribute('data-dir')).toBe('desc');
+    expect(sorted?.querySelector('svg.caret'), 'the active header paints the SVG caret').toBeTruthy();
   });
 
   it('renders a null confidence as unattributed, not a dash or zero', () => {
@@ -140,6 +146,28 @@ describe('Findings', () => {
     loadPage({ total: 389, page: 19, size: 20, items: items.slice(0, 9) });
     expect((el.querySelector('.pager-text')!.textContent)).toContain('381–389');
     expect((Array.from(el.querySelectorAll('.pager button')) as HTMLButtonElement[])[1].disabled).toBe(true);
+  });
+
+  it('lets Next reach the last page when it is a partial slice', () => {
+    // 25 findings at 20 per page: page 1 is the partial last slice (items 21–25).
+    // The old goPage guard — `(next + 1) * size > total` — blocked exactly this jump,
+    // so the button was enabled (canNext) yet the click silently did nothing.
+    const firstSlice = Array.from({ length: 20 }, (_, i) => ({ ...finding7, id: i }));
+    loadPage({ total: 25, page: 0, size: 20, items: firstSlice });
+
+    const next = Array.from(el.querySelectorAll('.pager button'))[1] as HTMLButtonElement;
+    expect(next.disabled).toBe(false);
+    next.click();
+    fixture.detectChanges();
+
+    const req = http.expectOne(r =>
+      r.url === '/api/findings' && r.params.get('page') === '1');
+    const lastSlice = Array.from({ length: 5 }, (_, i) => ({ ...finding7, id: 20 + i }));
+    req.flush({ total: 25, page: 1, size: 20, items: lastSlice });
+    fixture.detectChanges();
+
+    expect(el.querySelector('.pager-text')!.textContent).toContain('21–25');
+    expect(next.disabled, 'next is disabled at the partial last page').toBe(true);
   });
 
   it('opens the detail panel with the causal chain as the loudest thing', () => {

@@ -73,10 +73,39 @@
               <td class="num count">{{ fmt(c.toolCalls) }}</td>
               <td class="num count">{{ fmt(c.findings) }}</td>
               <td class="num count">{{ fmt(c.guardFindings) }}</td>
-              <td class="num rate">{{ rateText(c.findingsPerKCalls) }}</td>
-              <td class="num rate">{{ rateText(c.violationRatePerK) }}</td>
-              <td class="num delta" [class.zero]="deltaIsZero(c.findingsPerKCallsDelta)">{{ deltaText(c.findingsPerKCallsDelta) }}</td>
-              <td class="num delta" [class.zero]="deltaIsZero(c.violationRatePerKDelta)">{{ deltaText(c.violationRatePerKDelta) }}</td>
+              <td class="num rate" [class.na]="c.findingsPerKCalls === null">{{ rateText(c.findingsPerKCalls) }}</td>
+              <td class="num rate" [class.na]="c.violationRatePerK === null">{{ rateText(c.violationRatePerK) }}</td>
+              @let dfd = deltaKind(c.findingsPerKCallsDelta);
+              <td
+                class="num delta"
+                [class.delta-up]="dfd === 'up'"
+                [class.delta-down]="dfd === 'down'"
+                [class.zero]="dfd === 'zero'"
+                [class.na]="dfd === 'na'"
+              >
+                @if (dfd === 'up' || dfd === 'down') {
+                  <!-- The caret says direction without leaning on the sign: up means worse, down better. -->
+                  <svg class="tri" [class.tri-down]="dfd === 'down'" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+                    <path d="M4 1.6 7.1 6.7H0.9z"/>
+                  </svg>
+                }
+                {{ deltaText(c.findingsPerKCallsDelta) }}
+              </td>
+              @let vrd = deltaKind(c.violationRatePerKDelta);
+              <td
+                class="num delta"
+                [class.delta-up]="vrd === 'up'"
+                [class.delta-down]="vrd === 'down'"
+                [class.zero]="vrd === 'zero'"
+                [class.na]="vrd === 'na'"
+              >
+                @if (vrd === 'up' || vrd === 'down') {
+                  <svg class="tri" [class.tri-down]="vrd === 'down'" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+                    <path d="M4 1.6 7.1 6.7H0.9z"/>
+                  </svg>
+                }
+                {{ deltaText(c.violationRatePerKDelta) }}
+              </td>
             </tr>
           }
         </tbody>
@@ -85,8 +114,9 @@
       <p class="units muted">
         Rates are findings per 1,000 observed tool calls — a <code>tool/result</code> whose
         <code>tool/call</code> never appeared is stored but not counted. Deltas are
-        <strong>percentage points</strong> against the baseline cohort, signed but not coloured
-        good or bad. <code>n/a</code> is a cohort with no observed calls.
+        <strong>percentage points</strong> against the baseline cohort, signed and coloured by
+        direction: lower is better, so improvements render in the accent and regressions in the
+        violation hue. <code>n/a</code> is a cohort with no observed calls.
       </p>
     }
   }

@@ -73,9 +73,9 @@ export class Cohorts {
   /**
    * A delta in the rate's own units — percentage points, not a percentage.
    * Signed when non-zero: an unsigned number next to a rate reads as a second
-   * rate. The sign is the information; the colour is deliberately the neutral
-   * accent, because red/green would claim good/bad, which is a stance the
-   * design refuses to take.
+   * rate. The sign stays in the text, and the colour follows direction too —
+   * both rates are better lower, so negative is an improvement (accent) and
+   * positive a regression (violation hue).
    */
   deltaText(v: number | null): string {
     if (v === null) { return 'n/a'; }
@@ -83,6 +83,17 @@ export class Cohorts {
     if (v > 0) { return `+${abs}`; }
     if (v < 0) { return `-${abs}`; }
     return abs;
+  }
+
+  /**
+   * The delta's direction, which the cell paints: up = regression, down =
+   * improvement (lower is better on both rates), zero = muted, na = italic absence.
+   */
+  deltaKind(v: number | null): 'up' | 'down' | 'zero' | 'na' {
+    if (v === null) { return 'na'; }
+    if (v > 0) { return 'up'; }
+    if (v < 0) { return 'down'; }
+    return 'zero';
   }
 
   /** Zero delta, muted: identical to the baseline is a statement, not an alarm. */

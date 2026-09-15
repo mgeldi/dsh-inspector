@@ -1,9 +1,13 @@
 // Variables-only import: theme-tokens emits no CSS, so the compiled Material theme never
-// rides into this component's style budget. Panel styles live here — the panel is its own
-// component with its own inlined scope, so it carries its own budget line.
+// rides into this component's style budget. The panel is its own component with its own
+// inlined scope, so it carries its own budget line.
 @use '../../theme-tokens' as *;
 
 .detail {
+  // Declared once here, consumed by every monospace run below, so the 56-byte stack is
+  // not repeated into the compiled CSS four times.
+  --mono: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+
   position: fixed;
   top: 0;
   right: 0;
@@ -18,14 +22,8 @@
 }
 
 @keyframes panel-in {
-  from {
-    transform: translateX(24px);
-    opacity: 0.4;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
+  from { transform: translateX(24px); opacity: 0.4; }
+  to { transform: none; opacity: 1; }
 }
 
 .detail-head {
@@ -53,6 +51,7 @@
 .when { font-size: 12px; }
 
 .close {
+  position: relative;
   padding: 2px 8px;
   background: none;
   border: none;
@@ -61,11 +60,24 @@
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, transform 0.12s ease;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -9px 0;
+  }
 
   &:hover {
     color: $text-hi;
     background: color-mix(in srgb, $text-hi 8%, transparent);
+  }
+
+  &:active { transform: scale(0.96); transition-duration: 0.06s; }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: 1px;
   }
 }
 
@@ -84,11 +96,15 @@
 }
 
 .chip {
+  max-width: 190px;
   padding: 2px 9px;
+  overflow: hidden;
   border: 1px solid $hairline;
   border-radius: 999px;
   font-size: 11.5px;
   color: $text-lo;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .chip.conf { color: $text-hi; font-weight: 600; }
@@ -101,7 +117,7 @@
 
 .chip.code-chip,
 .chip.path-chip {
-  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-family: var(--mono);
   font-size: 11px;
 }
 
@@ -111,7 +127,7 @@
 }
 
 .tool-name {
-  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-family: var(--mono);
   color: $text-hi;
 }
 
@@ -124,7 +140,8 @@
   color: $text-lo;
 }
 
-// The causal chain: the loudest thing in the panel — §5.3 made visible.
+// ---- the causal chain: one timeline the eye follows, not three paragraphs ----
+
 .chain {
   display: flex;
   flex-direction: column;
@@ -135,52 +152,60 @@
 }
 
 .chain-steps {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  margin-left: 5px;
-  border-left: 2px solid $hairline;
-  padding-left: 16px;
-}
-
-.chain-step {
   position: relative;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
 
+  // The connecting hairline runs through the middle of the dots.
   &::before {
     content: '';
     position: absolute;
-    top: 50%;
-    left: -22px;
-    transform: translateY(-50%);
-    width: 9px;
-    height: 9px;
-    border-radius: 50%;
-    border: 2px solid $surface-raised;
-    background: $text-lo;
+    left: 4px;
+    top: 14px;
+    bottom: 14px;
+    width: 1px;
+    background: $hairline;
   }
 }
 
-// The refusal is the guard doing its job: the Guard plane's hue marks the last step.
-.chain-step.final {
-  &::before { background: $plane-guard; }
+.chain-step {
+  display: grid;
+  grid-template-columns: 9px 58px auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
 
-  .chain-seq { color: $plane-guard; }
+  &:first-child { padding-top: 0; }
+  &:last-child { padding-bottom: 0; }
+}
+
+// The dot sits on the hairline, in the finding's plane colour (--plane set on .chain).
+.chain-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--plane);
+  box-shadow: 0 0 0 1px color-mix(in srgb, $hairline 80%, transparent);
 }
 
 .chain-seq {
-  min-width: 52px;
-  font-size: 22px;
+  font-size: 16px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
   color: $text-hi;
 }
 
 .chain-label {
   font-size: 12.5px;
   color: $text-lo;
+}
+
+// The last step is where the guard did its job: the dot is ringed and the seq takes the plane hue.
+.chain-step.final {
+  .chain-dot { box-shadow: 0 0 0 3px color-mix(in srgb, var(--plane) 25%, transparent); }
+  .chain-seq { color: var(--plane); }
+  .chain-label { color: $text-hi; }
 }
 
 // ---- evidence: the only place redacted command text appears ----
@@ -195,47 +220,70 @@
 .ev {
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 8px 10px;
+  gap: 6px;
+  padding: 10px;
   background: $surface;
   border: 1px solid $hairline;
-  border-radius: 6px;
+  border-radius: 10px;
 }
 
 .ev-head {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   font-size: 12px;
 }
 
 .ev-seq { color: $text-lo; }
 
+// The verb class is a badge, not a word: MUTATING carries the alarm hue, VCS_RESTORE the
+// accent (legitimate work, never alarming red), everything else stays neutral. The values
+// arrive already upper-case from the backend enum, so no text-transform is needed.
 .ev-verb {
-  color: $text-hi;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: $text-lo;
+  background: color-mix(in srgb, $text-lo 12%, transparent);
+}
+
+.ev-verb.verb-mutating {
+  color: $plane-misuse;
+  background: color-mix(in srgb, $plane-misuse 14%, transparent);
+}
+
+.ev-verb.verb-restoring {
+  color: $accent;
+  background: color-mix(in srgb, $accent 13%, transparent);
+  border: 1px solid color-mix(in srgb, $accent 34%, transparent);
 }
 
 .ev-path {
   margin-left: auto;
-  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  max-width: 160px;
+  overflow: hidden;
+  font-family: var(--mono);
   font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
+// An inset surface — darker than the card — and it scrolls sideways: a command that wraps
+// mid-line is unreadable, so the line stays whole and the box takes the overflow.
 .ev-excerpt {
   display: block;
-  padding: 6px 9px;
-  background: $surface-raised;
-  border: 1px solid $hairline;
-  border-radius: 5px;
-  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  padding: 8px 10px;
+  overflow-x: auto;
+  background: color-mix(in srgb, $surface 70%, black);
+  border: 1px solid color-mix(in srgb, $hairline 70%, transparent);
+  border-radius: 8px;
+  font-family: var(--mono);
   font-size: 12px;
+  line-height: 1.5;
   color: $text-hi;
-  white-space: pre-wrap;
-  word-break: break-all;
+  white-space: pre;
 }
 
 .no-evidence {

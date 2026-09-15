@@ -34,5 +34,5 @@
     </section>
   }
 
-  <button type="button" class="clear" (click)="clear()">Clear filters</button>
+  <button type="button" class="clear" [disabled]="!hasActiveFilters()" (click)="clear()">Clear filters</button>
 </aside>

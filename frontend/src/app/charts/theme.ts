@@ -30,11 +30,13 @@ export const CHART_AXIS = {
 } as const;
 
 /**
- * The daily findings volume bar: the muted text tone, plane-agnostic on purpose —
- * a day's activity is not one plane, so painting it with a plane hue would argue
- * with the plane mix next to it.
+ * The daily findings volume bar: the accent at rest, at a level that reads as activity
+ * without competing with the plane hues next to it. A day's findings are not one plane,
+ * so painting the bar with a plane colour would argue with the plane mix; the accent says
+ * "this app", the plane colours say "which kind of problem".
  */
-export const DAILY_BAR_COLOUR = TEXT_LO;
+export const DAILY_BAR_COLOUR = 'rgba(91, 214, 165, 0.55)'; // $accent at rest
+export const DAILY_BAR_EMPHASIS = '#5bd6a5';                // $accent, hovered
 
 /** One chart theme for the app: dark surface, grid padding, hairline axes. */
 export const CHART_BASE: EChartsCoreOption = {
@@ -42,7 +44,27 @@ export const CHART_BASE: EChartsCoreOption = {
   textStyle: { color: TEXT_LO },
   grid: { left: 8, right: 16, top: 24, bottom: 8, containLabel: true },
   legend: { textStyle: { color: TEXT_LO } },
-  tooltip: { trigger: 'axis' },
+  // ECharts' default tooltip is a white box with black text: on a dark dashboard it is the
+  // one element that announces itself as somebody else's component. Text HI is the mirrored
+  // $text-hi, since the tooltip is drawn outside the component tree and cannot see the CSS.
+  tooltip: {
+    trigger: 'axis',
+    backgroundColor: '#191c24', // $surface-raised
+    borderColor: HAIRLINE,
+    borderWidth: 1,
+    padding: [7, 10],
+    textStyle: { color: '#e8ebf2', fontSize: 12 },
+    extraCssText: 'border-radius: 8px; box-shadow: 0 10px 28px rgba(0, 0, 0, 0.5);',
+    axisPointer: {
+      type: 'shadow',
+      shadowStyle: { color: 'rgba(232, 235, 242, 0.05)' },
+    },
+  },
+  // A short settle on load; the default 1 s ease-out bounce reads as decoration on a
+  // measurement screen, and re-renders on every filter change would replay it.
+  animationDuration: 320,
+  animationEasing: 'cubicOut',
+  animationDurationUpdate: 220,
   xAxis: {
     axisLine: { lineStyle: { color: HAIRLINE } },
     axisTick: { show: false },

@@ -24,10 +24,13 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 12px 14px;
+  padding: 13px 15px;
   background: $surface-raised;
   border: 1px solid $hairline;
-  border-radius: 8px;
+  border-radius: 10px;
+  // Depth from a shadow rather than a heavier border: a border reads as a table cell, and
+  // these are meant to read as objects sitting above the canvas.
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 2px 6px rgba(0, 0, 0, 0.28);
 }
 
 .tile-value {
@@ -35,6 +38,8 @@
   font-weight: 650;
   letter-spacing: -0.02em;
   color: $text-hi;
+  // Every tile redraws on a filter change; proportional digits would make the row jitter.
+  font-variant-numeric: tabular-nums;
 }
 
 .tile-context {
@@ -57,7 +62,10 @@
   padding: 14px 16px;
   background: $surface-raised;
   border: 1px solid $hairline;
-  border-radius: 8px;
+  // 10 px on the card, 8 px on the controls inside it: equal radii on a container and its
+  // child is the one thing that makes a layout feel subtly wrong.
+  border-radius: 10px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 2px 6px rgba(0, 0, 0, 0.28);
 }
 
 .card-title {
@@ -73,16 +81,21 @@
 
 // ---- plane mix: one hue per plane, the legend is the readable record ----
 
+// Separate rounded segments rather than one flush bar with hairline dividers: the gaps say
+// "three counts that happen to share a track", which is what they are, and the flush version
+// reads as a single value someone sliced up.
 .mixbar {
   display: flex;
-  height: 14px;
-  overflow: hidden;
-  background: $surface;
-  border: 1px solid $hairline;
-  border-radius: 4px;
+  gap: 3px;
+  height: 12px;
 }
 
-.mix-seg { display: block; height: 100%; }
+.mix-seg {
+  display: block;
+  height: 100%;
+  min-width: 5px;
+  border-radius: 999px;
+}
 
 .mix-legend {
   list-style: none;
@@ -165,6 +178,10 @@
 
 .tput tr:last-child td { border-bottom: none; }
 
+// A table this dense is read one row at a time, so the row under the cursor answers.
+// A tint, not a fill: the tabular figures have to stay legible on top of it.
+.tput tbody tr:hover td { background: color-mix(in srgb, $text-hi 4%, transparent); }
+
 .r { text-align: right; }
 
 .src { font-size: 12.5px; }
@@ -209,11 +226,20 @@ button.ghost {
   font: inherit;
   font-size: 12.5px;
   cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+              transform 0.12s ease;
 
   &:hover:not(:disabled) {
     border-color: $text-lo;
+    background: color-mix(in srgb, $text-hi 5%, transparent);
     color: $text-hi;
+  }
+
+  &:active:not(:disabled) { transform: scale(0.96); }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: 1px;
   }
 
   &:disabled { opacity: 0.45; cursor: default; }

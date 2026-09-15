@@ -13,76 +13,210 @@
       </div>
     </section>
   } @else {
-    <table class="ftable" aria-label="Findings">
-      <thead>
-        <tr>
-          <th scope="col" class="sortable" data-field="time" [class.sorted]="activeSort().field === 'time'" (click)="toggleSort('time')">
-            Time<span class="arrow">{{ arrow('time') }}</span>
-          </th>
-          <th scope="col" class="sortable" data-field="plane" [class.sorted]="activeSort().field === 'plane'" (click)="toggleSort('plane')">
-            Plane<span class="arrow">{{ arrow('plane') }}</span>
-          </th>
-          <th scope="col" class="sortable" data-field="detector" [class.sorted]="activeSort().field === 'detector'" (click)="toggleSort('detector')">
-            Detector<span class="arrow">{{ arrow('detector') }}</span>
-          </th>
-          <th scope="col" class="sortable" data-field="code" [class.sorted]="activeSort().field === 'code'" (click)="toggleSort('code')">
-            Code<span class="arrow">{{ arrow('code') }}</span>
-          </th>
-          <th scope="col">Category</th>
-          <th scope="col" class="sortable" data-field="confidence" [class.sorted]="activeSort().field === 'confidence'" (click)="toggleSort('confidence')">
-            Confidence<span class="arrow">{{ arrow('confidence') }}</span>
-          </th>
-          <th scope="col">Path</th>
-          <th scope="col" class="sortable" data-field="session" [class.sorted]="activeSort().field === 'session'" (click)="toggleSort('session')">
-            Session<span class="arrow">{{ arrow('session') }}</span>
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (f of items(); track f.id) {
-          <tr
-            class="frow"
-            [class.alarm]="f.category === 'DIRECT_MUTATION'"
-            [class.legitimate]="f.category === 'VCS_RESTORE'"
-            (click)="open(f)"
-          >
-            <td class="num time">{{ fmtTimeShort(f.occurredAt) }}</td>
-            <td>
-              <span class="plane">
-                <span class="dot" [style.background]="PLANE_COLOURS[f.plane]"></span>
-                {{ planeName(f.plane) }}
-              </span>
-            </td>
-            <td class="det">{{ f.detector }}</td>
-            <td class="code num">{{ f.code ?? '—' }}</td>
-            <td>
-              @switch (f.category) {
-                @case ('DIRECT_MUTATION') {
-                  <span class="cat cat-mutation">direct mutation</span>
-                }
-                @case ('VCS_RESTORE') {
-                  <span class="cat cat-restore">vcs restore · legitimate</span>
-                }
-                @case ('EXTERNAL') {
-                  <span class="cat cat-external">external</span>
-                }
-                @default {
-                  <span class="cat cat-none muted">—</span>
-                }
+    <!-- The wrapper is the scroll container: the header sticks inside it, not inside the page. -->
+    <div class="ftable-wrap">
+      <table class="ftable" aria-label="Findings">
+        <!-- A column budget rather than twelve hundred pixels of auto layout: with table-layout
+             fixed every column keeps its design width at every window size, so the header never
+             clips and the long identifiers ellipsize where they are supposed to. CODE is the one
+             column left unassigned, and it absorbs whatever the viewport offers. -->
+        <colgroup>
+          <col style="width: 104px" />
+          <col style="width: 108px" />
+          <col style="width: 100px" />
+          <col />
+          <col style="width: 168px" />
+          <col style="width: 112px" />
+          <col style="width: 152px" />
+          <col style="width: 100px" />
+        </colgroup>
+        <thead>
+          <tr>
+            <th
+              scope="col"
+              class="sortable"
+              data-field="time"
+              role="button"
+              tabindex="0"
+              [attr.aria-sort]="ariaSortFor('time')"
+              [attr.data-dir]="dirFor('time')"
+              [class.sorted]="isSorted('time')"
+              (click)="toggleSort('time')"
+              (keydown)="onHeaderKeydown($event, 'time')"
+            >
+              Time
+              @if (isSorted('time')) {
+                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        [class.caret-asc]="dirFor('time') === 'asc'"/>
+                </svg>
               }
-            </td>
-            <td class="conf" [class.unattributed]="f.confidence === null" [attr.title]="confidenceTipFor(f.confidence)">
-              {{ confidenceWord(f.confidence) }}
-            </td>
-            <td class="path">{{ f.pathHint ?? '—' }}</td>
-            <td class="sid num">{{ f.sessionId }}</td>
+            </th>
+            <th
+              scope="col"
+              class="sortable"
+              data-field="plane"
+              role="button"
+              tabindex="0"
+              [attr.aria-sort]="ariaSortFor('plane')"
+              [attr.data-dir]="dirFor('plane')"
+              [class.sorted]="isSorted('plane')"
+              (click)="toggleSort('plane')"
+              (keydown)="onHeaderKeydown($event, 'plane')"
+            >
+              Plane
+              @if (isSorted('plane')) {
+                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        [class.caret-asc]="dirFor('plane') === 'asc'"/>
+                </svg>
+              }
+            </th>
+            <th
+              scope="col"
+              class="sortable"
+              data-field="detector"
+              role="button"
+              tabindex="0"
+              [attr.aria-sort]="ariaSortFor('detector')"
+              [attr.data-dir]="dirFor('detector')"
+              [class.sorted]="isSorted('detector')"
+              (click)="toggleSort('detector')"
+              (keydown)="onHeaderKeydown($event, 'detector')"
+            >
+              Detector
+              @if (isSorted('detector')) {
+                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        [class.caret-asc]="dirFor('detector') === 'asc'"/>
+                </svg>
+              }
+            </th>
+            <th
+              scope="col"
+              class="sortable"
+              data-field="code"
+              role="button"
+              tabindex="0"
+              [attr.aria-sort]="ariaSortFor('code')"
+              [attr.data-dir]="dirFor('code')"
+              [class.sorted]="isSorted('code')"
+              (click)="toggleSort('code')"
+              (keydown)="onHeaderKeydown($event, 'code')"
+            >
+              Code
+              @if (isSorted('code')) {
+                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        [class.caret-asc]="dirFor('code') === 'asc'"/>
+                </svg>
+              }
+            </th>
+            <th scope="col">Category</th>
+            <th
+              scope="col"
+              class="sortable"
+              data-field="confidence"
+              role="button"
+              tabindex="0"
+              [attr.aria-sort]="ariaSortFor('confidence')"
+              [attr.data-dir]="dirFor('confidence')"
+              [class.sorted]="isSorted('confidence')"
+              (click)="toggleSort('confidence')"
+              (keydown)="onHeaderKeydown($event, 'confidence')"
+            >
+              Confidence
+              @if (isSorted('confidence')) {
+                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        [class.caret-asc]="dirFor('confidence') === 'asc'"/>
+                </svg>
+              }
+            </th>
+            <th scope="col">Path</th>
+            <th
+              scope="col"
+              class="sortable"
+              data-field="session"
+              role="button"
+              tabindex="0"
+              [attr.aria-sort]="ariaSortFor('session')"
+              [attr.data-dir]="dirFor('session')"
+              [class.sorted]="isSorted('session')"
+              (click)="toggleSort('session')"
+              (keydown)="onHeaderKeydown($event, 'session')"
+            >
+              Session
+              @if (isSorted('session')) {
+                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
+                        stroke-linecap="round" stroke-linejoin="round"
+                        [class.caret-asc]="dirFor('session') === 'asc'"/>
+                </svg>
+              }
+            </th>
           </tr>
-        }
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          @for (f of items(); track f.id) {
+            <tr
+              class="frow"
+              [class.alarm]="f.category === 'DIRECT_MUTATION'"
+              [class.legitimate]="f.category === 'VCS_RESTORE'"
+              (click)="open(f)"
+            >
+              <td class="num time">{{ fmtTimeShort(f.occurredAt) }}</td>
+              <td>
+                <span class="plane">
+                  <span class="dot" [style.background]="PLANE_COLOURS[f.plane]"></span>
+                  {{ planeName(f.plane) }}
+                </span>
+              </td>
+              <!-- The row's primary control: a real focusable element, so a keyboard user
+                   opens the same row a mouse user clicks. -->
+              <td class="det">
+                <button
+                  type="button"
+                  class="row-open"
+                  [attr.aria-label]="'Open finding ' + f.id"
+                  (click)="openRow($event, f)"
+                >{{ f.detector }}</button>
+              </td>
+              <td class="code num">{{ f.code ?? '—' }}</td>
+              <td>
+                @switch (f.category) {
+                  @case ('DIRECT_MUTATION') {
+                    <span class="cat cat-mutation">direct mutation</span>
+                  }
+                  @case ('VCS_RESTORE') {
+                    <span class="cat cat-restore">vcs restore · legitimate</span>
+                  }
+                  @case ('EXTERNAL') {
+                    <span class="cat cat-external">external</span>
+                  }
+                  @default {
+                    <span class="cat cat-none muted">—</span>
+                  }
+                }
+              </td>
+              <td class="conf" [class.unattributed]="f.confidence === null" [attr.title]="confidenceTipFor(f.confidence)">
+                {{ confidenceWord(f.confidence) }}
+              </td>
+              <td class="path" [attr.title]="f.pathHint ?? undefined">{{ f.pathHint ?? '—' }}</td>
+              <td class="sid num" [attr.title]="f.sessionId">{{ f.sessionId }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
 
     <div class="pager">
-      <button type="button" class="ghost" [disabled]="!canPrev()" (click)="goPage(-1)">Prev</button>
+      <button type="button" class="ghost" aria-label="Previous page" [disabled]="!canPrev()" (click)="goPage(-1)">Prev</button>
       <span class="pager-text num">
         @let s = slice();
         @if (s) {
@@ -91,7 +225,7 @@
           0 of 0
         }
       </span>
-      <button type="button" class="ghost" [disabled]="!canNext()" (click)="goPage(1)">Next</button>
+      <button type="button" class="ghost" aria-label="Next page" [disabled]="!canNext()" (click)="goPage(1)">Next</button>
     </div>
   }
 

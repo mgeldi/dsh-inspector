@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { InsightsStore } from '../state/insights.store';
-import { PRESETS, type Filters, type PresetId } from '../state/filters';
+import { DEFAULT_PRESET, PRESETS, type Filters, type PresetId } from '../state/filters';
 
 type FacetKey = 'schema' | 'model' | 'preset' | 'harnessVersion';
 type VocabKey = 'schemas' | 'models' | 'presets' | 'harnessVersions';
@@ -42,6 +42,22 @@ export class FilterRail {
   readonly store = inject(InsightsStore);
   readonly facets = FACETS;
   readonly presets = PRESETS;
+
+  /**
+   * Whether anything is actually being filtered. "Clear filters" is a no-op with an empty
+   * filter set, and a control that is always live teaches the user that its state means
+   * nothing; the disabled state doubles as the answer to "am I looking at everything?".
+   */
+  readonly hasActiveFilters = computed(() => {
+    const f = this.store.filters();
+    return f.presetId !== DEFAULT_PRESET
+      || f.from !== null
+      || f.to !== null
+      || f.schema !== null
+      || f.model !== null
+      || f.preset !== null
+      || f.harnessVersion !== null;
+  });
 
   /**
    * The facet's values from the store's vocabulary, plus — if the active filter value

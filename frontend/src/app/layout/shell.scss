@@ -55,11 +55,97 @@
 
 .spacer { flex: 1; }
 
+// The one primary action in the app. Not a Material button: M3 gives a filled button a 40 px
+// height and a 20 px radius, which do not fit a 48 px toolbar, so every property that makes
+// it a Material button would have been overridden — and the module's ripple machinery bought
+// nothing. This is the app's own control, on the app's own tokens.
+.action {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 13px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, $accent 34%, transparent);
+  background: color-mix(in srgb, $accent 13%, $surface);
+  color: color-mix(in srgb, $accent 88%, $text-hi);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 550;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  // Exact properties, never `all`: an inherited change would otherwise animate along with it.
+  transition: background-color 0.16s ease, border-color 0.16s ease, color 0.16s ease,
+              transform 0.12s ease, box-shadow 0.16s ease;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 1px 2px rgba(0, 0, 0, 0.35);
+
+  // The visible pill is 32 px; the target reaches 40 px without changing the layout.
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -4px 0;
+  }
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, $accent 20%, $surface);
+    border-color: color-mix(in srgb, $accent 52%, transparent);
+    color: $accent;
+    transform: translateY(-0.5px);
+  }
+
+  // Tactile: a press that reads as a press. Anything below 0.96 feels exaggerated.
+  &:active:not(:disabled) {
+    transform: scale(0.96);
+    transition-duration: 0.06s;
+  }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: 2px;
+  }
+
+  // The disabled state is the busy state, so it has to say "working", not "dead": the
+  // label changes to Indexing…, the icon turns, and the tint stays lit.
+  &:disabled {
+    cursor: progress;
+    opacity: 0.72;
+  }
+}
+
+.action-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+
+  [aria-busy='true'] & {
+    animation: action-spin 0.9s linear infinite;
+    transform-origin: 50% 50%;
+  }
+}
+
+@keyframes action-spin {
+  to { transform: rotate(360deg); }
+}
+
 .index-result {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: $text-lo;
   font-size: 12.5px;
-  margin-right: 10px;
   white-space: nowrap;
+
+  // A lit dot rather than a coloured sentence: the fact that something just happened,
+  // without the line competing with the button for attention.
+  &::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: $accent;
+    box-shadow: 0 0 0 3px color-mix(in srgb, $accent 16%, transparent);
+  }
 }
 
 .busy-bar {
@@ -107,7 +193,9 @@
 }
 
 .rail-pane {
-  width: 280px;
+  // 280 was roomy but it came out of the table's budget: at a 1280 window every pixel here
+  // is a pixel the findings grid cannot use for a code or a path.
+  width: 244px;
   flex-shrink: 0;
   overflow-y: auto;
   background: $surface-raised;

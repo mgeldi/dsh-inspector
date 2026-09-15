@@ -37,17 +37,21 @@
 
 .cselect {
   min-width: 190px;
+  min-height: 34px;
   padding: 6px 10px;
   background: $surface-raised;
   border: 1px solid $hairline;
-  border-radius: 6px;
+  border-radius: 8px;
   color: $text-hi;
   font: inherit;
   font-size: 13px;
   cursor: pointer;
+  transition: border-color 0.15s ease;
+
+  &:hover { border-color: color-mix(in srgb, $text-lo 55%, $hairline); }
 
   &:focus-visible {
-    outline: 2px solid $accent;
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
     outline-offset: 1px;
   }
 }
@@ -57,15 +61,18 @@
 // The backend's own sentence about what the table is allowed to claim: it is on
 // screen with the table, not behind a tooltip. A one-row comparison without this
 // line reads as a regression analysis, which is the wrong answer.
+// An information banner, not an alarm: a subtle accent tint carries "read this before
+// you read the numbers", which is what the note is.
 .basis-banner {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  padding: 9px 12px;
+  padding: 10px 14px;
   background: color-mix(in srgb, $accent 7%, $surface-raised);
   border: 1px solid color-mix(in srgb, $accent 32%, $hairline);
   border-radius: 8px;
   font-size: 12.5px;
+  line-height: 1.45;
   color: $text-hi;
 }
 
@@ -121,6 +128,13 @@
 
 .ctable tbody tr:last-child td { border-bottom: none; }
 
+// The row under the cursor answers, the way the overview table does: a tint, not a fill.
+.ctable tbody tr {
+  transition: background-color 0.12s ease;
+
+  &:hover { background: color-mix(in srgb, $text-hi 4%, transparent); }
+}
+
 // The baseline row is marked, not highlighted: it is the reference the deltas
 // are read against, and the tag says so in words.
 tr.baseline-row > td:first-child {
@@ -143,17 +157,35 @@ tr.baseline-row > td:first-child {
 .count { color: $text-lo; }
 .rate { color: $text-hi; }
 
-// The delta is the number the screen exists for. Signed, and coloured the
-// neutral accent: red/green would claim good/bad, which the design refuses.
+// The delta is the number the screen exists for. Signed and coloured by direction —
+// both rates are better lower, so down is the improvement and up the regression.
 .delta {
   font-weight: 600;
-  color: $accent;
-}
-
-.delta.zero {
-  font-weight: 400;
   color: $text-lo;
 }
+
+.delta-up { color: $plane-misuse; }
+.delta-down { color: $accent; }
+
+.delta.zero { font-weight: 400; color: $text-lo; }
+
+// A null delta (or a null rate) is an absence: italic n/a in the muted tone, never 0.
+.na {
+  font-weight: 400;
+  font-style: italic;
+  color: $text-lo;
+}
+
+// The tiny caret carries the direction without leaning on the sign.
+.tri {
+  width: 7px;
+  height: 7px;
+  margin-right: 4px;
+  vertical-align: 0.5px;
+  fill: currentColor;
+}
+
+.tri-down { transform: rotate(180deg); }
 
 // ---- the unit line ----
 

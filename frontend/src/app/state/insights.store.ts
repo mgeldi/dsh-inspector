@@ -38,6 +38,14 @@ export class InsightsStore {
    */
   readonly busy = signal(0);
 
+  /**
+   * Whether *this* action is running, as distinct from `busy` — the count of everything in
+   * flight. The toolbar's one action used to key its label and disabled state off `busy`,
+   * so a filter change three panes away made the primary button announce "Indexing…" while
+   * it was merely reloading a table. A control may only describe its own work.
+   */
+  readonly indexing = signal(false);
+
   /** The human sentence from the last rejected request; a later success clears it. */
   readonly error = signal<string | null>(null);
 
@@ -151,11 +159,14 @@ export class InsightsStore {
    * returned counts for the status line ("indexed 168 streams, 389 findings in 4.3 s").
    */
   reindex(): void {
+    this.indexing.set(true);
     this.track(this.api.runIndex(), v => {
       this.lastIndex.set(v);
       this.loadOverview();
       this.loadFindings();
-    });
+    // Settled on both paths: a failed index must not leave the button claiming work that
+    // stopped happening two seconds ago.
+    }, () => this.indexing.set(false));
   }
 
   // ---- internals ----
@@ -164,7 +175,8 @@ export class InsightsStore {
     this.detailCache.clear();
   }
 
-  private track<T>(source: Observable<T>, onValue: (value: T) => void): void {
+  private track<T>(source: Observable<T>, onValue: (value: T) => void,
+                   onSettled?: () => void): void {
     this.busy.update(b => b + 1);
     // takeUntilDestroyed with the explicit DestroyRef: safe to call from any method, and
     // it completes every subscription when the store is destroyed, so a late response
@@ -172,11 +184,13 @@ export class InsightsStore {
     source.pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: value => {
         this.busy.update(b => b - 1);
+        onSettled?.();
         this.error.set(null);
         onValue(value);
       },
       error: err => {
         this.busy.update(b => b - 1);
+        onSettled?.();
         // A rejected request: surface the human sentence and leave the previous data in
         // place. An empty dashboard that means "you typed something wrong" reads as
         // "no problems found" — the most dangerous wrong answer this tool can give.

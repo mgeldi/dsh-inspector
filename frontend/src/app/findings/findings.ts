@@ -15,7 +15,7 @@ import { FindingDetail, confidenceLabel, confidenceTip, planeLabel, timeShort } 
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FindingDetail],
   templateUrl: './findings.html',
-  styleUrl: './findings.scss',
+  styleUrls: ['./findings.scss', './findings-rows.scss'],
 })
 export class Findings {
   readonly store = inject(InsightsStore);
@@ -69,6 +69,12 @@ export class Findings {
     this.store.selectFinding(f.id);
   }
 
+  /** The row's primary control (the focusable detector cell) calls this, not `open` again. */
+  openRow(ev: Event, f: FindingDto): void {
+    ev.stopPropagation();
+    this.open(f);
+  }
+
   close(): void { this.openId.set(null); }
 
   // ---- server-side sort ----
@@ -82,9 +88,30 @@ export class Findings {
     this.store.loadFindings();
   }
 
-  arrow(field: SortField): string {
+  isSorted(field: SortField): boolean {
+    return this.activeSort().field === field;
+  }
+
+  /** The direction on the active column, null on every other column. */
+  dirFor(field: SortField): SortDir | null {
     const cur = this.activeSort();
-    return cur.field === field ? (cur.dir === 'desc' ? '↓' : '↑') : '';
+    return cur.field === field ? cur.dir : null;
+  }
+
+  /** The WAI-ARIA sort state for the header: the caret paints it, the attribute states it. */
+  ariaSortFor(field: SortField): 'ascending' | 'descending' | 'none' {
+    const dir = this.dirFor(field);
+    if (dir === 'asc') { return 'ascending'; }
+    if (dir === 'desc') { return 'descending'; }
+    return 'none';
+  }
+
+  /** Headers are role="button": Enter and Space trigger the same sort a click does. */
+  onHeaderKeydown(ev: KeyboardEvent, field: SortField): void {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      this.toggleSort(field);
+    }
   }
 
   // ---- pagination ----
@@ -93,7 +120,11 @@ export class Findings {
     const p = this.store.findings();
     if (!p) { return; }
     const next = p.page + delta;
-    if (next < 0 || (next + 1) * p.size > p.total) { return; }
+    // A page exists while its first item is within the total — `next * size < total`.
+    // (The old `(next + 1) * size > total` form was stricter and made the last page
+    // unreachable whenever it was a partial slice, while canNext — the button's own
+    // disabled state — said the jump was fine. Now both agree on the same rule.)
+    if (next < 0 || next * p.size >= p.total) { return; }
     this.store.setPage(next);
     this.store.loadFindings();
   }

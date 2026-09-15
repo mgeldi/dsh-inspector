@@ -11,12 +11,25 @@
       @if (indexResult()) {
         <span class="index-result num">{{ indexResult() }}</span>
       }
+      <!-- No mat-flat-button: the shell imports the toolbar and the progress bar, not the
+           button module, so the attribute was inert and Chrome painted a native light button
+           on a dark toolbar. The action is styled from the same tokens as the rest of the app
+           instead; see shell.scss for why the M3 button would have been overridden anyway. -->
       <button
-        mat-flat-button
-        class="index-button"
-        [disabled]="store.busy() > 0"
+        type="button"
+        class="action"
         (click)="reindex()"
-      >Index sessions</button>
+        [disabled]="store.indexing()"
+        [attr.aria-busy]="store.indexing()"
+      >
+        <svg class="action-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M13.6 8a5.6 5.6 0 1 1-1.7-4.05" fill="none" stroke="currentColor"
+                stroke-width="1.6" stroke-linecap="round" />
+          <path d="M13.4 1.6v2.9h-2.9" fill="none" stroke="currentColor" stroke-width="1.6"
+                stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+        <span>{{ store.indexing() ? 'Indexing…' : 'Index sessions' }}</span>
+      </button>
     </mat-toolbar>
 
     @if (store.busy() > 0) {

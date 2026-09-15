@@ -1,7 +1,7 @@
 // Variables-only import: theme-tokens emits no CSS, so the compiled Material theme never
-// rides into this component's 4 kB anyComponentStyle budget. The FindingDetail panel is a
-// sibling component with its own scope and its own finding-detail.scss, so each file stays
-// under the per-component budget line.
+// rides into this component's 4 kB anyComponentStyle budget. This file carries the page
+// shell and the table chrome; row, chip and pager styles live in findings-rows.scss, so
+// each file stays under the per-component budget line.
 @use '../../theme-tokens' as *;
 
 :host { display: block; }
@@ -12,19 +12,36 @@
   flex-direction: column;
   gap: 12px;
   padding: 18px 20px 28px;
-  max-width: 1160px;
+  // A table wants every pixel it can get; the overview's 1120 was carried over by copy and
+  // pasted a scrollbar onto a screen that had room for the columns.
+  max-width: 1400px;
 }
 
 .floading { margin: 8px 0; }
 
 // ---- the table ----
 
-.ftable {
-  width: 100%;
-  border-collapse: collapse;
+// The wrapper is the scroll container: the header sticks inside it, so the columns stay
+// legible while the rows scroll, and the pager below never has to scroll out of sight.
+.ftable-wrap {
+  max-height: calc(100vh - 148px);
+  overflow: auto;
   background: $surface-raised;
   border: 1px solid $hairline;
   border-radius: 8px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) inset, 0 2px 6px rgba(0, 0, 0, 0.28);
+}
+
+.ftable {
+  width: 100%;
+  // The colgroup in the template is only honoured under a fixed layout; auto layout would
+  // ignore it and grow the table past the wrapper, pushing SESSION off the right edge.
+  table-layout: fixed;
+  // Below this the wrapper scrolls instead of crushing a column into three characters. The
+  // number is deliberately under a 1280 window's usable outlet width (~1000 px): the table
+  // should fit the laptop it is demoed on, and scroll only past that.
+  min-width: 900px;
+  border-collapse: collapse;
   font-size: 13px;
 }
 
@@ -46,6 +63,10 @@
 
 .ftable tbody td {
   padding: 8px 10px;
+  // Fixed columns plus nowrap means content can exceed the cell; clipped with an ellipsis
+  // is the intended behaviour, overlapping the next column is not.
+  overflow: hidden;
+  text-overflow: ellipsis;
   border-bottom: 1px solid color-mix(in srgb, $hairline 55%, transparent);
   white-space: nowrap;
 }
@@ -53,174 +74,38 @@
 .ftable tbody tr:last-child td { border-bottom: none; }
 
 // Sorting is server-side: the header is the only control, and it says what it asked for.
+// Hover brightens, and the active column is the only header at full text brightness —
+// obvious without shouting. The direction is an inline SVG caret, never a unicode glyph.
 th.sortable {
   cursor: pointer;
   user-select: none;
-  transition: color 0.15s ease;
+  transition: color 0.15s ease, transform 0.12s ease;
 
   &:hover { color: $text-hi; }
+
+  &:active { transform: scale(0.96); transition-duration: 0.06s; }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: -2px;
+  }
 }
 
 th.sorted { color: $text-hi; }
 
-.arrow {
+.caret {
+  width: 8px;
+  height: 8px;
   margin-left: 4px;
+  vertical-align: -1px;
   color: $accent;
-}
 
-.frow {
-  cursor: pointer;
-  transition: background 0.12s ease;
-
-  &:hover { background: $surface; }
-}
-
-// DIRECT_MUTATION is the alarm the harness exists to catch: the misuse hue at low alpha.
-.frow.alarm {
-  background: color-mix(in srgb, $plane-misuse 7%, $surface-raised);
-
-  &:hover { background: color-mix(in srgb, $plane-misuse 12%, $surface-raised); }
-}
-
-// VCS_RESTORE is legitimate work, not a violation: a quiet accent tint, no alarm colour.
-.frow.legitimate {
-  background: color-mix(in srgb, $accent 4%, $surface-raised);
-
-  &:hover { background: color-mix(in srgb, $accent 9%, $surface-raised); }
-}
-
-.plane {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.time { color: $text-lo; }
-
-.det { color: $text-hi; }
-
-.code,
-.path,
-.sid {
-  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
-  font-size: 12px;
-  color: $text-lo;
-}
-
-.cat {
-  display: inline-block;
-  padding: 2px 9px;
-  border-radius: 999px;
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  white-space: nowrap;
-}
-
-.cat-mutation {
-  color: $plane-misuse;
-  background: color-mix(in srgb, $plane-misuse 14%, transparent);
-}
-
-.cat-restore {
-  color: $accent;
-  background: color-mix(in srgb, $accent 12%, transparent);
-}
-
-.cat-external {
-  color: $text-lo;
-  background: color-mix(in srgb, $text-lo 12%, transparent);
-}
-
-.cat-none { font-weight: 400; }
-
-.conf { font-weight: 600; color: $text-hi; }
-
-// null confidence: the word unattributed, muted and slanted — distinct from high/medium.
-.conf.unattributed {
-  color: $text-lo;
-  font-weight: 400;
-  font-style: italic;
-}
-
-// ---- the honest pager ----
-
-.pager {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.pager-text {
-  color: $text-lo;
-  font-size: 12.5px;
-}
-
-button.ghost {
-  padding: 5px 13px;
-  background: none;
-  border: 1px solid $hairline;
-  border-radius: 6px;
-  color: $text-lo;
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-  transition: border-color 0.15s ease, color 0.15s ease;
-
-  &:hover:not(:disabled) {
-    border-color: $text-lo;
-    color: $text-hi;
-  }
-
-  &:disabled {
-    opacity: 0.45;
-    cursor: default;
+  path {
+    transform-box: fill-box;
+    transform-origin: center;
+    transition: transform 0.15s ease;
   }
 }
 
-// ---- empty state: silence reads as "nothing wrong", so name the cause and offer the fix ----
-
-.fempty {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  max-width: 620px;
-  padding: 22px 24px;
-  border: 1px dashed $hairline;
-  border-radius: 8px;
-}
-
-.fempty-title {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  color: $text-hi;
-}
-
-.fempty-text {
-  margin: 0;
-  font-size: 13px;
-  color: $text-lo;
-}
-
-.fempty-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-// ---- the detail panel ----
-
-.detail-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-  background: color-mix(in srgb, $surface 55%, transparent);
-}
+// The chevron is drawn pointing down (desc); asc rotates it in place.
+.caret path.caret-asc { transform: rotate(180deg); }

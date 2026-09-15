@@ -19,3 +19,56 @@ body {
 .plane-GUARD { color: $plane-guard; }
 .plane-MODEL_MISUSE { color: $plane-misuse; }
 .plane-INFRASTRUCTURE { color: $plane-infra; }
+
+// ---- keyboard focus is never invisible ----
+// Components that style their own focus ring carry it under their own selectors; this is
+// the default for links and generic buttons that do not, so tabbing through the app never
+// loses the cursor.
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+  outline-offset: 1px;
+}
+
+// ---- thin dark scrollbars ----
+// The bright system scrollbar on a dark app is the loudest element on screen that is not
+// data. Thumb in $hairline on $surface, thin, in both engine families.
+* {
+  scrollbar-width: thin;
+  scrollbar-color: $hairline $surface;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track { background: $surface; }
+
+*::-webkit-scrollbar-thumb {
+  background: $hairline;
+  border: 2px solid $surface;
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover { background: $text-lo; }
+
+*::-webkit-scrollbar-corner { background: $surface; }
+
+// ---- line wrap ----
+// Headings are short and read as one line: balance them. Body copy breaks where the eye
+// will not land a ragged word.
+h1, h2, h3, h4 { text-wrap: balance; }
+p { text-wrap: pretty; }
+
+// ---- reduced motion ----
+// The app animates a 160 ms panel slide and a 320 ms chart settle; for a reader who
+// prefers no motion those become instant, not absent — the states still arrive, fast.
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001s !important;
+    scroll-behavior: auto !important;
+  }
+}

@@ -83,7 +83,7 @@ export function confidenceTip(c: number | null): string {
           }
           <span class="chip conf" [class.unattributed]="f.confidence === null" [attr.title]="confidenceTip(f.confidence)">{{ confidenceLabel(f.confidence) }}</span>
           @if (f.pathHint) {
-            <span class="chip path-chip">{{ f.pathHint }}</span>
+            <span class="chip path-chip" [attr.title]="f.pathHint">{{ f.pathHint }}</span>
           }
         </p>
         @if (d.tool) {
@@ -92,28 +92,33 @@ export function confidenceTip(c: number | null): string {
       </header>
 
       @if (f.staleSeq !== null || f.causeSeq !== null || f.seq !== null) {
-        <section class="chain" aria-label="Causal chain">
+        <!-- The chain is one reading: a timeline the eye follows top to bottom, the dots in
+             the finding's plane colour, the hairline connecting them. -->
+        <section class="chain" aria-label="Causal chain" [style.--plane]="PLANE_COLOURS[f.plane]">
           <h3 class="section-title">Causal chain</h3>
-          <div class="chain-steps">
+          <ol class="chain-steps">
             @if (f.staleSeq !== null) {
-              <div class="chain-step">
+              <li class="chain-step">
+                <span class="chain-dot"></span>
                 <span class="chain-seq num">{{ f.staleSeq }}</span>
                 <span class="chain-label">stamped at {{ f.staleSeq }}</span>
-              </div>
+              </li>
             }
             @if (f.causeSeq !== null) {
-              <div class="chain-step">
+              <li class="chain-step">
+                <span class="chain-dot"></span>
                 <span class="chain-seq num">{{ f.causeSeq }}</span>
                 <span class="chain-label">changed at {{ f.causeSeq }}</span>
-              </div>
+              </li>
             }
             @if (f.seq !== null) {
-              <div class="chain-step final">
+              <li class="chain-step final">
+                <span class="chain-dot"></span>
                 <span class="chain-seq num">{{ f.seq }}</span>
                 <span class="chain-label">refused at {{ f.seq }}</span>
-              </div>
+              </li>
             }
-          </div>
+          </ol>
         </section>
       }
 
@@ -125,11 +130,17 @@ export function confidenceTip(c: number | null): string {
               <div class="ev">
                 <div class="ev-head">
                   <span class="ev-seq num">seq {{ e.seq }}</span>
-                  <span class="ev-verb">{{ e.verbClass }}</span>
+                  <span
+                    class="ev-verb"
+                    [class.verb-mutating]="e.verbClass === 'MUTATING'"
+                    [class.verb-restoring]="e.verbClass === 'VCS_RESTORE'"
+                  >{{ e.verbClass }}</span>
                   @if (e.pathHint) {
-                    <span class="ev-path muted">{{ e.pathHint }}</span>
+                    <span class="ev-path muted" [attr.title]="e.pathHint">{{ e.pathHint }}</span>
                   }
                 </div>
+                <!-- The redacted command, on an inset surface: it scrolls sideways rather than
+                     wrapping mid-command. This is the only place command text appears. -->
                 <code class="ev-excerpt">{{ e.excerptRedacted }}</code>
               </div>
             }

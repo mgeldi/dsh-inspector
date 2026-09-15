@@ -28,26 +28,45 @@
   font-weight: 500;
 }
 
+// Native <select> (see filter-rail.html for why). appearance:none removes the platform
+// widget, which in a dark app renders a light box no CSS can reach; the caret is an inline
+// SVG so the control costs nothing at load and matches the token colour.
 .facet-select {
   width: 100%;
-  padding: 7px 8px;
-  background: $surface;
+  min-height: 34px;
+  padding: 6px 30px 6px 10px;
+  appearance: none;
+  -webkit-appearance: none;
+  background: $surface url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%2399a1b3' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") right 9px center / 12px no-repeat;
   border: 1px solid $hairline;
-  border-radius: 6px;
+  border-radius: 8px;
   color: $text-hi;
   font: inherit;
   font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 
   option {
     background: $surface-raised;
     color: $text-hi;
   }
 
+  &:hover:not(:disabled) { border-color: color-mix(in srgb, $text-lo 55%, $hairline); }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: 1px;
+  }
+
   // A single-valued facet is shown, not hidden: dimmed but the value stays legible,
-  // so a one-version index reads as "fixed", not "broken".
+  // so a one-version index reads as "fixed", not "broken". No caret either — there is
+  // nothing to choose, and an affordance that leads nowhere is a lie about the control.
   &:disabled {
     cursor: default;
-    opacity: 0.75;
+    background-image: none;
+    color: $text-lo;
+    border-style: dashed;
+    border-color: color-mix(in srgb, $hairline 80%, transparent);
   }
 }
 
@@ -58,6 +77,7 @@
 }
 
 .chip {
+  min-height: 30px;
   padding: 4px 12px;
   background: $surface;
   border: 1px solid $hairline;
@@ -66,35 +86,64 @@
   font: inherit;
   font-size: 12px;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+              transform 0.12s ease;
 
   &:hover {
-    border-color: $text-lo;
+    border-color: color-mix(in srgb, $text-lo 60%, $hairline);
+    background: color-mix(in srgb, $text-hi 4%, $surface);
     color: $text-hi;
+  }
+
+  &:active { transform: scale(0.96); }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: 1px;
   }
 
   // The active preset is the accent token: time is the one facet with a default,
   // and the default must be visible on first load.
   &.chip-active {
-    background: color-mix(in srgb, $accent 18%, $surface);
-    border-color: color-mix(in srgb, $accent 55%, $surface);
-    color: $text-hi;
+    background: color-mix(in srgb, $accent 16%, $surface);
+    border-color: color-mix(in srgb, $accent 50%, transparent);
+    color: color-mix(in srgb, $accent 85%, $text-hi);
   }
 }
 
 .clear {
   align-self: flex-start;
+  min-height: 30px;
   padding: 5px 12px;
   background: none;
   border: 1px solid $hairline;
-  border-radius: 6px;
+  border-radius: 8px;
   color: $text-lo;
   font: inherit;
   font-size: 12.5px;
   cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
+              transform 0.12s ease;
 
-  &:hover {
-    border-color: $text-lo;
+  &:hover:not(:disabled) {
+    border-color: color-mix(in srgb, $text-lo 60%, $hairline);
+    background: color-mix(in srgb, $text-hi 5%, transparent);
     color: $text-hi;
+  }
+
+  &:active:not(:disabled) { transform: scale(0.96); }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: 1px;
+  }
+
+  // With nothing filtered there is nothing to clear. A control that is always live
+  // teaches the user that its state means nothing — here the absence of filters is
+  // worth showing, because it is also the answer to "is the dashboard really all my data?".
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+    border-style: dashed;
   }
 }
