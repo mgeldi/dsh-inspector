@@ -43,6 +43,16 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!--
+            Boot 4 moved MockMvc auto-configuration out of spring-boot-starter-test
+            (org.springframework.boot.test.autoconfigure.web.servlet no longer exists);
+            @AutoConfigureMockMvc now lives in spring-boot-webmvc-test.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
