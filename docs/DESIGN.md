@@ -613,6 +613,13 @@ GET  /api/cohorts?groupBy=harnessVersion|model|schema|preset&baseline=<key>&from
 POST /api/index/run          synchronous scan, returns the summary
 ```
 
+`plane`, `detector`, `session` and `code` are accepted by `/api/findings`, validated against the
+vocabulary like every other value, and **the UI sends none of them**. That is a cut, not an
+oversight: the parameters are covered by backend tests and remain the seam a future column
+filter hangs on, and what was left out is the interaction — clicking a plane or detector cell to
+narrow the table — which is a feature, and the hour it costs went into the causal chain instead.
+Read those four parameters as API capability, not as a screen control.
+
 `/api/cohorts` carries the same shared filter parameters as the other two reads, and its rates
 are computed over the filtered population: four aggregates, four different time columns, one
 WHERE contract. Stated flatly, a cohort comparison is *these cohorts, in this window*: the rates

@@ -90,7 +90,7 @@ describe('Shell', () => {
   it('renders a rejected request as a dismissible error bar carrying the store sentence', () => {
     expect(el.querySelector('.error-bar'), 'no error bar while error is null').toBeNull();
 
-    store.setSchema('nope');
+    store.setFilters({ schema: 'nope' });
     store.loadOverview();
     http.expectOne(r => r.url === '/api/overview').flush(
       { status: 400, title: 'Unknown filter value', filter: 'schema', value: 'nope', allowed: ['V0', 'V3'] },

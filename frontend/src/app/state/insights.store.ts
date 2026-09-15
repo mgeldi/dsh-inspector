@@ -59,11 +59,9 @@ export class InsightsStore {
   readonly error = signal<string | null>(null);
 
   // Findings-only request state. The from/to/schema/model/preset/harnessVersion filters
-  // above are shared with overview; these are not.
-  readonly plane = signal<string | null>(null);
-  readonly detector = signal<string | null>(null);
-  readonly session = signal<string | null>(null);
-  readonly code = signal<string | null>(null);
+  // above are shared with overview; these are not. The backend also accepts per-row
+  // plane/detector/session/code filters (FindingsRequest); no screen drives them, so the
+  // store holds no state for them — a filter nothing writes is not a filter, it is residue.
   readonly sort = signal<{ field: SortField; dir: SortDir } | null>(null);
   readonly page = signal(0);
   readonly size = signal(20);
@@ -71,7 +69,6 @@ export class InsightsStore {
   // ---- derived ----
 
   readonly preset = computed(() => this.filters().presetId);
-  readonly totalCount = computed(() => this.findings()?.total ?? 0);
 
   /**
    * Per-id cache for the lazy detail fetch, a plain Map for the session. Any reload
@@ -84,10 +81,6 @@ export class InsightsStore {
   setFilters(patch: Partial<Filters>): void {
     this.filters.update(f => ({ ...f, ...patch }));
   }
-
-  setSchema(value: string | null): void { this.setFilters({ schema: value }); }
-  setModel(value: string | null): void { this.setFilters({ model: value }); }
-  setHarnessVersion(value: string | null): void { this.setFilters({ harnessVersion: value }); }
 
   setPreset(id: PresetId, now: number = Date.now()): void {
     this.filters.update(f => applyPreset(f, id, now));
@@ -103,10 +96,6 @@ export class InsightsStore {
    */
   dismissError(): void { this.error.set(null); }
 
-  setPlane(value: string | null): void { this.plane.set(value); }
-  setDetector(value: string | null): void { this.detector.set(value); }
-  setSession(value: string | null): void { this.session.set(value); }
-  setCode(value: string | null): void { this.code.set(value); }
   setSort(sort: { field: SortField; dir: SortDir } | null): void { this.sort.set(sort); }
   setPage(page: number): void { this.page.set(page); }
 
@@ -126,10 +115,6 @@ export class InsightsStore {
     // null means "no filter" and maps to absence at this boundary.
     this.track(this.api.findings({
       filters: this.filters(),
-      plane: this.plane() ?? undefined,
-      detector: this.detector() ?? undefined,
-      session: this.session() ?? undefined,
-      code: this.code() ?? undefined,
       sort: this.sort() ?? undefined,
       page: this.page(),
       size: this.size(),

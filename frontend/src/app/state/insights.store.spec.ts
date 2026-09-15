@@ -50,7 +50,7 @@ describe('InsightsStore', () => {
 
   it('sends the same filter params to overview and findings from the one filter state', () => {
     store.setPreset('7d', 1_790_000_000_000);
-    store.setSchema('V0');
+    store.setFilters({ schema: 'V0' });
     store.loadOverview();
     store.loadFindings();
 
@@ -77,8 +77,8 @@ describe('InsightsStore', () => {
   });
 
   it('lets a facet be cleared to null, and a null facet is not sent', () => {
-    store.setSchema('V0');
-    store.setSchema(null);
+    store.setFilters({ schema: 'V0' });
+    store.setFilters({ schema: null });
     expect(store.filters().schema).toBeNull();
     store.loadOverview();
     const req = http.expectOne(r => r.url === '/api/overview');
@@ -91,7 +91,7 @@ describe('InsightsStore', () => {
     http.expectOne(r => r.url === '/api/overview').flush(goodOverview);
     expect(store.overview()?.tiles.sessions).toBe(165);
 
-    store.setSchema('nope');
+    store.setFilters({ schema: 'nope' });
     store.loadOverview();
     http.expectOne(r => r.url === '/api/overview').flush(
       { status: 400, title: 'Unknown filter value', filter: 'schema', value: 'nope', allowed: ['V0', 'V3'] },
@@ -106,16 +106,16 @@ describe('InsightsStore', () => {
     http.expectOne(r => r.url === '/api/findings').flush(goodFindings);
     expect(store.findings()?.total).toBe(389);
 
-    store.setDetector('nope');
+    store.setFilters({ schema: 'nope' });
     store.loadFindings();
     http.expectOne(r => r.url === '/api/findings').flush(
-      { status: 400, title: 'Unknown filter value', filter: 'detector', value: 'nope', allowed: ['error-plane', 'retry-storm'] },
+      { status: 400, title: 'Unknown filter value', filter: 'schema', value: 'nope', allowed: ['V0', 'V3'] },
       { status: 400, statusText: 'Bad Request' });
 
     expect(store.findings()?.total).toBe(389);
     expect(store.findings()?.items[0].id).toBe(7);
-    expect(store.error()).toContain('error-plane');
-    expect(store.error()).toContain('retry-storm');
+    expect(store.error()).toContain('V0');
+    expect(store.error()).toContain('V3');
   });
 
   it('treats busy as a counter, so the earlier completion does not clear the later spinner', () => {

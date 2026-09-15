@@ -98,7 +98,7 @@ describe('FilterRail', () => {
   });
 
   it('writes null — not an empty string — when (any) is chosen', () => {
-    store.setSchema('V0');
+    store.setFilters({ schema: 'V0' });
     fixture.detectChanges();
     expect(select('schema').value).toBe('V0');
 
@@ -128,7 +128,7 @@ describe('FilterRail', () => {
   });
 
   it('clears every facet and the preset on Clear, and reloads', () => {
-    store.setSchema('V0');
+    store.setFilters({ schema: 'V0' });
     store.setPreset('7d', 1_790_000_000_000);
     const loadAll = vi.spyOn(store, 'loadAll');
 
