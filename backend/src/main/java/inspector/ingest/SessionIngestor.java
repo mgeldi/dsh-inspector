@@ -198,6 +198,9 @@ public final class SessionIngestor {
         private void onResult(final RawEvent ev) {
             final String callId = ev.text("/message/source/callId");
             final OpenCall open = callId == null ? null : pendingCalls.remove(callId);
+            // open == null is the orphan branch: a tool/result whose tool/call never appeared.
+            // The row is kept so no outcome is lost, but it is not an observed call — that is
+            // what outcome_only records, and it is the one place the marker is set.
             final String code = ev.text("/error/code");
             final String path = open != null && open.absolutePath != null
                     ? open.absolutePath : ev.text("/meta/path");
@@ -208,7 +211,7 @@ public final class SessionIngestor {
                     open == null ? null : open.startedAt,
                     ev.time(),
                     open == null ? null : ev.time() - open.startedAt,
-                    code, path));
+                    code, path, open == null));
             if (code != null) {
                 errors.add(new ErrorEvent(open == null ? ev.seq() : open.seq,
                         open == null ? orNull(ev.integer("/turn")) : open.turn,
@@ -234,7 +237,7 @@ public final class SessionIngestor {
                     null, null, null, null, "none")));
             calls.addAll(pendingCalls.values().stream()
                     .map(c -> new ToolCallRecord(c.turn, c.step, c.seq, c.name, c.startedAt,
-                            null, null, null, c.absolutePath))
+                            null, null, null, c.absolutePath, false))
                     .toList());
             return new StreamFacts(
                     new SessionRecord(id, source.sourceFile(), source.projectSlug(),

@@ -113,6 +113,43 @@ final class SessionIngestorTest {
     }
 
     @Test
+    void anOrphanResultIsMarkedAndAMatchedCallIsNot() throws IOException {
+        // The marker is set in exactly one place: the orphan branch, a tool/result whose
+        // tool/call never appeared. The matched call must not be marked, or the marker
+        // drifts into marking everything.
+        final StreamFacts facts = ingest(Convention.V0,
+                toolCall("c1", "edit", T0, "{\"file_path\":\"/home/dev/demo/a.java\"}"),
+                toolResult("c1", T0 + 40, "FS_STALE_VERSION"),
+                toolResult("c999", T0 + 80, null));   // result of a call that never appeared
+
+        assertThat(facts.toolCalls()).hasSize(2);
+        assertThat(facts.toolCalls().get(0)).satisfies(call -> {
+            assertThat(call.name()).isEqualTo("edit");
+            assertThat(call.startedAt()).isEqualTo(T0);
+            assertThat(call.outcomeOnly()).as("a matched call is an observed call").isFalse();
+        });
+        assertThat(facts.toolCalls().get(1)).satisfies(call -> {
+            assertThat(call.outcomeOnly()).as("the orphan result is marked").isTrue();
+            assertThat(call.name()).isNull();              // consequence of the missing call
+            assertThat(call.startedAt()).isNull();
+            assertThat(call.endedAt()).isEqualTo(T0 + 80);
+            assertThat(call.durationMs()).isNull();
+            assertThat(call.errorCode()).isNull();
+        });
+    }
+
+    @Test
+    void aCallThatNeverGetsAResultIsNotMarked() throws IOException {
+        // A tool/call whose result never arrives is flushed at end of stream. It is still an
+        // observed call — the marker belongs to missing calls, not to incomplete ones.
+        final StreamFacts facts = ingest(Convention.V0,
+                toolCall("c1", "read", T0, "{\"file_path\":\"/home/dev/demo/a.java\"}"));
+
+        assertThat(facts.toolCalls()).singleElement()
+                .satisfies(call -> assertThat(call.outcomeOnly()).isFalse());
+    }
+
+    @Test
     void malformedArgumentsYieldNoPathAndNoException() throws IOException {
         final StreamFacts facts = ingest(Convention.V0,
                 toolCall("c2", "edit", T0, "{not json"),

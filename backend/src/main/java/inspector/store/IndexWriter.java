@@ -116,12 +116,12 @@ public final class IndexWriter {
                     call.name(), call.startedAt(), call.endedAt(), call.durationMs(),
                     call.errorCode(),
                     call.errorCode() == null ? null : ErrorPlanes.ofToolCode(call.errorCode()).name(),
-                    Paths.hint(call.absolutePath(), cwd)});
+                    Paths.hint(call.absolutePath(), cwd), call.outcomeOnly() ? 1 : 0});
         }
         return jdbc.batchUpdate(
                 "insert into tool_call (session_id, source_file, turn, step, seq, name, started_at,"
-                        + " ended_at, duration_ms, error_code, plane, path_hint)"
-                        + " values (?,?,?,?,?,?,?,?,?,?,?,?)", rows).length;
+                        + " ended_at, duration_ms, error_code, plane, path_hint, outcome_only)"
+                        + " values (?,?,?,?,?,?,?,?,?,?,?,?,?)", rows).length;
     }
 
     private int insertFindings(final String sessionId, final String sourceFile, final String cwd,

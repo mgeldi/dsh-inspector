@@ -12,8 +12,11 @@ import java.util.TreeSet;
 
 /**
  * The cohorts comparison queries (DESIGN.md §7): raw counters per cohort
- * key, no rates. Rates are findings per 1,000 tool calls and are computed
- * by the controller, which also knows which row is the baseline.
+ * key, no rates. Rates are findings per 1,000 <i>observed</i> tool calls
+ * ({@code outcome_only = 0}) and are computed by the controller, which
+ * also knows which row is the baseline: a {@code tool/result} whose
+ * {@code tool/call} never appeared is stored so no outcome is lost, but it
+ * is not a call and must not sit in a denominator.
  *
  * <p>The axis column is a fixed fragment chosen by the controller from a
  * whitelist; nothing user-supplied is spliced into the SQL.
@@ -41,9 +44,11 @@ public final class CohortRepository {
     public Result cohorts(final String axisColumn) {
         final Map<String, Long> sessions = groupCount(
                 "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n from session s group by 1");
+        // Observed calls only: the rate denominator must not count outcome-only rows
         final Map<String, Long> toolCalls = groupCount(
                 "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n from tool_call t "
-                        + "join session s on s.id = t.session_id and s.source_file = t.source_file group by 1");
+                        + "join session s on s.id = t.session_id and s.source_file = t.source_file "
+                        + "where t.outcome_only = 0 group by 1");
         final Map<String, Long> findings = groupCount(
                 "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n from finding f "
                         + "join session s on s.id = f.session_id and s.source_file = f.source_file group by 1");

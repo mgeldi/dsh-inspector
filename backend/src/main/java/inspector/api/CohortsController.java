@@ -15,9 +15,15 @@ import java.util.Map;
 
 /**
  * The cohorts comparison (DESIGN.md §7): one axis at a time, rates per
- * 1,000 tool calls, deltas in the same units against the baseline cohort,
- * and a note that states which basis is being shown — a one-row cohort is
- * a description, not a regression analysis, and inferred versions say so.
+ * 1,000 <i>observed</i> tool calls, deltas in the same units against the
+ * baseline cohort, and a note that states which basis is being shown — a
+ * one-row cohort is a description, not a regression analysis, and inferred
+ * versions say so.
+ *
+ * <p>The denominators are observed calls only: a {@code tool/result} whose
+ * {@code tool/call} never appeared is stored as a row ({@code outcome_only})
+ * so no outcome is lost, but it is not a call, and counting it would bias
+ * the rates per convention.
  *
  * <p>{@code groupBy} is a fixed whitelist — the session column comes from
  * a map, so a SQL-ish value is a 400, not a second statement.
@@ -120,8 +126,8 @@ public final class CohortsController {
     }
 
     /**
-     * Findings per 1,000 tool calls, rounded to two decimals. Null when the
-     * cohort has no tool calls — never a division by zero.
+     * Findings per 1,000 observed tool calls, rounded to two decimals. Null
+     * when the cohort has no observed tool calls — never a division by zero.
      */
     static Double rate(final long numerator, final long toolCalls) {
         return toolCalls == 0 ? null : round2(numerator * 1000.0 / toolCalls);

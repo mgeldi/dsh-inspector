@@ -126,12 +126,28 @@ final class CorpusSmokeTest {
                 .as("attributed findings still carry their causal sequence without the evidence")
                 .isGreaterThanOrEqualTo(1);
 
+        // tool-call row basis: some rows are tool/results whose tool/call never appeared
+        // (outcome_only = 1). They are stored so no outcome is lost, but they are not
+        // observed calls — the split is reported so the rate denominators stay honest
+        final long toolCallRows = count("select count(*) from tool_call", jdbc);
+        final long outcomeOnlyRows = count("select count(*) from tool_call where outcome_only = 1", jdbc);
+        assertThat(toolCallRows).as("the corpus really does persist tool calls").isGreaterThan(0);
+        assertThat(outcomeOnlyRows)
+                .as("some rows are observed calls, not only orphan results")
+                .isLessThan(toolCallRows);
+        final List<java.util.Map<String, Object>> byConvention = jdbc.queryForList(
+                "select s.\"schema\" as convention, count(*) as rows,"
+                        + " sum(case when t.outcome_only = 1 then 1 else 0 end) as outcome_only"
+                        + " from tool_call t join session s on s.id = t.session_id"
+                        + " and s.source_file = t.source_file group by 1 order by 1");
+
         // counts and codes only — never content, never a corpus path
         LOG.info("smoke: streams={} sessions={} findings={} parseFailures={} errorCodes={} unmapped={} "
-                        + "pathHints={} staleVersionFindings={} attributedWithCause={} evidenceRows={}",
+                        + "pathHints={} staleVersionFindings={} attributedWithCause={} evidenceRows={} "
+                        + "toolCallRows={} outcomeOnlyRows={} byConvention={}",
                 summary.streams(), summary.sessions(), summary.findings(), summary.parseFailures(),
                 errorCodes.size(), unmapped, pathHints.size(), staleVersionFindings, attributed,
-                evidenceRows);
+                evidenceRows, toolCallRows, outcomeOnlyRows, byConvention);
     }
 
     private static long count(final String sql, final JdbcTemplate jdbc) {

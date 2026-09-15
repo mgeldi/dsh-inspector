@@ -44,7 +44,8 @@ CREATE TABLE IF NOT EXISTS tool_call (
     duration_ms  INTEGER,
     error_code   TEXT,
     plane        TEXT,
-    path_hint    TEXT
+    path_hint    TEXT,
+    outcome_only INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS finding (

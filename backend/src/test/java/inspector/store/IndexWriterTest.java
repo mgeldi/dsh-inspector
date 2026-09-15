@@ -2,6 +2,8 @@ package inspector.store;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import inspector.api.FindingFilters;
+import inspector.api.dto.FindingDetailDto;
 import inspector.detect.Category;
 import inspector.detect.Finding;
 import inspector.detect.Plane;
@@ -31,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 import org.springframework.util.FileCopyUtils;
@@ -52,10 +55,11 @@ final class IndexWriterTest {
 
     private JdbcTemplate jdbc;
     private IndexWriter writer;
+    private DriverManagerDataSource dataSource;
 
     @BeforeEach
     void createDatabase() throws IOException {
-        final DriverManagerDataSource dataSource = new DriverManagerDataSource();
+        dataSource = new DriverManagerDataSource();
         dataSource.setUrl("jdbc:sqlite:" + temp.resolve("index.sqlite"));
         jdbc = new JdbcTemplate(dataSource);
         writer = new IndexWriter(jdbc, new DataSourceTransactionManager(dataSource));
@@ -217,6 +221,83 @@ final class IndexWriterTest {
                 .doesNotContain("cwd");
     }
 
+    @Test
+    void anOrphanResultRowIsStoredMarkedAndExcludedFromTheCallCounts() {
+        // The measured defect at the store level: a tool/result whose tool/call never appeared
+        // in the stream. The row is stored — no outcome is lost — but it is not a call: it is
+        // marked outcome_only and excluded from the tile count and the rate denominators. The
+        // complement, the call that did get its result, is not marked, so the marker cannot
+        // drift into marking everything.
+        final StreamFacts orphan = new StreamFacts(
+                new SessionRecord("s-1", "session.jsonl.zstd", "demo-app", "V0", T0, T0 + 60_000,
+                        null, null, "model-a", 131072, 0, "/home/dev/demo"),
+                List.of(),
+                List.of(
+                        new ToolCallRecord(0, 0, 5, "edit", T0 + 200, T0 + 300, 100L, null,
+                                "/home/dev/demo/App.java", false),
+                        new ToolCallRecord(0, 0, 9, null, null, T0 + 500, null, null, null, true)),
+                List.of(),
+                List.of(),
+                List.of(new ErrorEvent(5, 0, 0, "edit", "FS_NOT_FOUND",
+                        "/home/dev/demo/App.java", T0 + 300)),
+                List.of(),
+                List.of(),
+                0L);
+        writer.writeStream(source(), orphan,
+                List.of(new Finding("error-plane", Plane.MODEL_MISUSE, null, "FS_NOT_FOUND", null,
+                        "/home/dev/demo/App.java", 5, null, null, T0 + 300,
+                        "edit returned FS_NOT_FOUND", List.of())),
+                VERSION, false, T0 + 999);
+
+        // stored: both rows are in the table — the orphan's outcome is not lost
+        assertThat(count("tool_call")).isEqualTo(2);
+
+        // marked: exactly the orphan row, with the null-start consequences. The name stays
+        // null as a consequence of the missing call; the column is the marker.
+        final List<Map<String, Object>> rows = jdbc.queryForList(
+                "select seq, name, started_at, ended_at, duration_ms, outcome_only"
+                        + " from tool_call order by seq");
+        assertThat(rows).hasSize(2);
+        assertThat(rows.get(0)).satisfies(row -> {
+            assertThat(row.get("seq")).isEqualTo(5);
+            assertThat(row.get("name")).isEqualTo("edit");
+            assertThat(row.get("started_at")).isEqualTo(T0 + 200);
+            assertThat(row.get("outcome_only")).isEqualTo(0);
+        });
+        assertThat(rows.get(1)).satisfies(row -> {
+            assertThat(row.get("seq")).isEqualTo(9);
+            assertThat(row.get("name")).isNull();
+            assertThat(row.get("started_at")).isNull();
+            assertThat(row.get("ended_at")).isEqualTo(T0 + 500);
+            assertThat(row.get("duration_ms")).isNull();
+            assertThat(row.get("outcome_only")).isEqualTo(1);
+        });
+
+        // excluded from the tile count: the overview's tool-call tile counts observed calls,
+        // not rows
+        final JdbcClient client = JdbcClient.create(dataSource);
+        assertThat(new OverviewRepository(client)
+                .toolCallCount(new FindingFilters.Sql("", List.of())))
+                .as("the tile counts observed calls")
+                .isEqualTo(1);
+
+        // excluded from the rate denominators: the cohort's toolCalls is exactly the value the
+        // controller divides findings by — one observed call, not two rows. With the orphan
+        // counted the rate would read 500.0 instead of 1000.0.
+        assertThat(new CohortRepository(client).cohorts("harness_version").cohorts())
+                .singleElement()
+                .satisfies(cohort -> {
+                    assertThat(cohort.toolCalls()).as("the rate denominator").isEqualTo(1);
+                    assertThat(cohort.findings()).as("the numerator is unchanged").isEqualTo(1);
+                    assertThat(cohort.guardFindings()).isZero();
+                });
+
+        // the finding on the matched row is unaffected: the seq join still resolves its tool
+        final FindingDetailDto detail =
+                new FindingRepository(client).detail(1L).orElseThrow();
+        assertThat(detail.tool()).isEqualTo("edit");
+    }
+
     // ------------------------------------------------------------------ fixtures
 
     private void writeAll() {
@@ -241,12 +322,13 @@ final class IndexWriterTest {
                         new StepRecord(1, 0, T0 + 3000, null, 1000, 100, null, null, "none")),
                 List.of(
                         new ToolCallRecord(0, 0, 5, "read", T0 + 200, T0 + 300, 100L, null,
-                                "/home/dev/demo/App.java"),
-                        new ToolCallRecord(0, 0, 7, "bash", T0 + 400, T0 + 500, 100L, null, null),
+                                "/home/dev/demo/App.java", false),
+                        new ToolCallRecord(0, 0, 7, "bash", T0 + 400, T0 + 500, 100L, null, null,
+                                false),
                         new ToolCallRecord(0, 0, 9, "edit", T0 + 600, T0 + 700, 100L,
-                                "FS_STALE_VERSION", "/home/dev/demo/App.java"),
+                                "FS_STALE_VERSION", "/home/dev/demo/App.java", false),
                         new ToolCallRecord(1, 0, 11, "write", T0 + 800, T0 + 900, 100L,
-                                "FS_NOT_FOUND", "/home/dev/other/missing.txt")),
+                                "FS_NOT_FOUND", "/home/dev/other/missing.txt", false)),
                 List.of(new FileTouch(5, "/home/dev/demo/App.java", FileTouch.READ),
                         new FileTouch(9, "/home/dev/demo/App.java", FileTouch.WRITE)),
                 List.of(new ShellEvidence(7, Set.of("/home/dev/demo/App.java"), VerbClass.MUTATING,

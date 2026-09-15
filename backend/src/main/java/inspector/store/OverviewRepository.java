@@ -61,8 +61,15 @@ public final class OverviewRepository {
         return singleLong("select count(*) " + FINDING_JOIN + " " + where.asWhere(), where.params());
     }
 
+    /**
+     * The tool-call tile: observed tool calls only. A {@code tool/result} whose
+     * {@code tool/call} never appeared is stored as a row ({@code outcome_only = 1}) so no
+     * outcome is lost, but it is not a call — counting it would inflate every rate this
+     * tile feeds, differently per convention.
+     */
     public long toolCallCount(final FindingFilters.Sql where) {
-        return singleLong("select count(*) " + TOOL_CALL_JOIN + " " + where.asWhere(), where.params());
+        return singleLong("select count(*) " + TOOL_CALL_JOIN + " "
+                + whereExtra(where, "t.outcome_only = 0"), where.params());
     }
 
     public long stepCount(final FindingFilters.Sql where) {
@@ -98,10 +105,15 @@ public final class OverviewRepository {
                 .list();
     }
 
-    /** Tool calls per UTC day, the second of the two chart series. */
+    /**
+     * Tool calls per UTC day, the second of the two chart series. Observed calls only, on the
+     * same basis as the tile: the marker is the exclusion, and the null-start guard only
+     * protects the day bucketing from rows without a start.
+     */
     public List<SeriesPointRow> toolCallSeries(final FindingFilters.Sql where) {
         final String sql = "select date(t.started_at/1000.0, 'unixepoch') as day, count(*) as n " + TOOL_CALL_JOIN + " "
-                + whereExtra(where, "t.started_at is not null") + " group by day order by day";
+                + whereExtra(where, "t.outcome_only = 0 and t.started_at is not null")
+                + " group by day order by day";
         return jdbc.sql(sql).params(where.params())
                 .query((RowMapper<SeriesPointRow>) (rs, rowNum) ->
                         new SeriesPointRow(rs.getString("day"), rs.getLong("n")))
