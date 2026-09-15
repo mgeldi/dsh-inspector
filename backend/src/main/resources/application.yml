@@ -1,0 +1,20 @@
+server:
+  port: 8091
+  address: 127.0.0.1
+
+spring:
+  application:
+    name: dsh-inspector
+  datasource:
+    url: jdbc:sqlite:${inspector.db:var/inspector.sqlite}?journal_mode=WAL&busy_timeout=5000&foreign_keys=on
+    driver-class-name: org.sqlite.JDBC
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+inspector:
+  corpus: fixtures/sessions
+  harness-version: unknown
+  evidence:
+    store: true
