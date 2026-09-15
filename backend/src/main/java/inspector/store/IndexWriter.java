@@ -205,6 +205,9 @@ public final class IndexWriter {
 
     /** Zero on a fresh database. The startup rule indexes only when this returns nothing. */
     public int countSessions() {
-        return jdbc.queryForObject("select count(*) from session", Integer.class);
+        // Distinct ids: a session holding both log conventions occupies two rows, and "sessions"
+        // has to mean sessions wherever it is printed. The startup gate only cares about zero
+        // versus non-zero, which this preserves.
+        return jdbc.queryForObject("select count(distinct id) from session", Integer.class);
     }
 }

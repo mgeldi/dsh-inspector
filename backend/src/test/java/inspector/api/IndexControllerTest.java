@@ -55,12 +55,13 @@ class IndexControllerTest {
 
     @Test
     void runIndexesTheConfiguredCorpusAndReportsCountsOnly() throws Exception {
-        // the re-run over fixtures/sessions replaces the 12 streams; the 3
-        // rows from sessions-b survive, so the session total is 15
+        // the re-run over fixtures/sessions replaces the 12 streams; the 3 rows from
+        // sessions-b survive, so 15 rows remain — but one session is written in both
+        // conventions, so the honest session count is 14, not 15
         mockMvc.perform(post("/api/index/run"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.streams").value(12))
-                .andExpect(jsonPath("$.sessions").value(15))
+                .andExpect(jsonPath("$.sessions").value(14))
                 .andExpect(jsonPath("$.toolCalls").value(32))
                 .andExpect(jsonPath("$.findings").value(9))
                 .andExpect(jsonPath("$.parseFailures").value(0))

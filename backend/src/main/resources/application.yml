@@ -6,7 +6,11 @@ spring:
   application:
     name: dsh-inspector
   datasource:
-    url: jdbc:sqlite:${inspector.db:var/inspector.sqlite}?journal_mode=WAL&busy_timeout=5000&foreign_keys=on
+    # Deliberately a bare filename, not var/inspector.sqlite. sqlite-jdbc does not create a
+    # missing parent directory, so a path with one makes the packaged jar die at startup with
+    # SQLITE_CANTOPEN — and every test missed it, because each one overrides this URL to a temp
+    # directory. A clone with no var/ would have shipped broken. ApplicationContextTest guards it.
+    url: jdbc:sqlite:${inspector.db:inspector.sqlite}?journal_mode=WAL&busy_timeout=5000&foreign_keys=on
     driver-class-name: org.sqlite.JDBC
   sql:
     init:

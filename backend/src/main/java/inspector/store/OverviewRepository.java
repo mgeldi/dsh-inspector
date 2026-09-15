@@ -50,7 +50,11 @@ public final class OverviewRepository {
     }
 
     public long sessionCount(final FindingFilters.Sql where) {
-        return singleLong("select count(*) from session s " + where.asWhere(), where.params());
+        // Distinct ids, not rows: the session table is keyed by (id, sourceFile) because a
+        // session can hold both log conventions, so count(*) would report 168 streams as 168
+        // "sessions" next to a filter rail that lists 165. A tile the user can disprove by
+        // looking at their own session list costs credibility in every other number here.
+        return singleLong("select count(distinct s.id) from session s " + where.asWhere(), where.params());
     }
 
     public long findingCount(final FindingFilters.Sql where) {

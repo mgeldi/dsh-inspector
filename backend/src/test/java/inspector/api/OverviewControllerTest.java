@@ -89,11 +89,23 @@ class OverviewControllerTest {
     }
 
     @Test
+    void theSessionTileCountsSessionsNotStreams() throws Exception {
+        // The fixture corpus contains one session written in both conventions, so the session
+        // table holds 15 rows for 14 sessions. The tile has to answer "how many sessions", and
+        // the filter rail underneath it already lists 14 — two answers to one question is how a
+        // dashboard loses the right to be believed about anything else.
+        assertThat(count("select count(*) from session")).isEqualTo(15);
+        assertThat(strings(asJson(get("/api/overview")).path("vocabulary").path("sessions"))).hasSize(14);
+        assertThat(asJson(get("/api/overview")).path("tiles").path("sessions").asLong()).isEqualTo(14);
+    }
+
+    @Test
     void overviewReportsTilesAndVocabulary() throws Exception {
         final JsonNode root = asJson(get("/api/overview"));
 
         // tiles against the database ground truth, not a hardcoded guess
-        assertThat(root.path("tiles").path("sessions").asLong()).isEqualTo(count("select count(*) from session"));
+        assertThat(root.path("tiles").path("sessions").asLong())
+                .isEqualTo(count("select count(distinct id) from session"));
         assertThat(root.path("tiles").path("findings").asLong()).isEqualTo(count("select count(*) from finding"));
         assertThat(root.path("tiles").path("toolCalls").asLong())
                 .isEqualTo(count("select count(*) from tool_call"));
