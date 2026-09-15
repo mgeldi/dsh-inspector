@@ -58,7 +58,7 @@ checkable and the implementer was not — and the loop caught the defects there.
 
 ## 3. The ledger
 
-**Headline: automated tests alone would have caught ~4 of the 14 backend defects.** The
+**Headline: automated tests alone would have caught ~4 of the 15 backend defects.** The
 rest were caught by the review loop (reading returned code against the spec), by running
 the shipped artifact, or by reasoning about the fixture — roughly descending by what
 they would have cost.
@@ -86,6 +86,7 @@ signals force-ignored for background jobs. Each was preceded by a green run.
 | The packaged jar could not boot from a fresh clone: default `var/inspector.sqlite`, and sqlite-jdbc does not create parent dirs. **137 green tests shipped it** — every test overrode the JDBC URL | Running the shipped artifact | The deliverable's own quickstart failing on a clean machine with a message pointing at the wrong layer |
 | Re-index against an old schema → HTTP 500 | Review of the version gate; `meta.schema_version` check now wipes and re-indexes in one transaction | Any schema evolution between two runs of one clone: the Index button returning a stack trace |
 | `@SpringBootTest` runs `ApplicationRunner` beans under Boot 4, against the author's belief that it does not | The implementer verified it empirically; every test context now passes `--no-index` | Every store-touching test running the indexer against whatever the classpath holds — slow, flaky, machine-dependent |
+| `/api/cohorts` accepted the shared filter parameters and ignored them: the store sent them, the client encoded them, the controller did not declare them, the repository had no `WHERE` at all. Concealed by an HTTP test double that answers whatever it is handed, and by the spec asserting the contract was shared | Running the shipped artifact: filtering to one of five models returned byte-identical totals to the unfiltered read, and a value that exists nowhere was answered with HTTP 200 | A comparison screen showing unfiltered rates under any filter — the cohorts view answering a question about this window with the whole corpus, with no error and no warning |
 
 ### Frontend
 
@@ -99,6 +100,10 @@ signals force-ignored for background jobs. Each was preceded by a green run.
 | `provideAnimations()` not needed and left out | Review | A dead provider in the app config — small, but the line that becomes load-bearing folklore later |
 | The rail became a plain CSS `aside` instead of the spec table's `mat-sidenav` | Measured-cost review; documented as a deviation in DESIGN.md §8 | A state machine for a state that never occurs: open/closed, pinning, overlay — none of which the design has |
 | `$!` returned wrapper pids twice, once leaving a JVM holding 8091 for 27 minutes | Verified empirically with `ss -ltnp` | run.sh's "Ctrl-C stops both" being false: the port stays held, the next run fails with address-in-use, and the cause is a process the operator cannot name |
+| The toolbar action carried `mat-flat-button` with no button module imported: the attribute was inert, and Chrome painted a native light button on a dark toolbar. Concealed by the dark theme really being loaded — a review that assumed Material was doing the work saw a toolbar that looked right | The author, looking at the running page | The product's one verb, its primary action, advertised as a broken control on first paint |
+| The toolbar action's label and disabled state keyed off the store's global request counter: any filter change made it announce "Indexing…" while it was merely reloading a table. Concealed by correctness under the one flow ever exercised manually — the flow that never filters while indexing | The author, changing a filter while a table reload was in flight | A toolbar that lies about its own work on every filter change — while the signal that describes its own work (`indexing`) already existed in the store, unused |
+| The findings pager could never reach the last page: the full result size was compared against a multiple of the page size, while `canNext` used the current slice's length — the two disagreed exactly on a partial last slice. Concealed by tests with two full pages, where the total is a multiple of the size and both formulas agree | A test with a partial last page | The last slice of every findings list — the most recent findings, the rows the tool exists to surface — unreachable from the UI |
+| ECharts rendered its default white tooltip on a dark dashboard: the chart option was built next to the theme without spreading `CHART_BASE`, so the theme applied at the chart root silently lost to an option constructed beside it. Nothing was wrong until a user hovered | The author, hovering a bar on the running dashboard | The one interaction a chart exists for — reading a value — answering with a white box on a dark canvas, on the default screen, every hover |
 
 ### Launcher and verification
 
@@ -115,6 +120,8 @@ jobs. Every one of these was preceded by a green check.
 | The CLI's once-per-machine analytics prompt is unreadable with stdin detached ("User force closed the prompt"), and `cli.analytics: false` in `angular.json` does not suppress the question | The human's terminal, where the prompt was answerable at all | A crash waiting on any machine that has never answered that prompt — which is every reviewer's machine |
 | A trap set for INT never ran while the script was blocked in `wait -n` | Sending the signal the way a terminal does. The first attempt could not fail: a background job in a shell without job control has SIGINT force-ignored | Ctrl-C leaving both processes holding their ports, and the next start failing on address-in-use with no visible cause |
 | An orchestration command SIGTERMed the inference server serving its own session, because the pid came from grepping the whole `ss` listing rather than the target port's line | Reading the pid back after the fact | Its own runtime, restarted mid-task. The rule is not "be careful": a pid must come from a filtered query, and a machine running the agent's model beside the build has no margin for that mistake |
+
+The five defects added in this revision repeat the launcher table's shape: each was preceded by a green check that measured the presence of the machinery — a theme that loaded, a 200 that answered, a page that rendered, a control that existed — while the behaviour it was supposed to prove sat unmeasured next to it. That is the class the green conceals: the check passes about a narrower claim than the one it was written for, and the green is real, which is exactly why it was believed.
 
 ## 4. What I would change
 

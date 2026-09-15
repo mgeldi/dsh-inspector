@@ -615,7 +615,11 @@ POST /api/index/run          synchronous scan, returns the summary
 
 `/api/cohorts` carries the same shared filter parameters as the other two reads, and its rates
 are computed over the filtered population: four aggregates, four different time columns, one
-WHERE contract. Values are validated against the vocabulary like everywhere else, so a stale
+WHERE contract. Stated flatly, a cohort comparison is *these cohorts, in this window*: the rates
+are computed inside the current filter selection, so the selection is compared against itself —
+never against the unfiltered corpus — and a filter change re-picks the baseline rather than
+resending the previous key, which may name a cohort the new selection no longer contains. Values
+are validated against the vocabulary like everywhere else, so a stale
 filter is a 400 that names the allowed set rather than an empty table that reads as "this
 cohort is clean". Two consequences for the screen: the facet used as the grouping axis is dimmed
 with a stated reason, because filtering by the axis you group on always leaves one row whose

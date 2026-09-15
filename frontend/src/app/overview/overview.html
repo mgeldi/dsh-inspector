@@ -17,8 +17,8 @@
           indexed data. Widen it to All time, or re-run the indexer.
         </p>
         <div class="empty-actions">
-          <button type="button" class="ghost" (click)="useAllTime()">Use All time</button>
-          <button type="button" class="ghost" [disabled]="busy()" (click)="runIndexer()">Run indexer</button>
+          <button type="button" class="btn btn-ghost" (click)="useAllTime()">Use All time</button>
+          <button type="button" class="btn btn-ghost" [disabled]="busy()" (click)="runIndexer()">Run indexer</button>
         </div>
       </section>
     } @else {

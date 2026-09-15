@@ -9,7 +9,7 @@
         widen it to All time, or clear the rail facet that excludes everything.
       </p>
       <div class="fempty-actions">
-        <button type="button" class="ghost" (click)="useAllTime()">Use All time</button>
+        <button type="button" class="btn btn-ghost" (click)="useAllTime()">Use All time</button>
       </div>
     </section>
   } @else {
@@ -164,12 +164,10 @@
         </thead>
         <tbody>
           @for (f of items(); track f.id) {
-            <tr
-              class="frow"
-              [class.alarm]="f.category === 'DIRECT_MUTATION'"
-              [class.legitimate]="f.category === 'VCS_RESTORE'"
-              (click)="open(f)"
-            >
+            <!-- No row tint: the category chip already carries the distinction, and a tinted
+                 row plus a tinted chip says the same thing twice. The hover tint stays,
+                 because it answers "which row am I on", not "what is this row". -->
+            <tr class="frow" (click)="open(f)">
               <td class="num time">{{ fmtTimeShort(f.occurredAt) }}</td>
               <td>
                 <span class="plane">
@@ -216,7 +214,7 @@
     </div>
 
     <div class="pager">
-      <button type="button" class="ghost" aria-label="Previous page" [disabled]="!canPrev()" (click)="goPage(-1)">Prev</button>
+      <button type="button" class="btn btn-ghost" aria-label="Previous page" [disabled]="!canPrev()" (click)="goPage(-1)">Prev</button>
       <span class="pager-text num">
         @let s = slice();
         @if (s) {
@@ -225,7 +223,7 @@
           0 of 0
         }
       </span>
-      <button type="button" class="ghost" aria-label="Next page" [disabled]="!canNext()" (click)="goPage(1)">Next</button>
+      <button type="button" class="btn btn-ghost" aria-label="Next page" [disabled]="!canNext()" (click)="goPage(1)">Next</button>
     </div>
   }
 

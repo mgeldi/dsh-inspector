@@ -1,5 +1,5 @@
 import {
-  ChangeDetectionStrategy, Component, ElementRef, Input, OnChanges, OnDestroy, ViewChild, afterNextRender,
+  ChangeDetectionStrategy, Component, DestroyRef, ElementRef, effect, inject, input, viewChild, afterNextRender,
 } from '@angular/core';
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart } from 'echarts/charts';
@@ -21,23 +21,34 @@ echarts.use([BarChart, LineChart, GridComponent, LegendComponent, TooltipCompone
   template: `<div #host class="chart"></div>`,
   styles: [`:host,.chart,.chart>div{height:100%;width:100%} :host{display:block;min-height:220px}`],
 })
-export class ChartComponent implements OnChanges, OnDestroy {
-  @Input() option: echarts.EChartsCoreOption | null = null;
-  @ViewChild('host', { static: true }) host!: ElementRef<HTMLElement>;
+export class ChartComponent {
+  readonly option = input<echarts.EChartsCoreOption | null>(null);
+  readonly host = viewChild.required<ElementRef<HTMLElement>>('host');
   private chart?: echarts.ECharts;
   private readonly resizeObs = new ResizeObserver(() => this.chart?.resize());
 
   constructor() {
     afterNextRender(() => {
-      this.chart = echarts.init(this.host.nativeElement, undefined, { renderer: 'canvas' });
-      this.resizeObs.observe(this.host.nativeElement);
-      if (this.option) { this.chart.setOption(this.option, true); }
+      const el = this.host().nativeElement;
+      this.chart = echarts.init(el, undefined, { renderer: 'canvas' });
+      this.resizeObs.observe(el);
+      // The input may already carry a value by the first render; apply it once the canvas
+      // exists, so nothing depends on whether the effect beat the render callback.
+      const option = this.option();
+      if (option) { this.chart.setOption(option, true); }
+    });
+
+    // setOption(option, true) replaces rather than merges: a filtered-out series must not
+    // ghost over the new data. Skips the first tick when the canvas does not exist yet —
+    // the render callback above owns that case.
+    effect(() => {
+      const option = this.option();
+      if (this.chart && option) { this.chart.setOption(option, true); }
+    });
+
+    inject(DestroyRef).onDestroy(() => {
+      this.resizeObs.disconnect();
+      this.chart?.dispose();
     });
   }
-
-  // setOption(option, true) replaces rather than merges: a filtered-out series must not
-  // ghost over the new data.
-  ngOnChanges(): void { if (this.chart && this.option) { this.chart.setOption(this.option, true); } }
-
-  ngOnDestroy(): void { this.resizeObs.disconnect(); this.chart?.dispose(); }
 }

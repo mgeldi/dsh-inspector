@@ -1,4 +1,4 @@
-import { Component, Input } from '@angular/core';
+import { Component, input } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import type { EChartsCoreOption } from 'echarts/core';
 import { describe, expect, it, vi } from 'vitest';
@@ -54,10 +54,10 @@ vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
 @Component({
   standalone: true,
   imports: [ChartComponent],
-  template: '<app-chart [option]="option"></app-chart>',
+  template: '<app-chart [option]="option()"></app-chart>',
 })
 class TestHost {
-  @Input() option: EChartsCoreOption | null = null;
+  readonly option = input<EChartsCoreOption | null>(null);
 }
 
 describe('ChartComponent', () => {

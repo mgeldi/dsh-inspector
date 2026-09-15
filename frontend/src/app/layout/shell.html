@@ -14,10 +14,11 @@
       <!-- No mat-flat-button: the shell imports the toolbar and the progress bar, not the
            button module, so the attribute was inert and Chrome painted a native light button
            on a dark toolbar. The action is styled from the same tokens as the rest of the app
-           instead; see shell.scss for why the M3 button would have been overridden anyway. -->
+           instead; see styles.scss (.btn-primary) for why the M3 button would have been
+            overridden anyway. -->
       <button
         type="button"
-        class="action"
+        class="btn btn-primary"
         (click)="reindex()"
         [disabled]="store.indexing()"
         [attr.aria-busy]="store.indexing()"

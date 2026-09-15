@@ -117,16 +117,19 @@ describe('Findings', () => {
   it('marks a vcs-restore row as legitimate work, not a violation', () => {
     loadPage({ total: 1, page: 0, size: 20, items: [restore8] });
 
-    const row = el.querySelector('tr.legitimate')!;
-    expect(row, 'the row is classed legitimate').toBeTruthy();
-    expect(row.classList.contains('alarm')).toBe(false);
+    // The row tint is gone — the distinction the guard exists to show now lives in the
+    // category chip, which stayed.
+    const row = el.querySelector('tbody tr.frow')!;
+    expect(row, 'the row renders').toBeTruthy();
     const categoryCell = Array.from(row.querySelectorAll('td')).find(td =>
       td.querySelector('.cat-restore'))!;
+    expect(categoryCell, 'the row carries the restore chip').toBeTruthy();
     expect(categoryCell.textContent).toMatch(/legitimate/i);
+    expect(row.querySelector('.cat-mutation'), 'no alarm chip on a legitimate row').toBeNull();
 
-    // and a direct mutation keeps the alarm the guard exists to show
+    // and a direct mutation keeps the alarm chip the guard exists to show
     loadPage({ total: 1, page: 0, size: 20, items: [finding7] });
-    expect(el.querySelector('tr.alarm'), 'direct mutation stays the alarm').toBeTruthy();
+    expect(el.querySelector('.cat-mutation'), 'direct mutation keeps its chip').toBeTruthy();
   });
 
   it('keeps pagination honest: page 2 of 389 shows the right slice bounds', () => {

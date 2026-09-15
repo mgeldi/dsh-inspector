@@ -10,20 +10,6 @@
   &:hover { background: color-mix(in srgb, $text-hi 4%, transparent); }
 }
 
-// DIRECT_MUTATION is the alarm the harness exists to catch: the misuse hue at low alpha.
-.frow.alarm {
-  background: color-mix(in srgb, $plane-misuse 7%, $surface-raised);
-
-  &:hover { background: color-mix(in srgb, $plane-misuse 12%, $surface-raised); }
-}
-
-// VCS_RESTORE is legitimate work, not a violation: a quiet accent tint, no alarm colour.
-.frow.legitimate {
-  background: color-mix(in srgb, $accent 4%, $surface-raised);
-
-  &:hover { background: color-mix(in srgb, $accent 9%, $surface-raised); }
-}
-
 // The row's primary control: the detector cell is a real focusable element, so a keyboard
 // user opens the same row a mouse user clicks. It reads as the cell's text until it is
 // under the pointer or focused, and the ring says so.
@@ -141,46 +127,8 @@
   font-size: 12.5px;
 }
 
-// Ghost language: nothing to do is dashed and dimmed, doing something is a border brighten
-// and a tint. The range label is tabular so the slice bounds do not jitter between pages.
-button.ghost {
-  position: relative;
-  padding: 6px 13px;
-  background: none;
-  border: 1px solid $hairline;
-  border-radius: 8px;
-  color: $text-lo;
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
-              transform 0.12s ease;
-
-  &::after {
-    content: '';
-    position: absolute;
-    inset: -5px 0;
-  }
-
-  &:hover:not(:disabled) {
-    background: color-mix(in srgb, $text-hi 5%, transparent);
-    border-color: color-mix(in srgb, $text-lo 60%, $hairline);
-    color: $text-hi;
-  }
-
-  &:active:not(:disabled) { transform: scale(0.96); transition-duration: 0.06s; }
-
-  &:focus-visible {
-    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
-    outline-offset: 2px;
-  }
-
-  &:disabled {
-    opacity: 0.4;
-    cursor: default;
-    border-style: dashed;
-  }
-}
+// The pager buttons use the global `.btn-ghost`; nothing pager-specific is left to style
+// here. The range label is tabular so the slice bounds do not jitter between pages.
 
 // ---- empty state: silence reads as "nothing wrong", so name the cause and offer the fix ----
 

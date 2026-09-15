@@ -10,7 +10,7 @@ export const appConfig: ApplicationConfig = {
     // The store is the only fetcher in this app; it gets one fetch-based client.
     //
     // provideAnimations() is deliberately not here: the shell's Material parts
-    // (toolbar, progress-bar, flat button) and the rail's native controls render
+    // (toolbar, progress-bar) and the rail's native controls render
     // correctly without the animation engine — Material degrades to instant
     // transitions — and skipping it keeps the entry bundle smaller. Re-add it with
     // a bundle measurement if a later task needs a genuinely animated surface.

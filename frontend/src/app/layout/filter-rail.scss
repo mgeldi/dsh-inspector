@@ -128,39 +128,9 @@
   }
 }
 
+// The ghost language itself lives in the global `.btn-ghost`; only the layout that is
+// specific to the rail stays here.
 .clear {
   align-self: flex-start;
   min-height: 30px;
-  padding: 5px 12px;
-  background: none;
-  border: 1px solid $hairline;
-  border-radius: 8px;
-  color: $text-lo;
-  font: inherit;
-  font-size: 12.5px;
-  cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease,
-              transform 0.12s ease;
-
-  &:hover:not(:disabled) {
-    border-color: color-mix(in srgb, $text-lo 60%, $hairline);
-    background: color-mix(in srgb, $text-hi 5%, transparent);
-    color: $text-hi;
-  }
-
-  &:active:not(:disabled) { transform: scale(0.96); }
-
-  &:focus-visible {
-    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
-    outline-offset: 1px;
-  }
-
-  // With nothing filtered there is nothing to clear. A control that is always live
-  // teaches the user that its state means nothing — here the absence of filters is
-  // worth showing, because it is also the answer to "is the dashboard really all my data?".
-  &:disabled {
-    opacity: 0.4;
-    cursor: default;
-    border-style: dashed;
-  }
 }
