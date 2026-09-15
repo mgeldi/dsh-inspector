@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS tool_call (
     turn         INTEGER,
     step         INTEGER,
     seq          INTEGER NOT NULL,
-    name         TEXT    NOT NULL,
+    name         TEXT,
     started_at   INTEGER,
     ended_at     INTEGER,
     duration_ms  INTEGER,
