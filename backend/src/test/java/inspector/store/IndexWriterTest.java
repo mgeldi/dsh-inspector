@@ -2,11 +2,13 @@ package inspector.store;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.zaxxer.hikari.HikariDataSource;
 import inspector.api.FindingFilters;
 import inspector.api.dto.FindingDetailDto;
 import inspector.detect.Category;
 import inspector.detect.Finding;
 import inspector.detect.Plane;
+import inspector.index.IndexService;
 import inspector.ingest.Convention;
 import inspector.ingest.ErrorEvent;
 import inspector.ingest.FatalTurn;
@@ -63,6 +65,11 @@ final class IndexWriterTest {
         dataSource.setUrl("jdbc:sqlite:" + temp.resolve("index.sqlite"));
         jdbc = new JdbcTemplate(dataSource);
         writer = new IndexWriter(jdbc, new DataSourceTransactionManager(dataSource));
+        executeSchema(jdbc);
+    }
+
+    /** The shipped DDL, statement by statement — the same source the app applies. */
+    private void executeSchema(final JdbcTemplate jdbc) throws IOException {
         try (InputStream in = new ClassPathResource("schema.sql").getInputStream()) {
             final String ddl = FileCopyUtils.copyToString(
                     new java.io.InputStreamReader(in, StandardCharsets.UTF_8));
@@ -296,6 +303,93 @@ final class IndexWriterTest {
         final FindingDetailDto detail =
                 new FindingRepository(client).detail(1L).orElseThrow();
         assertThat(detail.tool()).isEqualTo("edit");
+    }
+
+    @Test
+    void aStaleSchemaVersionEmptiesEveryTableAndSeedsTheCurrentOne() {
+        // The defect a schema bump used to be: tool_call gained a column, the DDL is
+        // CREATE TABLE IF NOT EXISTS, and a database written by the older build meets the
+        // next index run with "no such column". The version row is the hook: a mismatch
+        // invalidates the whole index, it does not migrate it.
+        writeAll();
+        writer.seedMeta("0");
+
+        final int discarded = writer.resetIfStale(IndexService.SCHEMA_VERSION);
+
+        assertThat(discarded).isEqualTo(1);
+        assertThat(count("session")).isZero();
+        assertThat(count("step")).isZero();
+        assertThat(count("tool_call")).isZero();
+        assertThat(count("finding")).isZero();
+        assertThat(count("shell_evidence")).isZero();
+        assertThat(writer.countSessions()).isZero();
+        assertThat(jdbc.queryForList("select key, value from meta"))
+                .containsExactly(Map.of("key", "schema_version", "value", IndexService.SCHEMA_VERSION));
+    }
+
+    @Test
+    void aDatabaseAtTheCurrentVersionIsNotReset() {
+        // A reboot of a working install must not throw the index away. This is the test
+        // that keeps the feature from becoming "reset everything": with the version check
+        // inverted, every boot of a healthy install would discard a good index and pay for
+        // a rescan nobody asked for.
+        writeAll();
+        writer.seedMeta(IndexService.SCHEMA_VERSION);
+
+        final int discarded = writer.resetIfStale(IndexService.SCHEMA_VERSION);
+
+        assertThat(discarded).isZero();
+        assertThat(count("session")).isEqualTo(1);
+        assertThat(count("step")).isEqualTo(2);
+        assertThat(count("tool_call")).isEqualTo(4);
+        assertThat(count("finding")).isEqualTo(2);
+        assertThat(count("shell_evidence")).isEqualTo(1);
+        assertThat(jdbc.queryForList("select key, value from meta"))
+                .containsExactly(Map.of("key", "schema_version", "value", IndexService.SCHEMA_VERSION));
+    }
+
+    @Test
+    void aDatabaseWithNoSchemaVersionRowIsTreatedAsStale() {
+        // "No value stored" is a mismatch, not a default to keep: a database that predates
+        // the version row is emptied, re-seeded, and left usable.
+        writeAll();
+
+        final int discarded = writer.resetIfStale(IndexService.SCHEMA_VERSION);
+
+        assertThat(discarded).isEqualTo(1);
+        assertThat(count("session")).isZero();
+        assertThat(jdbc.queryForList("select key, value from meta"))
+                .containsExactly(Map.of("key", "schema_version", "value", IndexService.SCHEMA_VERSION));
+    }
+
+    @Test
+    void theResetKeepsForeignKeysEnabled() throws IOException {
+        // Production turns the guard on in the JDBC URL; a single-connection pool means the
+        // reset runs on the same connection the assertions read, so a "fix" that disables
+        // the guard to dodge a constraint error cannot hide. The delete order is
+        // child-to-parent precisely so no such fix is ever wanted.
+        final HikariDataSource pooled = new HikariDataSource();
+        pooled.setJdbcUrl("jdbc:sqlite:" + temp.resolve("fk.sqlite") + "?foreign_keys=on");
+        pooled.setMaximumPoolSize(1);
+        try {
+            final JdbcTemplate fk = new JdbcTemplate(pooled);
+            executeSchema(fk);
+            final IndexWriter fkWriter = new IndexWriter(fk, new DataSourceTransactionManager(pooled));
+            fkWriter.writeStream(source(), facts(), findings(), VERSION, true, T0 + 999);
+            fkWriter.seedMeta("0");
+
+            assertThat(fk.queryForObject("pragma foreign_keys", Integer.class)).isEqualTo(1);
+
+            final int discarded = fkWriter.resetIfStale(IndexService.SCHEMA_VERSION);
+
+            assertThat(discarded).isEqualTo(1);
+            assertThat(fk.queryForObject("select count(*) from shell_evidence", Integer.class)).isZero();
+            assertThat(fk.queryForObject("pragma foreign_keys", Integer.class))
+                    .as("the guard the reset ran under stays on")
+                    .isEqualTo(1);
+        } finally {
+            pooled.close();
+        }
     }
 
     // ------------------------------------------------------------------ fixtures

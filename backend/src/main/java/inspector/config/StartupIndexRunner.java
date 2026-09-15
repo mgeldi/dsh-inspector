@@ -13,7 +13,9 @@ import org.springframework.stereotype.Component;
 /**
  * Indexes on startup when the database holds nothing and the configured corpus has files.
  * Conditional rather than unconditional: a second boot must not pay for a rescan the
- * operator did not ask for, and an empty corpus must not look like a crash.
+ * operator did not ask for, and an empty corpus must not look like a crash. Before the rule
+ * runs, a stale schema version resets the index — the database is a derived cache of the
+ * corpus, not a system of record — so a schema bump never meets a half-obsolete table.
  */
 @Component
 public final class StartupIndexRunner implements ApplicationRunner {
@@ -33,7 +35,10 @@ public final class StartupIndexRunner implements ApplicationRunner {
 
     @Override
     public void run(final ApplicationArguments args) {
-        // The database gate comes first: a populated index is never rescanned, whatever the
+        // A schema bump is an invalidation, not a migration: the reset runs whether or not
+        // this boot goes on to index, because a stale index is broken either way.
+        writer.resetIfStale(IndexService.SCHEMA_VERSION);
+        // The database gate comes next: a populated index is never rescanned, whatever the
         // corpus directory looks like.
         if (args.containsOption("no-index") || writer.countSessions() > 0) {
             return;

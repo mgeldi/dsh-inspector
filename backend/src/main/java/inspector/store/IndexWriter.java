@@ -9,6 +9,8 @@ import inspector.ingest.StreamFacts;
 import inspector.ingest.ToolCallRecord;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -22,9 +24,17 @@ import org.springframework.transaction.support.TransactionTemplate;
  * <p>Every path goes through {@link Paths#hint} before anything reaches disk, so a raw
  * absolute path can never end up in the database (DESIGN.md §4.1, §6). occurred_at is the
  * finding's own event time, persisted verbatim — nothing in this class interpolates a time.
+ *
+ * <p>The database is a derived cache of the corpus, not a system of record: everything in
+ * it is reproducible by re-reading the logs, so a schema change is an invalidation event,
+ * not a migration. That is why {@link #resetIfStale(String)} empties the whole index when
+ * the stored {@code meta.schema_version} no longer matches, and the whole reason
+ * DESIGN.md §4.2 could ship without a migration engine.
  */
 @Component
 public final class IndexWriter {
+
+    private static final Logger LOG = LoggerFactory.getLogger(IndexWriter.class);
 
     /** What one write produced. The orchestrator sums these into its summary line. */
     public record Written(int steps, int toolCalls, int findings, int evidenceRows) {
@@ -201,6 +211,44 @@ public final class IndexWriter {
     public void seedMeta(final String schemaVersion) {
         jdbc.update("insert into meta (key, value) values ('schema_version', ?)"
                 + " on conflict(key) do update set value = excluded.value", schemaVersion);
+    }
+
+    /**
+     * The invalidation behind the no-migration-engine decision (DESIGN.md §4.2). When the
+     * stored schema version does not match the one the running build expects — including
+     * "no value stored" — every table is emptied, child-to-parent so the order holds with
+     * {@code foreign_keys=on}, and the version is re-seeded, all in one transaction so a
+     * crash mid-reset cannot leave a half-emptied database that looks like a valid empty
+     * index. Only a count is logged: how many streams were discarded, never a corpus path
+     * or content.
+     *
+     * @return how many streams were discarded; zero when the stored version already matches
+     */
+    public int resetIfStale(final String expectedSchemaVersion) {
+        return tx.execute(status -> {
+            final String stored = storedSchemaVersion();
+            if (expectedSchemaVersion.equals(stored)) {
+                return 0;
+            }
+            final int discarded = jdbc.queryForObject("select count(*) from session", Integer.class);
+            // child-to-parent: evidence rows reference the findings that own them, and
+            // findings, tool calls and steps reference the sessions that own them
+            jdbc.update("delete from shell_evidence");
+            jdbc.update("delete from finding");
+            jdbc.update("delete from tool_call");
+            jdbc.update("delete from step");
+            jdbc.update("delete from session");
+            seedMeta(expectedSchemaVersion);
+            LOG.info("index schema version is stale (stored: {}, expected: {}); reset the index,"
+                    + " discarding {} streams", stored, expectedSchemaVersion, discarded);
+            return discarded;
+        });
+    }
+
+    /** The stored schema version; null on a database no index run has versioned yet. */
+    private String storedSchemaVersion() {
+        return jdbc.query("select value from meta where key = 'schema_version'",
+                rs -> rs.next() ? rs.getString(1) : null);
     }
 
     /** Zero on a fresh database. The startup rule indexes only when this returns nothing. */

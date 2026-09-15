@@ -211,6 +211,32 @@ final class IndexServiceTest {
         }
 
         @Test
+        void aStaleDatabaseIsResetAndReindexedOnStartup() {
+            // The first boot on a database an older build left behind: the reset must leave
+            // the database usable, not merely empty — the startup rule then indexes the
+            // corpus and the row counts come back.
+            service.run();
+            writer.seedMeta("0");
+            logAppender.list.clear();
+
+            new StartupIndexRunner(service, propertiesOf(corpus), writer)
+                    .run(new DefaultApplicationArguments());
+
+            assertThat(writer.countSessions()).isEqualTo(2);
+            assertThat(count("step")).isEqualTo(2);
+            assertThat(count("tool_call")).isEqualTo(4);
+            assertThat(count("finding")).isEqualTo(3);
+            assertThat(jdbc.queryForList("select key, value from meta"))
+                    .containsExactly(Map.of("key", "schema_version", "value",
+                            IndexService.SCHEMA_VERSION));
+            // the reset is logged with counts only: how many streams were discarded, never
+            // a corpus path or content
+            final List<String> info = logMessages(Level.INFO);
+            assertThat(info).anyMatch(msg -> msg.contains("discarding 2 streams"));
+            assertThat(info).noneMatch(msg -> msg.contains(corpus.toString()));
+        }
+
+        @Test
         void aPopulatedDatabaseIsNeverRescannedEvenWhenTheCorpusIsMissing() {
             service.run();
             logAppender.list.clear();

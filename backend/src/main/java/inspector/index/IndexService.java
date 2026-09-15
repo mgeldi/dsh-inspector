@@ -25,7 +25,8 @@ import org.springframework.stereotype.Service;
 public final class IndexService {
 
     private static final Logger LOG = LoggerFactory.getLogger(IndexService.class);
-    static final String SCHEMA_VERSION = "1";
+    /** The index schema the running build writes; the startup reset compares it against the stored row. */
+    public static final String SCHEMA_VERSION = "1";
 
     private final CorpusScanner scanner;
     private final SessionIngestor ingestor;
