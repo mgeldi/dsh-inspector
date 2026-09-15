@@ -24,6 +24,13 @@ public final class StampGuardDetector implements Detector {
     public static final String ID = "stamp-guard";
     private static final String CODE = "FS_STALE_VERSION";
 
+    /**
+     * The verb classes that can have moved an mtime. A version-control restore rewrites the file
+     * just as a direct mutation does, so both are causal and chronology between them decides.
+     * READ_ONLY and OTHER never are: a mention is not a write (§5.3).
+     */
+    private static final Set<VerbClass> CAUSAL_VERBS = Set.of(VerbClass.MUTATING, VerbClass.VCS_RESTORE);
+
     @Override
     public String id() {
         return ID;
@@ -62,27 +69,16 @@ public final class StampGuardDetector implements Detector {
             // No derived stale touch means no bounded window, and an unbounded window is a guess.
             return external(error, null, "no prior file-tool operation on this path");
         }
-        final Match mutation = firstInWindow(shell, stale, error, VerbClass.MUTATING);
-        if (mutation != null) {
-            return new Finding(ID, Plane.GUARD, Category.DIRECT_MUTATION, error.code(),
-                    mutation.absolute() ? Confidence.HIGH : Confidence.MEDIUM, error.absolutePath(),
-                    error.seq(), stale.seq(), mutation.evidence().seq(), 0L,
-                    ("%s refused: stamp stale since seq %d (%s); consistent with a mutating command "
-                            + "at seq %d (%s path match)").formatted(
-                                    base(error.absolutePath()), stale.seq(), stale.op(),
-                                    mutation.evidence().seq(),
-                                    mutation.absolute() ? "absolute" : "basename"),
-                    List.of(mutation.evidence()));
-        }
-        final Match restore = firstInWindow(shell, stale, error, VerbClass.VCS_RESTORE);
-        if (restore != null) {
-            return new Finding(ID, Plane.GUARD, Category.VCS_RESTORE, error.code(),
-                    Confidence.HIGH, error.absolutePath(), error.seq(), stale.seq(),
-                    restore.evidence().seq(), 0L,
-                    ("%s refused: stamp stale since seq %d; a version-control restore at seq %d is "
-                            + "legitimate work the stamp cannot know about").formatted(
-                                    base(error.absolutePath()), stale.seq(), restore.evidence().seq()),
-                    List.of(restore.evidence()));
+        // Chronology decides, not verb class. A direct mutation and a version-control restore
+        // both write the file, so the cause is whichever came first after the stale touch — the
+        // one that actually moved the stamp. Scanning for MUTATING before VCS_RESTORE, as an
+        // earlier version did, lets a later `sed -i` claim a stamp that an earlier `git checkout`
+        // had already broken, and the seqs on screen would then disagree with the summary.
+        final Match cause = firstInWindow(shell, stale, error, CAUSAL_VERBS);
+        if (cause != null) {
+            return cause.evidence().verbClass() == VerbClass.VCS_RESTORE
+                    ? vcsRestore(error, stale, cause)
+                    : directMutation(error, stale, cause);
         }
         final Match mention = firstInWindow(shell, stale, error, null);
         // READ_ONLY and OTHER are never a cause: a mention is not a write (§5.3). The finding
@@ -92,18 +88,44 @@ public final class StampGuardDetector implements Detector {
                 : "in-window mention at seq " + mention.evidence().seq() + " is not a mutation");
     }
 
+    private Finding directMutation(final ErrorEvent error, final FileTouch stale, final Match cause) {
+        return new Finding(ID, Plane.GUARD, Category.DIRECT_MUTATION, error.code(),
+                cause.absolute() ? Confidence.HIGH : Confidence.MEDIUM, error.absolutePath(),
+                error.seq(), stale.seq(), cause.evidence().seq(), 0L,
+                ("%s refused: stamp stale since seq %d (%s); consistent with a mutating command "
+                        + "at seq %d (%s path match)").formatted(
+                                base(error.absolutePath()), stale.seq(), stale.op(),
+                                cause.evidence().seq(),
+                                cause.absolute() ? "absolute" : "basename"),
+                List.of(cause.evidence()));
+    }
+
+    private Finding vcsRestore(final ErrorEvent error, final FileTouch stale, final Match cause) {
+        return new Finding(ID, Plane.GUARD, Category.VCS_RESTORE, error.code(),
+                Confidence.HIGH, error.absolutePath(), error.seq(), stale.seq(),
+                cause.evidence().seq(), 0L,
+                ("%s refused: stamp stale since seq %d; a version-control restore at seq %d is "
+                        + "legitimate work the stamp cannot know about").formatted(
+                                base(error.absolutePath()), stale.seq(), cause.evidence().seq()),
+                List.of(cause.evidence()));
+    }
+
     /**
-     * The open interval (stale.seq, error.seq), scanned in seq order. The first evidence of the
-     * requested verb class that references the path (absolutely or by basename) wins; when verb
-     * is null, any verb — used only to name a mention in the external summary.
+     * The open interval (stale.seq, error.seq), scanned in seq order. The first evidence whose
+     * verb is in {@code causal} and which references the path (absolutely or by basename) wins.
+     * A null set means any verb, used only to name a mention in the external summary.
+     *
+     * <p>One chronological pass, never one pass per verb: two passes would report the first
+     * mutation and the first restore independently and let whichever verb class is checked first
+     * win a race it lost on the clock.
      */
     private Match firstInWindow(final List<ShellEvidence> shell, final FileTouch stale,
-                                final ErrorEvent error, final VerbClass verb) {
+                                final ErrorEvent error, final Set<VerbClass> causal) {
         for (final ShellEvidence evidence : shell) {
             if (evidence.seq() <= stale.seq() || evidence.seq() >= error.seq()) {
                 continue;
             }
-            if (verb != null && evidence.verbClass() != verb) {
+            if (causal != null && !causal.contains(evidence.verbClass())) {
                 continue;
             }
             for (final String referenced : evidence.referencedPaths()) {

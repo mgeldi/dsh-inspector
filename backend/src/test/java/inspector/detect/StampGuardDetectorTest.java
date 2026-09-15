@@ -180,6 +180,44 @@ final class StampGuardDetectorTest {
         });
     }
 
+    @Test
+    void anEarlierRestoreWinsOverALaterMutationBecauseBothMoveTheStamp() {
+        // A `git checkout` rewrites the file just as `sed -i` does, so the earlier of the two is
+        // what broke the stamp. Reporting the mutation would be wrong twice: the attribution is
+        // late, and the seq shown on screen would disagree with the story the summary tells.
+        // Chronology decides between causal verbs; the verb class only decides the category.
+        final List<Finding> findings = detect(
+                edit(TOUCH_SEQ, "/home/dev/demo/App.java"),
+                shell(CAUSE_SEQ + 20, VerbClass.MUTATING, "/home/dev/demo/App.java"),
+                shell(CAUSE_SEQ, VerbClass.VCS_RESTORE, "/home/dev/demo/App.java"),
+                stale(FAIL_SEQ, "/home/dev/demo/App.java"));
+
+        assertThat(findings).singleElement().satisfies(f -> {
+            assertThat(f.category()).isEqualTo(Category.VCS_RESTORE);
+            assertThat(f.causeSeq()).isEqualTo(CAUSE_SEQ);
+            assertThat(f.summary()).contains("legitimate");
+        });
+    }
+
+    @Test
+    void evidenceOrderInTheStreamDoesNotChangeTheVerdict() {
+        // The detector sorts by seq before scanning. Handing the same events over in the other
+        // order must not produce a different attribution, or the window scan secretly depends
+        // on input order — which is exactly how the two-pass version got this wrong.
+        final List<Finding> forwards = detect(
+                edit(TOUCH_SEQ, "/home/dev/demo/App.java"),
+                shell(CAUSE_SEQ, VerbClass.VCS_RESTORE, "/home/dev/demo/App.java"),
+                shell(CAUSE_SEQ + 20, VerbClass.MUTATING, "/home/dev/demo/App.java"),
+                stale(FAIL_SEQ, "/home/dev/demo/App.java"));
+        final List<Finding> backwards = detect(
+                edit(TOUCH_SEQ, "/home/dev/demo/App.java"),
+                shell(CAUSE_SEQ + 20, VerbClass.MUTATING, "/home/dev/demo/App.java"),
+                shell(CAUSE_SEQ, VerbClass.VCS_RESTORE, "/home/dev/demo/App.java"),
+                stale(FAIL_SEQ, "/home/dev/demo/App.java"));
+
+        assertThat(backwards).usingRecursiveComparison().isEqualTo(forwards);
+    }
+
     private List<Finding> detect(final Object... parts) {
         final List<FileTouch> touches = new ArrayList<>();
         final List<ShellEvidence> shell = new ArrayList<>();
