@@ -65,6 +65,10 @@
 .busy-bar {
   height: 3px;
   border-radius: 0;
+  // The theme's primary is azure, but the app marks "active" with the accent green everywhere
+  // else (the tab underline), so the busy indicator follows that instead of the palette default.
+  --mdc-linear-progress-active-indicator-color: #{$accent};
+  --mdc-linear-progress-track-color: transparent;
 }
 
 .error-bar {

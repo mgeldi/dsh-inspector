@@ -109,18 +109,21 @@ describe('Shell', () => {
     expect(el.querySelector('.error-bar'), 'error bar after dismiss').toBeNull();
   });
 
-  it('drives the progress bar from the store busy counter, not a local flag', () => {
-    const bar = () => el.querySelector('mat-progress-bar') as HTMLElement;
-    expect(bar(), 'progress bar element').toBeTruthy();
-    expect(bar().hasAttribute('hidden'), 'hidden when settled').toBe(true);
+  it('renders the progress bar only while the store is busy, and from its counter', () => {
+    // Presence, not a [hidden] attribute: Material's own stylesheet sets display:block on the
+    // bar, which overrides the UA rule behind [hidden], so a hidden-marked bar animated over an
+    // idle dashboard. jsdom reports the attribute faithfully and the defect anyway — only
+    // looking at the page showed it.
+    const bar = () => el.querySelector('mat-progress-bar');
+    expect(bar(), 'absent when settled').toBeNull();
 
     store.loadOverview();
     fixture.detectChanges();
-    expect(bar().hasAttribute('hidden'), 'visible while a load is in flight').toBe(false);
+    expect(bar(), 'present while a load is in flight').toBeTruthy();
 
     http.expectOne(r => r.url === '/api/overview').flush(overview);
     fixture.detectChanges();
-    expect(bar().hasAttribute('hidden'), 'hidden again once settled').toBe(true);
+    expect(bar(), 'gone again once settled').toBeNull();
   });
 
   it('calls store.reindex from the button and renders the summary as one line', () => {

@@ -19,7 +19,12 @@
       >Index sessions</button>
     </mat-toolbar>
 
-    <mat-progress-bar mode="indeterminate" class="busy-bar" [hidden]="store.busy() === 0"></mat-progress-bar>
+    @if (store.busy() > 0) {
+      <!-- Not [hidden]: Material sets display:block on the bar's own class, which beats the
+           UA [hidden] rule, so an indeterminate bar marked hidden kept animating across an
+           idle dashboard — the screen looked like it was always loading. -->
+      <mat-progress-bar mode="indeterminate" class="busy-bar" aria-label="Loading"></mat-progress-bar>
+    }
 
     @if (store.error()) {
       <div class="error-bar" role="alert">
