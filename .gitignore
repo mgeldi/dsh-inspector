@@ -22,7 +22,7 @@ dist/
 *.iml
 .DS_Store
 
-# NOTE: the synthetic fixture corpus under backend/src/main/resources/fixtures/ is
+# NOTE: the synthetic fixture corpus under backend/fixtures/sessions/ is
 # committed ON PURPOSE. It is what makes `./run.sh` show a populated dashboard on a fresh
 # clone, and it carries the regression cases in docs/DESIGN.md §11 (both schema
 # conventions, the mention-without-mutation case, the measured false positive, the
@@ -39,3 +39,6 @@ corpus/
 # machine-local operating constraints for agents working in this checkout.
 # References paths on a personal machine, so it is not part of the published repo.
 AGENTS.md
+
+# agent-facing implementation plans: working documents, not reviewer artifacts
+docs/superpowers/

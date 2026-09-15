@@ -536,7 +536,7 @@ shell_evidence (finding_id, seq, verb_class, path_hint, excerpt_redacted)   -- c
 meta       (key, value)   -- schema_version, and nothing else
 ```
 
-Five tables. `meta` holds exactly one row. `last_run`, `corpus_root` and `evidence_store` were
+Six tables, counting `meta`, which holds exactly one row. `last_run`, `corpus_root` and `evidence_store` were
 removed on the same test as the `index_run` table in §2.2 — nothing reads them: the scan summary
 is returned by `POST /api/index/run`, the corpus root is a startup configuration value, and the
 evidence flag is read from configuration, not from the database. Storing configuration in a
