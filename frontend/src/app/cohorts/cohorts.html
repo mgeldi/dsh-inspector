@@ -1,0 +1,93 @@
+<section class="cpage">
+  @if (!loaded()) {
+    <p class="cloading muted">Loading cohorts…</p>
+  } @else {
+    <div class="ccontrols">
+      <div class="cfield">
+        <label class="clabel" for="group-by">Group by</label>
+        <select
+          class="cselect"
+          id="group-by"
+          [value]="groupBy()"
+          (change)="changeGroup($any($event.target).value)"
+        >
+          @for (g of groupKeys; track g.key) {
+            <option [value]="g.key">{{ g.label }}</option>
+          }
+        </select>
+      </div>
+      <div class="cfield">
+        <label class="clabel" for="baseline">Baseline</label>
+        <select
+          class="cselect"
+          id="baseline"
+          [value]="baseline()"
+          (change)="changeBaseline($any($event.target).value)"
+        >
+          @for (b of baselineKeys(); track b) {
+            <option [value]="b">{{ b }}</option>
+          }
+        </select>
+      </div>
+    </div>
+
+    @if (basisNote()) {
+      <div class="basis-banner" role="note">
+        <span class="basis-label">Basis</span>
+        <span class="basis-text">{{ basisNote() }}</span>
+      </div>
+    }
+
+    @if (rows().length === 0) {
+      <section class="cempty" aria-label="No cohorts">
+        <p class="cempty-title">The index holds no sessions</p>
+        <p class="cempty-text">
+          Run the indexer from the toolbar, or point the corpus at a directory that holds sessions.
+        </p>
+      </section>
+    } @else {
+      <table class="ctable" aria-label="Cohort comparison">
+        <thead>
+          <tr>
+            <th scope="col">Cohort</th>
+            <th scope="col">Sessions</th>
+            <th scope="col">Observed calls</th>
+            <th scope="col">Findings</th>
+            <th scope="col">Guard findings</th>
+            <th scope="col">Findings / 1k calls</th>
+            <th scope="col">Violation / 1k calls</th>
+            <th scope="col">Δ findings</th>
+            <th scope="col">Δ violation</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (c of rows(); track c.key) {
+            <tr [class.baseline-row]="isBaselineRow(c.key)">
+              <td class="key">
+                {{ c.key }}
+                @if (isBaselineRow(c.key)) {
+                  <span class="baseline-tag">baseline</span>
+                }
+              </td>
+              <td class="num count">{{ fmt(c.sessions) }}</td>
+              <td class="num count">{{ fmt(c.toolCalls) }}</td>
+              <td class="num count">{{ fmt(c.findings) }}</td>
+              <td class="num count">{{ fmt(c.guardFindings) }}</td>
+              <td class="num rate">{{ rateText(c.findingsPerKCalls) }}</td>
+              <td class="num rate">{{ rateText(c.violationRatePerK) }}</td>
+              <td class="num delta" [class.zero]="deltaIsZero(c.findingsPerKCallsDelta)">{{ deltaText(c.findingsPerKCallsDelta) }}</td>
+              <td class="num delta" [class.zero]="deltaIsZero(c.violationRatePerKDelta)">{{ deltaText(c.violationRatePerKDelta) }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+
+      <p class="units muted">
+        Rates are findings per 1,000 observed tool calls — a <code>tool/result</code> whose
+        <code>tool/call</code> never appeared is stored but not counted. Deltas are
+        <strong>percentage points</strong> against the baseline cohort, signed but not coloured
+        good or bad. <code>n/a</code> is a cohort with no observed calls.
+      </p>
+    }
+  }
+</section>

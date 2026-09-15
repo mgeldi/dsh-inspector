@@ -1,0 +1,196 @@
+// Variables-only import: theme-tokens emits no CSS, so the compiled Material theme never
+// rides into this component's per-component style budget.
+@use '../../theme-tokens' as *;
+
+:host { display: block; }
+
+.cpage {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px 28px;
+  max-width: 1160px;
+}
+
+.cloading { margin: 8px 0; }
+
+// ---- the two controls ----
+
+.ccontrols {
+  display: flex;
+  gap: 18px;
+}
+
+.cfield {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.clabel {
+  color: $text-lo;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cselect {
+  min-width: 190px;
+  padding: 6px 10px;
+  background: $surface-raised;
+  border: 1px solid $hairline;
+  border-radius: 6px;
+  color: $text-hi;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:focus-visible {
+    outline: 2px solid $accent;
+    outline-offset: 1px;
+  }
+}
+
+// ---- the basis banner ----
+
+// The backend's own sentence about what the table is allowed to claim: it is on
+// screen with the table, not behind a tooltip. A one-row comparison without this
+// line reads as a regression analysis, which is the wrong answer.
+.basis-banner {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 9px 12px;
+  background: color-mix(in srgb, $accent 7%, $surface-raised);
+  border: 1px solid color-mix(in srgb, $accent 32%, $hairline);
+  border-radius: 8px;
+  font-size: 12.5px;
+  color: $text-hi;
+}
+
+.basis-label {
+  flex-shrink: 0;
+  color: $accent;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.basis-text { color: $text-hi; }
+
+// ---- the table ----
+
+.ctable {
+  width: 100%;
+  border-collapse: collapse;
+  background: $surface-raised;
+  border: 1px solid $hairline;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.ctable thead th {
+  background: $surface-raised;
+  border-bottom: 1px solid $hairline;
+  padding: 9px 10px;
+  color: $text-lo;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: right;
+  white-space: nowrap;
+
+  &:first-child {
+    text-align: left;
+  }
+}
+
+.ctable tbody td {
+  padding: 8px 10px;
+  border-bottom: 1px solid color-mix(in srgb, $hairline 55%, transparent);
+  text-align: right;
+  white-space: nowrap;
+
+  &:first-child {
+    text-align: left;
+  }
+}
+
+.ctable tbody tr:last-child td { border-bottom: none; }
+
+// The baseline row is marked, not highlighted: it is the reference the deltas
+// are read against, and the tag says so in words.
+tr.baseline-row > td:first-child {
+  box-shadow: inset 2px 0 0 $accent;
+}
+
+.key { color: $text-hi; font-weight: 500; }
+
+.baseline-tag {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  color: $accent;
+  background: color-mix(in srgb, $accent 12%, transparent);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.count { color: $text-lo; }
+.rate { color: $text-hi; }
+
+// The delta is the number the screen exists for. Signed, and coloured the
+// neutral accent: red/green would claim good/bad, which the design refuses.
+.delta {
+  font-weight: 600;
+  color: $accent;
+}
+
+.delta.zero {
+  font-weight: 400;
+  color: $text-lo;
+}
+
+// ---- the unit line ----
+
+.units {
+  max-width: 860px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.units code {
+  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 11px;
+  color: $text-hi;
+}
+
+// ---- empty index ----
+
+.cempty {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 620px;
+  padding: 22px 24px;
+  border: 1px dashed $hairline;
+  border-radius: 8px;
+}
+
+.cempty-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: $text-hi;
+}
+
+.cempty-text {
+  margin: 0;
+  font-size: 13px;
+  color: $text-lo;
+}

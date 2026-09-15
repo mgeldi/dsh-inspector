@@ -37,7 +37,13 @@ export interface CohortRow {
   findingsPerKCalls: number | null; violationRatePerK: number | null;
   findingsPerKCallsDelta: number | null; violationRatePerKDelta: number | null;
 }
-export interface CohortPageDto { groupBy: string; baseline: string; basisNote: string; cohorts: CohortRow[]; }
+/**
+ * `baseline` is null when the index is empty (the backend's `defaultBaseline`
+ * has nothing to choose from) and `basisNote` is null when the backend has no
+ * basis to state — the one-row and inferred-version notes being the usual ones.
+ * Both are wire facts of the response, not options of the UI.
+ */
+export interface CohortPageDto { groupBy: string; baseline: string | null; basisNote: string | null; cohorts: CohortRow[]; }
 
 export interface IndexSummaryDto {
   streams: number; sessions: number; steps: number; toolCalls: number;
