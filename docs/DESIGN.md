@@ -146,10 +146,17 @@ fatal** (`data.reason.kind == "error"`), 254 `llm/retry` (247 v0 / 7 v3).
 Throughput, measured over **all 9,036 measurable v0 steps** — a census, not a sample — with the
 derivation stated rather than implied (§3.3):
 
-| Metric | Definition | p10 | median | p90 |
-|---|---|---:|---:|---:|
-| decode tok/s | `usage.outputTokens` ÷ (last chunk − **first** chunk) | 37.9 | **163.4** | 226.0 |
-| TTFT | first chunk − `step/start` | — | **564 ms** | 5,869 ms |
+**One definition, applied to both conventions:**
+
+| Metric | Definition |
+|---|---|
+| decode tok/s | `usage.outputTokens` ÷ (last chunk − **first** chunk) |
+| TTFT | first chunk − `step/start` |
+
+| Convention | Steps | decode p10 | median | p90 | TTFT median | p90 |
+|---|---:|---:|---:|---:|---:|---:|
+| v0 (chunk **events**) | 9,036 | 37.9 | **163.4** | 226.0 | 564 ms | 5,869 ms |
+| v3 (chunk times **embedded** in `assistant/message.stream[]`) | 4,689 | 36.6 | **165.1** | 235.6 | 560 ms | 2,940 ms |
 
 An earlier draft quoted 182 tok/s and 404 ms, measured over 40 of the 122 v0 files. That is a
 subset statistic presented as a corpus measurement, it does not reproduce, and it is recorded in
@@ -195,8 +202,9 @@ Behavioural differences that are not cosmetic:
 
 | | v0 | v3 |
 |---|---|---|
-| `assistant/chunk` / `reasoning-chunks` | present | **absent** |
-| TTFT (§3.3) | derivable | **not derivable, `NULL`** |
+| `assistant/chunk` / `reasoning-chunks` **events** | present | absent as events |
+| chunk **timings** (§3.3) | on the events | embedded in `assistant/message.stream[]` |
+| TTFT derivable | yes | **yes** — different extractor, same window |
 | `llm/retry` | 247 | 7 |
 | header `agentPreset` | always | sometimes absent |
 | header `isSeeded` | absent | present |
@@ -209,13 +217,24 @@ Behavioural differences that are not cosmetic:
   rate: on these same steps that substitution yields 122.9 tok/s instead of 163.4. Chunk
   timestamps are batched — consecutive chunks frequently share a millisecond — so per-chunk
   rates are noise; the step is the honest unit.
-- **v3:** no chunk events exist at all. Decode uses `step/start → step/end`;
-  `ttft_ms` is `NULL`, not `0`. A zero would read as "instant first token" and silently
-  improve the average.
+- **v3:** no chunk *events*, but the timings survive in a different place —
+  `assistant/message.stream[]` carries `{type, chunk, time}` per entry, so the first and last
+  `type == "chunk"` entries give the identical window. Entries of type `reasoning-chunks` and
+  `tool-call-chunks` may have **no** `time` field, so the extractor filters on it; a step whose
+  only timed entries are non-chunk yields `NULL`, not `0`.
 
-Mixing the two in one aggregate is a lie of averaging, so throughput is reported **per
-convention**, with the convention shown next to the number. This is a limitation of the log,
-not of the tool, and it is stated on the screen rather than in a footnote.
+**This corrects an earlier draft**, which asserted that v3 records no timing at all and set
+`ttft_ms` to `NULL` for every v3 step. That was found by reading a v3 `assistant/message`
+rather than by grepping for `assistant/chunk`: the events are gone, the data is not. It was
+wrong in the direction that *understates* the tool, and it had propagated into §9 as an upstream
+change request for data that already exists.
+
+The two conventions now agree to within 1% on median decode and on median TTFT. That agreement
+is the reason the metric is trustworthy: two unrelated serialisations of the same underlying
+stream, read by two different extractors, landing on the same distribution is a cross-check no
+single-convention measurement can provide. Throughput is still **labelled by convention**,
+because provenance differs and because a future harness version could break the equivalence
+without notice — but the honest reading is "verified equivalent so far", not "not comparable".
 
 ### 3.4 Application version is not in the session header
 
@@ -239,6 +258,28 @@ one-valued per session instead of turning the rail into a set. `context_window` 
 alongside it. Sessions with no such
 event get `NULL`, and the filter rail must render "unknown" as a real selectable value rather
 than dropping the row.
+
+### 3.6 Three parser traps, found by reading one event instead of grepping for one
+
+These cost an hour each if discovered at 2 a.m. rather than now.
+
+- **`tool/call.arguments` is a string containing JSON, not an object.** `{"command":…
+  ,"description":…}` for `bash`, `{"file_path":…}` for the file tools, identical in both
+  conventions. So both the shell text and the path hint come from a **second parse**, and an
+  unparseable `arguments` string is a data condition to record, not an exception to throw.
+- **Header fields live on the line root, not under `data`.** The session line is
+  `{type, seq, time, id, createdAt, cwd, version, agentPreset, delegationDepth, …}`; `data` is
+  empty. A parser that reaches for `data.id` stores 165 sessions of nulls and nothing fails.
+  `isSeeded`, `origin` and `parentSession` appear on v3 lines only (§9.1 needs them).
+- **Project-slug directories begin and end with `--`.** `zstd -dc ./--home-user-proj--/…`
+  exits with *Incorrect parameter*, because the relative path is parsed as an option. Any shell
+  helper must pass absolute paths or a `./` prefix. Java's `Files.newInputStream` is immune,
+  which is a small argument for doing the extraction in the application rather than in a
+  wrapper script.
+
+`tool/result` also carries **two** independent outcome markers — `data.error{code,name}` and
+`data.message.content[].isError`. The typed code is authoritative for the plane mapping; `isError`
+is a cross-check, not a second source of truth.
 
 ## 4. Architecture
 
@@ -484,7 +525,8 @@ session    (id, source_file, project_slug, schema, started_at, ended_at, agent_p
             delegation_depth, model, context_window, harness_version, version_inferred,
             indexed_at, fatal_turns)
 step       (session_id, source_file, turn, step, started_at, ended_at,
-            input_tokens, output_tokens, decode_tps, ttft_ms NULL on v3)
+            input_tokens, output_tokens, decode_tps, ttft_ms,
+            timing_source)              -- 'chunk-events' | 'embedded-stream'
 tool_call  (id, session_id, source_file, turn, step, seq, name, started_at, ended_at,
             duration_ms, error_code, plane, path_hint)
 finding    (id, session_id, source_file, detector, plane, category, code,
@@ -506,6 +548,11 @@ is what a real install would branch on when a `V2` exists.
 
 `(session_id, source_file)` is the stream key everywhere (§3.2); no seq-based comparison is
 ever performed across streams.
+
+`step.timing_source` records which extractor produced the two derived columns. It is the
+provenance label §3.3 argues for, stored per row rather than inferred from a join back to
+`session.schema` — and unlike a schema-derived label it survives a future convention that
+embeds timings under a different shape.
 
 `session.model` and `context_window` come from `request/context` (§3.5); `NULL` where absent,
 and "unknown" is a first-class filter value. `harness_version` is paired with a single boolean
@@ -573,8 +620,11 @@ reads as "no problems found", the most dangerous wrong answer this tool can give
 **`/api/cohorts`, honestly.** It is one `GROUP BY` and it is the right abstraction for the
 operator's question, but on *this* machine at delivery it has **one harness version and one
 install**, so grouping by version yields a single row. Its value on real data is as a
-**model/schema** comparison — and there the schema split is genuinely interesting, since
-§3.3 shows throughput is not comparable across conventions. Rates are **findings per 1,000 tool
+**model** comparison — this machine has several models and one harness version, so model is the
+only axis with more than one row to compare. Grouping by schema is still offered and is
+informative for a different reason than expected: §3.3 measured the two conventions as
+**equivalent** on throughput, so a schema cohort showing a violation-rate gap is evidence about
+behaviour rather than an artifact of what the log happens to record. Rates are **findings per 1,000 tool
 calls**, and deltas are shown in percentage points against the chosen baseline cohort — raw counts
 would just report which machine has been running longer. A harness-version demo requires
 the fixture corpus, which ships two synthetic versions. The screen states which basis it is
@@ -659,8 +709,12 @@ spends the budget on a layout no reviewer opens on a phone.
    the largest known blind spot in Detector 1.
 2. **Script opacity.** Cause attribution fails when a script performs the mutation (§5.3). The
    information is not in the log; an exec-audit or filewatch side-channel would supply it.
-3. **v3 first-token timing.** No chunk events means no TTFT on current sessions (§3.3). A
-   `first_token_at` on `assistant/message`, or coarser chunk batching, restores it.
+3. **Undocumented embedded timings.** v3 TTFT depends on `assistant/message.stream[].time`
+   (§3.3), which is an internal serialisation detail rather than a contract. It works today and
+   the extractor labels its provenance so a silent loss is visible; an explicit
+   `first_token_at` would make it a documented field instead of a fortunate implementation
+   detail. *An earlier draft listed "add `first_token_at`, v3 has no timing" here — the data was
+   already present.*
 4. **App version in the session header.** §3.4: attributable forward, never retroactively. One
    field removes a whole class of "we can't answer that about history".
 5. **The rule language for intent drift** (D4), once the shipped heuristics have produced
@@ -854,6 +908,18 @@ informative than the prose.
    own wording could not be implemented as written. It also produced one false finding of its own:
    it reported that ngx-charts has no Angular-22 release, having queried the unscoped deprecated
    `ngx-charts` rather than `@swimlane/ngx-charts`, whose published peers are exactly as cited.
+
+6. **A sixth correction, found by neither reviewer.** While writing the implementation plan,
+   reading one real `assistant/message` from a v3 file showed `stream[]{type, chunk, time}`:
+   chunk timings survive the compaction, they just move from events into the message. v3 TTFT is
+   derivable after all — 4,689 steps, median 560 ms, against 564 ms on v0 — and the two
+   conventions agree within 1% on decode rate, which is a cross-check on the derivation that no
+   single-convention measurement could give. The earlier claim came from grepping for
+   `assistant/chunk`, finding nothing, and concluding the *data* was absent when only the *event*
+   was. It had already propagated into §9 as a change request for data that existed, and into §7
+   as a reason to distrust schema cohorts. This is the only correction in the list that made the
+   product better rather than merely correct, and it came from reading an event rather than from
+   searching for one.
 
 Both directions of that loop matter. A reviewer model with fresh context caught errors I had
 committed to prose, and I caught errors it had committed to a report. Nothing entered this
