@@ -69,6 +69,30 @@ describe('FilterRail', () => {
     expect(select('schema').disabled, 'multi-valued facets stay enabled').toBe(false);
   });
 
+  it('dims the facet the cohorts page groups by, and says why, without hiding it', () => {
+    // The grouping axis is the one facet a cohort table cannot meaningfully be filtered by —
+    // every row would carry the same value. The control stays visible with its option list
+    // intact and is disabled with an explanation, because a rail that silently disagrees with
+    // the page beside it is worse than a control that admits it is inert.
+    store.cohortAxis.set('harnessVersion');
+    fixture.detectChanges();
+
+    const axis = select('harnessVersion');
+    expect(axis.disabled, 'the axis is not filterable while it is the axis').toBe(true);
+    expect(axis.classList, 'dimmed by class, not removed from the DOM').toContain('facet-inert');
+    expect(el.querySelector('.facet-note')?.textContent).toContain('grouped by this');
+
+    const other = select('schema');
+    expect(other.disabled, 'the other facets keep working').toBe(false);
+    expect(other.classList).not.toContain('facet-inert');
+
+    expect(axis.options.item(0)?.disabled, 'inert is not the same as single-valued').toBe(false);
+
+    store.cohortAxis.set(null);
+    fixture.detectChanges();
+    expect(select('harnessVersion').disabled, 'leaving cohorts re-arms the facet').toBe(false);
+  });
+
   it('keeps unknown selectable, with the label unknown verbatim', () => {
     const preset = select('preset');
     expect(preset.disabled).toBe(false);
