@@ -8,7 +8,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.TestPropertySource;
 
-@SpringBootTest
+@SpringBootTest(args = {"--no-index"})
 @TestPropertySource(properties = {
         "inspector.db=target/test-context.sqlite",
         "inspector.corpus=fixtures/sessions"})

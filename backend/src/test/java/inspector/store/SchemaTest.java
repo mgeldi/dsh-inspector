@@ -13,7 +13,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.util.FileCopyUtils;
 
-@SpringBootTest
+@SpringBootTest(args = {"--no-index"})
 @TestPropertySource(properties = {"inspector.db=target/schema.sqlite"})
 final class SchemaTest {
 
