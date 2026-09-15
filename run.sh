@@ -2,29 +2,65 @@
 #
 # DSH Inspector — one command, both processes, no manual step.
 #
-# Fresh-clone contract: no database and no pre-built jar required. If
-# backend/target holds no jar the script builds one (skipping tests); the default
-# corpus is the committed fixture set under backend/fixtures/sessions, so the
-# dashboard comes up populated on first run.
+#   ./run.sh demo [corpus]   the committed synthetic fixtures (default)
+#   ./run.sh live [corpus]   your real DSH session logs, read-only
+#
+# demo is the default because it is the only corpus that can travel with the repo:
+# it is generated, it holds invented paths and project names, and a fresh clone can
+# show a populated dashboard from it without anyone's data being in the repository.
+# live reads ~/.dsh/sessions unless a path is given. Its findings quote real paths
+# and real commands, so a screen from a live run is not a screen to publish.
+#
+# Fresh-clone contract: no database and no pre-built jar required. If backend/target
+# holds no jar the script builds one (skipping tests); the index file is created next
+# to the jar on first start and the corpus is indexed automatically.
 #
 # Ctrl-C stops both processes — and their children. `&` hands back a wrapper pid
-# (the subshell), not the JVM's, and killing the wrapper leaves the listener
-# holding its port, so each side is started as a process-group leader and the
-# trap kills the exact group:
-#   * the backend job is a subshell that `exec`s the JVM, so $! *is* the JVM;
-#   * the frontend job's group contains npm, ng and the dev server's node.
+# (the subshell), not the JVM's, and killing the wrapper leaves the listener holding
+# its port, so each side is started as a process-group leader and the trap kills the
+# exact group: the backend job `exec`s the JVM so $! *is* the JVM, and the frontend
+# job's group contains npm, ng and the dev server's node.
 #
-# Both jobs take stdin from /dev/null. `set -m` makes them background process
-# groups, and the Angular dev server installs a keypress listener on stdin
-# ("press h + enter to show help"). A background group that reads the
-# controlling terminal is stopped by the kernel with SIGTTIN, which froze the
-# dev server partway through startup — after printing its notice, sometimes
-# before it had bound 4300. Run detached from a terminal (no controlling tty)
-# the read returns EOF instead and the server starts normally, which is why
-# this only showed up when a human ran it from a shell. Only the help key is lost.
+# Both jobs take stdin from /dev/null. `set -m` makes them background process groups, and
+# the Angular dev server installs a keypress listener on stdin ("press h + enter to show
+# help"). A background group that reads the controlling terminal is stopped by the kernel
+# with SIGTTIN, which froze the dev server partway through startup — after printing its
+# notice, sometimes before it had bound 4300. Detached from a terminal the read returns EOF
+# and the server starts normally; only the help key is lost.
+#
+# The CLI's once-per-machine analytics question has the same shape: with no stdin it reads
+# EOF and aborts ("An unhandled exception occurred: User force closed the prompt with 0
+# null"). This variable removes the question on a machine with no recorded answer anywhere
+# — verified against a HOME holding no angular config, where the prompt otherwise fires.
 #
 set -euo pipefail
 cd "$(dirname "$0")"
+
+mode=${1:-demo}
+case "$mode" in
+  demo)
+    # resolved against the JVM's working directory, which is backend/
+    corpus=${2:-fixtures/sessions}
+    db=inspector.sqlite
+    banner="fixture corpus — synthetic data, safe to screenshot and publish"
+    ;;
+  live)
+    # absolute, because the JVM starts inside backend/
+    corpus=${2:-"$HOME/.dsh/sessions"}
+    if [ ! -d "$corpus" ]; then
+      echo "no session directory at '$corpus'" >&2
+      echo "pass one as the second argument, or copy logs somewhere and point at it" >&2
+      exit 1
+    fi
+    corpus=$(realpath "$corpus")
+    db=inspector-live.sqlite
+    banner="LIVE corpus: $corpus — findings contain real paths and commands; do not publish screenshots of this run"
+    ;;
+  *)
+    echo "usage: $(basename "$0") [demo|live] [corpus-directory]" >&2
+    exit 2
+    ;;
+esac
 
 shopt -s nullglob
 jars=( backend/target/*.jar )
@@ -37,17 +73,27 @@ if [ ${#jars[@]} -eq 0 ]; then
     exit 1
   fi
 fi
-jar_base=${jars[0]##*/}
-# The JVM's working directory is backend/ — the corpus flag and the bare sqlite
-# file name both resolve against it — so the jar is addressed as target/<name>.
-jar_path="target/$jar_base"
+jar_path="target/${jars[0]##*/}"
 
-# set -m puts every background job in its own process group, led by the job's
-# pid. The group ids are what the trap kills; with plain job control the
-# children (the JVM, the node dev server) would outlive the script.
+# set -m puts every background job in its own process group, led by the job's pid. The
+# group ids are what the trap kills; with plain job control the children (the JVM, the
+# node dev server) would outlive the script.
 set -m
 
-( cd backend && exec java -jar "$jar_path" --inspector.corpus=fixtures/sessions ) < /dev/null &
+# Index first, as its own process, before anything listens.
+#
+# The startup runner executes *after* Tomcat is already accepting connections, so a server
+# boot opens 8091 about 0.8 s in while the index still needs seconds (168 streams measured
+# at ~4 s). A health check against the port, and any browser opened right behind it, then
+# reads a partial index and presents it as the whole picture: 37 sessions and 66 findings
+# out of 165 and 389, with nothing on screen saying "still working". Running the batch first
+# makes "the port answers" mean "the data is complete". The server boot that follows does no
+# re-index — the corpus recorded in the database matches, so its gate skips.
+echo "indexing ($mode) ..."
+( cd backend && java -jar "$jar_path" --spring.main.web-application-type=none \
+    --inspector.corpus="$corpus" --inspector.db="$db" ) < /dev/null
+
+( cd backend && exec java -jar "$jar_path" --inspector.corpus="$corpus" --inspector.db="$db" ) < /dev/null &
 BE=$!
 
 if [ ! -d frontend/node_modules ]; then
@@ -55,14 +101,7 @@ if [ ! -d frontend/node_modules ]; then
   ( cd frontend && npm install )
 fi
 
-# The Angular CLI asks, once per machine, whether to share pseudonymous usage data.
-# In a terminal it can ask; with stdin on /dev/null it reads an immediate EOF and aborts
-# with "An unhandled exception occurred: User force closed the prompt with 0 null".
-# `cli.analytics: false` in angular.json does NOT suppress that question — only a
-# recorded answer or this variable does. Set here so a reviewer on a clean machine is
-# never greeted by a telemetry prompt from this project, and never crashes on it.
 export NG_CLI_ANALYTICS=false
-
 ( cd frontend && npm start ) < /dev/null &
 FE=$!
 
@@ -73,13 +112,16 @@ stop_tree() {
 trap stop_tree EXIT
 trap 'stop_tree; exit 130' INT TERM
 
-echo "starting backend on 8091 (fixture corpus, populated on first run) ..."
+echo "mode:     $mode"
+echo "corpus:   $banner"
+echo "database: backend/$db"
+
 for _ in $(seq 1 60); do
   curl -sf http://127.0.0.1:8091/api/overview >/dev/null && break
   sleep 1
 done
 if ! curl -sf http://127.0.0.1:8091/api/overview >/dev/null; then
-  echo "backend did not come up on 8091 within 60 s; its log was printed above" >&2
+  echo "backend did not come up on 8091 within 60 s; its output is above" >&2
   exit 1
 fi
 
@@ -92,20 +134,20 @@ if ! curl -sf http://127.0.0.1:4300/ >/dev/null; then
   exit 1
 fi
 
-# Printed only once both have answered. Announcing the URL before the check is
-# exactly how a dev server that never started gets reported as started.
+# Printed only once both have answered. Announcing the URL before the check is exactly
+# how a dev server that never started gets reported as started.
 echo "backend   http://127.0.0.1:8091"
 echo "frontend  http://127.0.0.1:4300   (the dashboard — Ctrl-C stops both)"
 
 # Block until either side dies, then stop both.
 #
-# Not `wait -n`: the two jobs live in their own process groups (set -m), so a
-# terminal's Ctrl-C reaches this script but never them, and bash does not run a
-# trap while it is blocked in `wait` — the script sat there with both children
-# alive after every interrupt. Polling with a short sleep lets the signal land
-# between iterations instead. `kill -0` is not enough as a liveness test: an
-# exited child stays a zombie until this shell reaps it, and its pid still
-# answers, so the state is read and Z counts as dead.
+# Not `wait -n`: the jobs live in their own process groups (set -m), so a terminal's
+# Ctrl-C reaches this script but never them, and bash does not run a trap while it is
+# blocked in `wait` — the script sat there with both children alive after every
+# interrupt. Polling with a short sleep lets the signal land between iterations.
+# `kill -0` is not enough as a liveness test either: an exited child stays a zombie
+# until this shell reaps it and its pid still answers, so the state is read and Z
+# counts as dead.
 alive() {
   local state
   state=$(ps -o stat= -p "$1" 2>/dev/null | tr -d ' ')

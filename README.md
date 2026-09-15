@@ -26,29 +26,46 @@ main class and fails if a content type or a content field name appears outside
 ```bash
 git clone <this repository>
 cd "DSH Inspector"
-./run.sh
+./run-demo.sh
 ```
 
 Open http://127.0.0.1:4300. That is the whole manual step: if `backend/target/*.jar` is
-missing, `run.sh` builds it, and on first run the backend indexes the committed fixture
-corpus, so the dashboard comes up populated — no database, no jar, no flag. Ctrl-C stops
-both processes.
+missing the script builds it, then indexes the committed fixture corpus and only then starts
+the two processes — so the dashboard arrives populated and complete, with no database, no
+jar and no flag to remember. Ctrl-C stops both.
 
-## Pointing it at a real corpus
+## Looking at your own sessions
 
-The flag is `--inspector.corpus=/path/to/sessions`, and it resolves against the JVM's
-working directory — which is why `run.sh` starts the JVM inside `backend/` (and why the
-committed default is the relative path `fixtures/sessions`). From `backend/`, against your
-own session directory:
+```bash
+./run-live.sh                    # reads ~/.dsh/sessions
+./run-live.sh /path/to/sessions  # or somewhere specific
+```
+
+Same dashboard, real data. It reads your session logs read-only, indexes into
+`backend/inspector-live.sqlite` so a demo index is never overwritten, and prints a reminder
+on the way up: findings from a live corpus quote **real paths and real commands**, so a
+screen from this run is not a screen to publish.
+
+The two commands are two-line wrappers around `run.sh`, which takes the mode as its first
+argument. Everything else — build, index, ports, shutdown — exists once in that file.
+
+Under the hood the flag is `--inspector.corpus=/path/to/sessions`, and it resolves against
+the JVM's working directory, which is why the scripts start the JVM inside `backend/` (and
+why the committed default is the relative path `fixtures/sessions`). From `backend/`:
 
 ```bash
 mvn -q -DskipTests package
 java -jar target/dsh-inspector-0.1.0.jar --inspector.corpus=/path/to/sessions
 ```
 
-then `cd frontend && npm start` and open http://127.0.0.1:4300. The index is derived data:
-the SQLite file is a cache of the corpus, and a schema-version mismatch wipes and
-re-indexes it rather than migrating.
+then `cd frontend && npm start` and open http://127.0.0.1:4300.
+
+The index is derived data: the SQLite file is a cache of the corpus, and it is wiped and
+re-indexed rather than migrated when either the schema version or **the corpus it was built
+from** no longer matches the one configured. A database also records which corpus its rows
+came from, because a file holding an index of your real sessions must not be able to answer a
+run configured for the fixtures — "rows present" is not the same question as "rows from this
+corpus".
 
 ## Tests
 

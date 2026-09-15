@@ -12,8 +12,9 @@ backend on **8091** via `proxy.conf.json`. The port is a design constraint of th
 project (the root README explains why), and the proxy is what makes the dashboard and
 the API same-origin in development.
 
-Easiest start is the `./run.sh` at the repository root, which runs both sides. To run
-only the frontend against an already-running backend:
+Easiest start is `./run-demo.sh` at the repository root, which indexes and runs both sides
+(`./run-live.sh` for your own session logs). To run only the frontend against an
+already-running backend:
 
 ```bash
 npm install

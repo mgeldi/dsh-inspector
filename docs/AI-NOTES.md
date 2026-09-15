@@ -63,6 +63,11 @@ rest were caught by the review loop (reading returned code against the spec), by
 the shipped artifact, or by reasoning about the fixture — roughly descending by what
 they would have cost.
 
+The launcher table at the end of this section is a class of its own, and its headline is
+worse: **not one of those defects was caught by any automated check**, because every check
+ran in an environment that flattered the code — stdin detached, no controlling terminal,
+signals force-ignored for background jobs. Each was preceded by a green run.
+
 ### Backend
 
 | Defect | What caught it | What it would have cost |
@@ -95,6 +100,22 @@ they would have cost.
 | The rail became a plain CSS `aside` instead of the spec table's `mat-sidenav` | Measured-cost review; documented as a deviation in DESIGN.md §8 | A state machine for a state that never occurs: open/closed, pinning, overlay — none of which the design has |
 | `$!` returned wrapper pids twice, once leaving a JVM holding 8091 for 27 minutes | Verified empirically with `ss -ltnp` | run.sh's "Ctrl-C stops both" being false: the port stays held, the next run fails with address-in-use, and the cause is a process the operator cannot name |
 
+### Launcher and verification
+
+The defects that only a human running it could show, because the agent's own environment
+detaches stdin, has no controlling terminal, and force-ignores some signals for background
+jobs. Every one of these was preceded by a green check.
+
+| Defect | What caught it | What it would have cost |
+|---|---|---|
+| The database never recorded which corpus its rows came from, so a run configured for the fixtures served the real corpus's 389 findings | A human running both modes on one database file, after the agent had called the launcher verified | The first screen a reviewer opens describing data that run never read — and the mirror image, an unexplained 9 findings, an hour earlier |
+| An index of unknown provenance was trusted rather than reset; "rows present" was treated as "rows from this corpus" | Writing the reset's complement tests | The same wrong screen from a database that predates the provenance row, which is every database written before this fix |
+| The port opened ~0.8 s before indexing finished, so the first read of a 168-stream corpus showed 37 of 165 sessions with nothing on screen saying "still working" | A check that compared the served counts against the indexed ones instead of only checking that the port answered | The tool under-reporting its own findings silently on every cold start, which reads as "it does not find much" |
+| `ng serve` puts a keypress listener on stdin; a background process group that reads the controlling terminal is stopped with SIGTTIN, so 4300 never bound | Reproducing the human's exact invocation under a pty, after agent-launched runs had passed twice | The reviewer's first command failing with a refused connection, a clean exit, and an announced URL that was never served |
+| The CLI's once-per-machine analytics prompt is unreadable with stdin detached ("User force closed the prompt"), and `cli.analytics: false` in `angular.json` does not suppress the question | The human's terminal, where the prompt was answerable at all | A crash waiting on any machine that has never answered that prompt — which is every reviewer's machine |
+| A trap set for INT never ran while the script was blocked in `wait -n` | Sending the signal the way a terminal does. The first attempt could not fail: a background job in a shell without job control has SIGINT force-ignored | Ctrl-C leaving both processes holding their ports, and the next start failing on address-in-use with no visible cause |
+| An orchestration command SIGTERMed the inference server serving its own session, because the pid came from grepping the whole `ss` listing rather than the target port's line | Reading the pid back after the fact | Its own runtime, restarted mid-task. The rule is not "be careful": a pid must come from a filtered query, and a machine running the agent's model beside the build has no margin for that mistake |
+
 ## 4. What I would change
 
 - Pin the wire contract *before* the plan, not inside it. The plan carried the API
@@ -114,6 +135,12 @@ they would have cost.
   the `ss -ltnp` evidence, instead of letting it rediscover it. It is the one defect
   where the machine's own job control was the trap, and the environment is exactly what
   a prompt should brief.
+- Re-run anything that starts a process **under a controlling terminal**, and compare
+  served counts rather than port answers. Four separate defects hid in the difference
+  between a harness-launched process and a human's shell: SIGTTIN stopping the dev server,
+  an analytics prompt with no stdin to answer, a trap that cannot fire inside `wait`, and a
+  readiness check that measured the port instead of the data. The green runs were not wrong;
+  they were about a launcher nobody uses.
 
 ## 5. What is not here
 
