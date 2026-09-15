@@ -29,3 +29,13 @@ dist/
 # documentation-contamination session). It is produced by the Java generator in backend/,
 # which is also committed, so provenance is reproducible and fixtures go through the same
 # ingest path as a real ~/.dsh corpus.
+
+# --- LOCAL ONLY, NEVER COMMIT -------------------------------------------
+# A frozen copy of real session logs, used as the integration corpus. It contains
+# real conversation content, absolute paths, usernames and project names. Nothing
+# under here may ever be committed, referenced from committed code, or printed.
+corpus/
+
+# machine-local operating constraints for agents working in this checkout.
+# References paths on a personal machine, so it is not part of the published repo.
+AGENTS.md
