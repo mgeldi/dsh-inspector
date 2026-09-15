@@ -9,6 +9,9 @@ import org.springframework.stereotype.Component;
  * One row per tool error not owned elsewhere. Confidence stays null because there is no
  * attribution to grade, and the UI distinguishes these by {@code detector}, not by rendering
  * every null as "unattributed".
+ *
+ * <p>One owner per source event: StampGuardDetector claims FS_STALE_VERSION, and this detector
+ * skips exactly the codes another detector claims, so no source error produces two findings.
  */
 @Component
 public final class ErrorPlaneDetector implements Detector {
@@ -17,10 +20,8 @@ public final class ErrorPlaneDetector implements Detector {
 
     private final Set<String> ownedElsewhere;
 
-    public ErrorPlaneDetector() {
-        // No other detector claims a tool code yet; the stamp-guard wiring arrives with
-        // StampGuardDetector and takes exactly the codes that detector claims.
-        this.ownedElsewhere = Set.of();
+    public ErrorPlaneDetector(final StampGuardDetector stampGuard) {
+        this.ownedElsewhere = stampGuard.ownsToolCodes();
     }
 
     @Override

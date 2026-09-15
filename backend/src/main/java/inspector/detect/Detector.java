@@ -11,7 +11,8 @@ public interface Detector {
 
     /**
      * Codes this detector claims outright. ErrorPlaneDetector skips them so exactly one finding
-     * is produced per source event.
+     * is produced per source event — asserted at the seam in ErrorPlaneDetectorTest and over
+     * the corpus by NoDuplicateFindingOwnerTest (Task 13).
      */
     default Set<String> ownsToolCodes() {
         return Set.of();
