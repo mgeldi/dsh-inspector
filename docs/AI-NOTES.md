@@ -162,10 +162,14 @@ The five defects added in this revision repeat the launcher table's shape: each 
   conclusion — the first reading blamed the rebuild, the second retracted that because the
   proxy path still returned `200`, and the retraction was the error. **A green hot path is not
   a health signal.** When a process may be half-loaded, sampling its busiest endpoint is
-  precisely how an agent convinces itself nothing is broken. The concrete change: the launcher
-  should refuse to repackage while something already listens on the backend port, or build to a
-  versioned name and swap; a shared mutable artifact with a live consumer is a hazard no
-  toolchain warns about.
+  precisely how an agent convinces itself nothing is broken. The fix is in `run.sh` now: it
+  probes both ports before it builds or launches anything and refuses, naming the classpath
+  hazard in the message. A request was used as the probe rather than `ss` or `lsof` because the
+  script is meant to survive a reviewer on a platform that has only one of them, and `curl` is
+  already a dependency. The alternative — build to a versioned name and swap — stayed unmade:
+  four lines of probing close the case without introducing an artifact naming scheme to explain.
+  Underlying all of it: a mutable artifact with a live consumer is a hazard no toolchain warns
+  about, so the guard belongs in the script that creates the situation.
 
 ## 5. What is not here
 

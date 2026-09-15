@@ -62,6 +62,30 @@ case "$mode" in
     ;;
 esac
 
+# Refuse to start on top of a running instance — before anything is built or launched.
+#
+# Two reasons, and the second is the one that cost an afternoon to find. The obvious one: a
+# second backend cannot bind the port and a second dev server cannot bind its own, so starting
+# on top of a live instance yields two half-started processes and a log that blames the wrong
+# thing. The worse one: if no jar existed yet, this script packages one — and Maven rewrites the
+# jar in place. A running JVM holds that same file open and loads classes from it lazily, so
+# repackaging underneath it leaves the process resolving classes against a zip whose central
+# directory no longer matches its bytes. Every class already loaded keeps working, so the
+# dashboard looks healthy while any path it has not taken yet starts returning an empty 500.
+# Observed on this machine; docs/AI-NOTES.md has the incident.
+#
+# The probe is a request rather than a socket listing because `ss` and `lsof` are not both
+# present on the platforms this script is meant to run on, and curl already is.
+for probe in "backend http://127.0.0.1:8091/api/overview" "frontend http://127.0.0.1:4300/"; do
+  what=${probe%% *}
+  url=${probe#* }
+  if curl -sf -m 2 -o /dev/null "$url" 2>/dev/null; then
+    printf '%s already answers on %s\n' "$what" "$url" >&2
+    printf 'stop that instance first: repackaging the jar under a running JVM corrupts its classpath\n' >&2
+    exit 1
+  fi
+done
+
 shopt -s nullglob
 jars=( backend/target/*.jar )
 if [ ${#jars[@]} -eq 0 ]; then
