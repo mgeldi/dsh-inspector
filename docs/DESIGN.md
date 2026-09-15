@@ -672,6 +672,22 @@ tables, panels), exactly what Material is for.
 | Route framing, index action | `mat-toolbar`, `mat-snack-bar` |
 | Evidence side panel | `mat-drawer` |
 
+Two entries in that table were measured against their alternatives at implementation
+time, and the cheaper one shipped — recorded here because the table above is the spec,
+and the spec should not be allowed to describe a build that does not exist:
+
+- **The global filter rail is a plain CSS `aside`, permanently visible, not a
+  `mat-sidenav`.** The design has no closed state: the rail is always visible at the
+  widths this tool targets, so the sidenav's open/closed state machine is machinery for
+  a state that never occurs. The measured cost of the deviation is a stylesheet that
+  carries no state.
+- **The re-index result is a persistent line in the `mat-toolbar`, not a
+  `mat-snack-bar`.** A toast disappears on its own timer while the index counts it
+  reports should stay readable; the count is the result's payload, so the result must
+  outlive the toast.
+
+Both were decided by the measured cost, not by taste.
+
 **Theming is deliberately left to whoever implements it.** The spec fixes the language, not
 the look. Guidance rather than mandate, because these are the levers that matter here:
 
@@ -901,65 +917,20 @@ both are the kind of thing that reads as a bug if discovered at demo time.
 Recorded because how the AI assistance was used is part of what this project is about, and the process is more
 informative than the prose.
 
-1. **Explore before designing.** Read the real log format first; the first draft's detector
-   design was built against actual instances of `file changed since it was read`.
-2. **Draft, then self-review.** Found two defects: a `.gitignore` that excluded the fixture
-   corpus while §12 promised a populated first run, and an unreconciled conflict between a
-   version filter and "version is unknowable" — which produced `version_inferred` in §6. It did
-   **not** catch over-engineering; that took a direct challenge from the author, which is the
-   blind spot to remember: self-review finds contradictions, not ambitions that were never
-   earned.
-3. **Independent review by a second model** (different model, no shared context), instructed to
-   hunt contradictions, infeasibility, technical impossibility and delivery risk. It found
-   four factual errors that all passed a 10-minute re-measure, including two that overturned
-   design premises: the structured error object (§3.1) and the second schema convention
-   (§3.2). It separately costed that draft at 10–14 hours, which confirmed it was over budget;
-   the §2.2 machinery removals are what brought the estimate down, and the §2.1 cut line is a
-   protection device for the core, not the mechanism that produced a 3-hour-shaped plan.
-4. **Verify review findings before accepting them.** Two of its claims were wrong and did not
-   survive re-measurement: it reported `llm/retry` absent from v3 (there are 7) and the model
-   as unrecoverable (`request/context` carries it, §3.5). It also reported 167 files against
-   164 sessions, and treated the AGENTS.md-sourced `media_budget_exceeded` counts as possibly
-   real, which prompted §5.2.
+The full account — the spec revisions, the implementation batches, and the defect ledger
+with what caught each one and what it would have cost — is in `docs/AI-NOTES.md`; this
+section keeps only the shape of the process.
 
-5. **A second fresh reviewer on rev 3, then the same verification discipline applied to it.** It
-   found that §3's throughput figures did not reproduce — they came from 40 of 122 files and were
-   published as a corpus census — plus a header-version claim that was false for half the corpus,
-   an incomplete enumeration of the contamination carriers, and a privacy boundary in §4.1 whose
-   own wording could not be implemented as written. It also produced one false finding of its own:
-   it reported that ngx-charts has no Angular-22 release, having queried the unscoped deprecated
-   `ngx-charts` rather than `@swimlane/ngx-charts`, whose published peers are exactly as cited.
-
-6. **A sixth correction, found by neither reviewer.** While writing the implementation plan,
-   reading one real `assistant/message` from a v3 file showed `stream[]{type, chunk, time}`:
-   chunk timings survive the compaction, they just move from events into the message. v3 TTFT is
-   derivable after all — 4,689 steps, median 560 ms, against 564 ms on v0 — and the two
-   conventions agree within 1% on decode rate, which is a cross-check on the derivation that no
-   single-convention measurement could give. The earlier claim came from grepping for
-   `assistant/chunk`, finding nothing, and concluding the *data* was absent when only the *event*
-   was. It had already propagated into §9 as a change request for data that existed, and into §7
-   as a reason to distrust schema cohorts. This is the only correction in the list that made the
-   product better rather than merely correct, and it came from reading an event rather than from
-   searching for one.
-
-7. **Two more, found by writing the SQL rather than the prose.** Planning the queries showed
-   that §6's `created_at` was ambiguous between event time and index time — read as the latter,
-   the 24h/7d/30d filter would have ranged over *when the scan ran*, so the column is now
-   `occurred_at` and holds the event timestamp. And the code table in §5.1 omitted `ASK_ABORTED`
-   and `ABORTED`, which belong on the guard plane: a human saying no is another case where the
-   harness worked and the model paid the cost. Neither defect was visible while reading the
-   document; both were visible the moment something had to *use* the definition.
-
-8. **Reconciliation against the finished implementation.** Running the finished indexer
-   against the corpus reproduced every published figure exactly — sessions, the typed-error
-   count, `FS_STALE_VERSION`, fatal turns, and both throughput and TTFT medians per
-   convention — and surfaced two things no measurement of the corpus could show. The default
-   database path could not be opened by a packaged jar, because sqlite-jdbc does not create a
-   parent directory: every test overrode that path, so 137 green tests shipped an unbootable
-   jar. And the rate denominator was inflated by 4.8% by result-only rows, unevenly across
-   the two conventions, which biases the cross-convention comparison in the direction the
-   tool is built to measure. That is the point of the exercise: the spec existed to be
-   falsified by the implementation.
+The real log format was read before the first draft was designed against it. Each draft
+was self-reviewed, then reviewed by a fresh-context second model, and its findings were
+re-measured on disk before acceptance — some of them did not survive, and the false
+findings are recorded alongside the true ones. A second fresh reviewer ran the same
+discipline on the next revision, and the remaining corrections came from writing the SQL
+rather than the prose, from reading one real event rather than searching for one, and
+from reconciling the finished implementation against every published figure — including
+two things no measurement of the corpus could show, one of them a packaged jar that
+could not open its own default database path. That is the point of the exercise: the spec
+existed to be falsified by the implementation.
 
 Both directions of that loop matter. A reviewer model with fresh context caught errors I had
 committed to prose, and I caught errors it had committed to a report. Nothing entered this
