@@ -1,0 +1,25 @@
+@use '@angular/material' as mat;
+
+// One theme, applied once, in one file. The dark `theme-type` is the whole aesthetic decision;
+// everything below it is a token the components are allowed to reference.
+@include mat.theme((
+  color: (
+    primary: mat.$azure-palette,
+    tertiary: mat.$blue-palette,
+    theme-type: dark,
+  ),
+  typography: (plain-family: ('Inter', 'Roboto', system-ui, sans-serif)),
+  density: 0,
+));
+
+// Plane colours: one hue per failure plane, used by the chart, the table chips and the
+// legend. They are the product's central distinction, so they are tokens, not chart config.
+$plane-guard: #e0a458;         // the harness worked, the model paid for it
+$plane-misuse: #e05c5c;        // the model could have done better
+$plane-infra: #5b8fd6;         // the operator's problem, not the model's
+$surface: #12141a;
+$surface-raised: #191c24;
+$hairline: #262b36;
+$text-hi: #e8ebf2;
+$text-lo: #99a1b3;
+$accent: #5bd6a5;

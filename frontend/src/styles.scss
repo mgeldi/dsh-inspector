@@ -1,0 +1,21 @@
+@use 'theme' as *;
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  background: $surface;
+  color: $text-hi;
+  font: 400 14px/1.55 'Inter', 'Roboto', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+// Every count in this app is a measurement, and measurements align on the decimal point.
+.num { font-variant-numeric: tabular-nums; font-feature-settings: 'tnum'; }
+
+.muted { color: $text-lo; }
+.hairline { border: 1px solid $hairline; }
+.surface { background: $surface-raised; }
+
+.plane-GUARD { color: $plane-guard; }
+.plane-MODEL_MISUSE { color: $plane-misuse; }
+.plane-INFRASTRUCTURE { color: $plane-infra; }
