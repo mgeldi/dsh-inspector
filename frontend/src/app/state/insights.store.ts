@@ -79,6 +79,13 @@ export class InsightsStore {
   /** The rail's "Clear": nulls are written, not empty strings, so nothing is sent. */
   clearFilters(): void { this.filters.set(emptyFilters()); }
 
+  /**
+   * Dismiss the error bar. The bar shows whatever `error()` holds and the store is
+   * the only writer: a later rejected request re-sets the signal and brings the bar
+   * back, so dismissing can never hide a new failure permanently.
+   */
+  dismissError(): void { this.error.set(null); }
+
   setPlane(value: string | null): void { this.plane.set(value); }
   setDetector(value: string | null): void { this.detector.set(value); }
   setSession(value: string | null): void { this.session.set(value); }

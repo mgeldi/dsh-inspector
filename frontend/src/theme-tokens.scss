@@ -1,0 +1,15 @@
+// Tokens only — this module emits no CSS. Component style files that @use it get the
+// variables without dragging `@include mat.theme(...)` out of theme.scss into every
+// component bundle: the Angular builder budgets each component stylesheet (4 kB warning,
+// 8 kB error), and the full Material theme is several kilobytes of CSS by itself.
+// theme.scss forwards this module, so `@use 'theme' as *` keeps working for the
+// global stylesheet.
+$plane-guard: #e0a458;         // the harness worked, the model paid for it
+$plane-misuse: #e05c5c;        // the model could have done better
+$plane-infra: #5b8fd6;         // the operator's problem, not the model's
+$surface: #12141a;
+$surface-raised: #191c24;
+$hairline: #262b36;
+$text-hi: #e8ebf2;
+$text-lo: #99a1b3;
+$accent: #5bd6a5;

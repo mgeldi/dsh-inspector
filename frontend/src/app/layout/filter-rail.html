@@ -1,0 +1,38 @@
+<aside class="rail">
+  <h2 class="rail-heading">Filters</h2>
+
+  <section class="facet-group">
+    <h3 class="facet-label">Time</h3>
+    <div class="chips" role="group" aria-label="Time range">
+      @for (p of presets; track p.id) {
+        <button
+          type="button"
+          class="chip"
+          [class.chip-active]="store.preset() === p.id"
+          [attr.aria-pressed]="store.preset() === p.id"
+          (click)="changePreset(p.id)"
+        >{{ p.label }}</button>
+      }
+    </div>
+  </section>
+
+  @for (facet of facets; track facet.key) {
+    <section class="facet-group">
+      <label class="facet-label" [attr.for]="'facet-' + facet.key">{{ facet.label }}</label>
+      <select
+        class="facet-select"
+        [id]="'facet-' + facet.key"
+        [value]="facetShownValue(facet)"
+        [disabled]="facetIsSingle(facet)"
+        (change)="changeFacet(facet, $any($event.target).value)"
+      >
+        <option value="" [disabled]="facetIsSingle(facet)">(any)</option>
+        @for (v of facetValues(facet); track v) {
+          <option [value]="v">{{ v }}</option>
+        }
+      </select>
+    </section>
+  }
+
+  <button type="button" class="clear" (click)="clear()">Clear filters</button>
+</aside>

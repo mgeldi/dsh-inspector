@@ -1,0 +1,41 @@
+<div class="shell">
+  <header class="header">
+    <mat-toolbar class="toolbar">
+      <span class="app-name">DSH Inspector</span>
+      <nav class="tabs" aria-label="Sections">
+        @for (t of tabs; track t.key) {
+          <a class="tab" [class.tab-active]="tabActive(t.key)" [routerLink]="t.link">{{ t.label }}</a>
+        }
+      </nav>
+      <span class="spacer"></span>
+      @if (indexResult()) {
+        <span class="index-result num">{{ indexResult() }}</span>
+      }
+      <button
+        mat-flat-button
+        class="index-button"
+        [disabled]="store.busy() > 0"
+        (click)="reindex()"
+      >Index sessions</button>
+    </mat-toolbar>
+
+    <mat-progress-bar mode="indeterminate" class="busy-bar" [hidden]="store.busy() === 0"></mat-progress-bar>
+
+    @if (store.error()) {
+      <div class="error-bar" role="alert">
+        <span class="error-text">{{ store.error() }}</span>
+        <button type="button" class="error-dismiss" aria-label="Dismiss error" (click)="dismissError()">×</button>
+      </div>
+    }
+  </header>
+
+  <div class="frame-body">
+    <!-- The rail is outside the outlet: a route change swaps the outlet, never the filters. -->
+    <aside class="rail-pane" aria-label="Filters">
+      <app-filter-rail />
+    </aside>
+    <main class="outlet-pane">
+      <router-outlet />
+    </main>
+  </div>
+</div>
