@@ -145,7 +145,11 @@ public final class SessionIngestor {
             Integer ttft = null;
             if (first != null && last != null && last > first && out > 0) {
                 decode = out / ((last - first) / 1000.0);
-                ttft = (int) (first - start);
+                // With no step/start the anchor falls back to the message time, which is *after*
+                // the chunk timings it gets compared to. That subtraction is negative, and a
+                // negative TTFT drags the median down in silence — an impossible value is
+                // reported as unknown instead, while decode survives because it never used start.
+                ttft = first >= start ? (int) (first - start) : null;
             }
             closed.put(k, new StepRecord(k.turn(), k.step(), start, null, in, out == 0 ? null : out,
                     decode, ttft, timingSource));

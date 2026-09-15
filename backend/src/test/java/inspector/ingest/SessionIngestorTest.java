@@ -63,6 +63,20 @@ final class SessionIngestorTest {
     }
 
     @Test
+    void aStepWithNoStartEventNeverReportsANegativeTtft() throws IOException {
+        // The anchor falls back to the message time, which is AFTER the chunk timings stored
+        // inside it. The subtraction would be negative, and a negative TTFT pulls the median
+        // down without ever looking wrong on screen. Decode is unaffected: it never used the
+        // anchor, which is exactly why it is worth keeping.
+        final StreamFacts facts = ingest(Convention.V3,
+                v3Message(0, 0, T0 + 4000, 350, List.of(chunk(T0 + 1000), chunk(T0 + 3000))));
+
+        final StepRecord step = facts.steps().getFirst();
+        assertThat(step.ttftMs()).isNull();
+        assertThat(step.decodeTps()).isCloseTo(175.0, offset(0.01));
+    }
+
+    @Test
     void headerFieldsAreReadFromTheLineRootNotFromData() throws IOException {
         final StreamFacts facts = ingest(Convention.V3,
                 sessionLine("s-1", "/home/dev/demo", 3, "orchestrator"));
