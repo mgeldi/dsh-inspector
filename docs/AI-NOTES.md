@@ -149,6 +149,24 @@ The five defects added in this revision repeat the launcher table's shape: each 
   readiness check that measured the port instead of the data. The green runs were not wrong;
   they were about a launcher nobody uses.
 
+- **Do not rebuild an artifact a live process is reading.** During the architecture pass the
+  agent ran `mvn -DskipTests package` while the owner's backend was serving from that jar. The
+  build rewrote the file in place — same inode, and the JVM's two open fds on it carried no
+  `(deleted)` marker — so the running process started loading classes from a zip whose central
+  directory no longer matched its contents. The dashboard kept working, because the busiest
+  endpoint had been hammered all afternoon and every class on its path was already resident; a
+  cold path died instead, and the tell was absurd: a `500` with `Content-Length: 0` and
+  `Connection: close`, thrown before any handler, for one value of the `Host` header only, on a
+  request that should have answered `400`. The same request against a freshly started JVM built
+  from the same source answered `200`. Diagnosis took three steps and included one wrong
+  conclusion — the first reading blamed the rebuild, the second retracted that because the
+  proxy path still returned `200`, and the retraction was the error. **A green hot path is not
+  a health signal.** When a process may be half-loaded, sampling its busiest endpoint is
+  precisely how an agent convinces itself nothing is broken. The concrete change: the launcher
+  should refuse to repackage while something already listens on the backend port, or build to a
+  versioned name and swap; a shared mutable artifact with a live consumer is a hazard no
+  toolchain warns about.
+
 ## 5. What is not here
 
 Nothing was pushed. The repository has no remote, the commits are local, and publishing
