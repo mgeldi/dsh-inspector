@@ -28,9 +28,6 @@ public final class FindingRepository {
             "f.id, f.session_id, f.detector, f.plane, f.category, f.code, f.confidence, f.path_hint, "
                     + "f.seq, f.stale_seq, f.cause_seq, f.occurred_at, f.summary";
 
-    private static final String FINDING_JOIN =
-            "from finding f join session s on s.id = f.session_id and s.source_file = f.source_file";
-
     private final JdbcClient jdbc;
 
     public FindingRepository(final JdbcClient jdbc) {
@@ -39,7 +36,8 @@ public final class FindingRepository {
 
     /** Total rows matching the filters, all pages. */
     public long count(final FindingFilters.Sql where) {
-        return singleLong("select count(*) " + FINDING_JOIN + " " + where.asWhere(), where.params());
+        return SqlSupport.singleLong(jdbc, "select count(*) " + SqlSupport.FINDING_JOIN + " "
+                + where.asWhere(), where.params());
     }
 
     /**
@@ -51,7 +49,7 @@ public final class FindingRepository {
         final List<Object> params = new ArrayList<>(where.params());
         params.add(size);
         params.add((long) page * size);
-        final String sql = "select " + FINDING_COLUMNS + " " + FINDING_JOIN + " " + where.asWhere()
+        final String sql = "select " + FINDING_COLUMNS + " " + SqlSupport.FINDING_JOIN + " " + where.asWhere()
                 + " order by " + orderBy + " limit ? offset ?";
         return jdbc.sql(sql).params(params)
                 .query((RowMapper<FindingDto>) (rs, rowNum) -> toFinding(rs))
@@ -101,7 +99,7 @@ public final class FindingRepository {
                 rs.getString("plane"),
                 rs.getString("category"),
                 rs.getString("code"),
-                asDouble(rs.getObject("confidence")),
+                SqlSupport.asDouble(rs.getObject("confidence")),
                 rs.getString("path_hint"),
                 asLong(rs.getObject("seq")),
                 asLong(rs.getObject("stale_seq")),
@@ -110,17 +108,7 @@ public final class FindingRepository {
                 rs.getString("summary"));
     }
 
-    private static Double asDouble(final Object value) {
-        return value == null ? null : ((Number) value).doubleValue();
-    }
-
     private static Long asLong(final Object value) {
         return value == null ? null : ((Number) value).longValue();
-    }
-
-    private long singleLong(final String sql, final List<Object> params) {
-        return jdbc.sql(sql).params(params)
-                .query((RowMapper<Long>) (rs, rowNum) -> rs.getLong(1))
-                .single();
     }
 }

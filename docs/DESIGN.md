@@ -636,7 +636,12 @@ criterion, not whether the endpoint looks general.
 **Where the filter vocabulary comes from.** `/api/overview` returns it: the five rail values, plus
 the observed error `code` values and `detector` ids that the Findings filter needs, because those
 are corpus-dependent and hardcoding the 16 codes would be wrong by construction. `plane` is the
-exception — exactly three values, a UI constant, not a round trip.
+exception — exactly three values, a UI constant, not a round trip. The vocabulary is the one read
+the shared filters do not reach, deliberately: it is computed over the whole index rather than the
+filtered selection, because a filter narrowing it would make a value that exists in the corpus stop
+being offerable the moment that value's rows were filtered out of the view — the rail would offer a
+set of filters that shrinks as you use it. The other population reads — overview, findings, cohorts
+— all answer over the filtered selection.
 
 `POST /api/index/run` is synchronous and returns its summary, which the UI shows in a snackbar.
 A full scan takes seconds (§12), so there is no job to poll: an async run, a progress bar and a

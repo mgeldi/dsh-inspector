@@ -65,16 +65,16 @@ public final class CohortRepository {
                 "select coalesce(s." + axisColumn + ", 'unknown') as key, count(distinct s.id) as n "
                         + "from session s " + bySession.asWhere() + " group by 1", bySession.params());
         final Map<String, Long> toolCalls = groupCount(
-                "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n from tool_call t "
-                        + "join session s on s.id = t.session_id and s.source_file = t.source_file "
+                "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n "
+                        + SqlSupport.TOOL_CALL_JOIN + " "
                         + observed.asWhere() + " group by 1", observed.params());
         final Map<String, Long> findings = groupCount(
-                "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n from finding f "
-                        + "join session s on s.id = f.session_id and s.source_file = f.source_file "
+                "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n "
+                        + SqlSupport.FINDING_JOIN + " "
                         + byFinding.asWhere() + " group by 1", byFinding.params());
         final Map<String, Long> guardFindings = groupCount(
-                "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n from finding f "
-                        + "join session s on s.id = f.session_id and s.source_file = f.source_file "
+                "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n "
+                        + SqlSupport.FINDING_JOIN + " "
                         + byGuard.asWhere() + " group by 1", byGuard.params());
 
         final TreeSet<String> keys = new TreeSet<>(sessions.keySet());

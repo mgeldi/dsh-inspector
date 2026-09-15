@@ -27,6 +27,16 @@ public final class VocabularyService {
         this.jdbc = jdbc;
     }
 
+    /**
+     * The one deliberate index-wide read (DESIGN.md §7): the rail's options are the
+     * values present in the index, and the rail keeps offering them even when a
+     * filter excludes their rows — an option that disappeared with the filter would
+     * stop being clearable, and the rail would offer a set of filters that shrinks
+     * as you use it. The rail reads exactly these values and nothing else.
+     */
+    @IndexWideRead(reason = "the rail's facet vocabulary is deliberately index-wide (DESIGN.md §7): "
+            + "an option is a value present in the index, and a filter must never make one "
+            + "disappear from the rail")
     public Vocabulary vocabulary() {
         return new Vocabulary(
                 distinct("select distinct coalesce(s.\"schema\", 'unknown') from session s order by 1"),

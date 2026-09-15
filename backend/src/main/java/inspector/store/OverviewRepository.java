@@ -26,10 +26,6 @@ import java.util.Objects;
 @Component
 public final class OverviewRepository {
 
-    private static final String FINDING_JOIN =
-            "from finding f join session s on s.id = f.session_id and s.source_file = f.source_file";
-    private static final String TOOL_CALL_JOIN =
-            "from tool_call t join session s on s.id = t.session_id and s.source_file = t.source_file";
     private static final String STEP_JOIN =
             "from step st join session s on s.id = st.session_id and s.source_file = st.source_file";
 
@@ -54,11 +50,13 @@ public final class OverviewRepository {
         // session can hold both log conventions, so count(*) would report 168 streams as 168
         // "sessions" next to a filter rail that lists 165. A tile the user can disprove by
         // looking at their own session list costs credibility in every other number here.
-        return singleLong("select count(distinct s.id) from session s " + where.asWhere(), where.params());
+        return SqlSupport.singleLong(jdbc, "select count(distinct s.id) from session s "
+                + where.asWhere(), where.params());
     }
 
     public long findingCount(final FindingFilters.Sql where) {
-        return singleLong("select count(*) " + FINDING_JOIN + " " + where.asWhere(), where.params());
+        return SqlSupport.singleLong(jdbc, "select count(*) " + SqlSupport.FINDING_JOIN + " "
+                + where.asWhere(), where.params());
     }
 
     /**
@@ -68,17 +66,17 @@ public final class OverviewRepository {
      * tile feeds, differently per convention.
      */
     public long toolCallCount(final FindingFilters.Sql where) {
-        return singleLong("select count(*) " + TOOL_CALL_JOIN + " "
+        return SqlSupport.singleLong(jdbc, "select count(*) " + SqlSupport.TOOL_CALL_JOIN + " "
                 + where.with("t.outcome_only = 0").asWhere(), where.params());
     }
 
     public long stepCount(final FindingFilters.Sql where) {
-        return singleLong("select count(*) " + STEP_JOIN + " " + where.asWhere(), where.params());
+        return SqlSupport.singleLong(jdbc, "select count(*) " + STEP_JOIN + " " + where.asWhere(), where.params());
     }
 
     public List<PlaneMixRow> planeMix(final FindingFilters.Sql where) {
-        final String sql = "select f.plane as plane, count(*) as n " + FINDING_JOIN + " " + where.asWhere()
-                + " group by f.plane order by f.plane";
+        final String sql = "select f.plane as plane, count(*) as n " + SqlSupport.FINDING_JOIN + " "
+                + where.asWhere() + " group by f.plane order by f.plane";
         return jdbc.sql(sql).params(where.params())
                 .query((RowMapper<PlaneMixRow>) (rs, rowNum) ->
                         new PlaneMixRow(rs.getString("plane"), rs.getLong("n")))
@@ -87,8 +85,8 @@ public final class OverviewRepository {
 
     /** Top detectors, count descending, id ascending to break ties. */
     public List<DetectorCountRow> topDetectors(final FindingFilters.Sql where) {
-        final String sql = "select f.detector as detector, count(*) as n " + FINDING_JOIN + " " + where.asWhere()
-                + " group by f.detector order by n desc, f.detector asc";
+        final String sql = "select f.detector as detector, count(*) as n " + SqlSupport.FINDING_JOIN + " "
+                + where.asWhere() + " group by f.detector order by n desc, f.detector asc";
         return jdbc.sql(sql).params(where.params())
                 .query((RowMapper<DetectorCountRow>) (rs, rowNum) ->
                         new DetectorCountRow(rs.getString("detector"), rs.getLong("n")))
@@ -97,8 +95,8 @@ public final class OverviewRepository {
 
     /** Findings per UTC day, the first of the two chart series. */
     public List<SeriesPointRow> findingSeries(final FindingFilters.Sql where) {
-        final String sql = "select date(f.occurred_at/1000.0, 'unixepoch') as day, count(*) as n " + FINDING_JOIN + " "
-                + where.asWhere() + " group by day order by day";
+        final String sql = "select date(f.occurred_at/1000.0, 'unixepoch') as day, count(*) as n "
+                + SqlSupport.FINDING_JOIN + " " + where.asWhere() + " group by day order by day";
         return jdbc.sql(sql).params(where.params())
                 .query((RowMapper<SeriesPointRow>) (rs, rowNum) ->
                         new SeriesPointRow(rs.getString("day"), rs.getLong("n")))
@@ -111,7 +109,8 @@ public final class OverviewRepository {
      * protects the day bucketing from rows without a start.
      */
     public List<SeriesPointRow> toolCallSeries(final FindingFilters.Sql where) {
-        final String sql = "select date(t.started_at/1000.0, 'unixepoch') as day, count(*) as n " + TOOL_CALL_JOIN + " "
+        final String sql = "select date(t.started_at/1000.0, 'unixepoch') as day, count(*) as n "
+                + SqlSupport.TOOL_CALL_JOIN + " "
                 + where.with("t.outcome_only = 0 and t.started_at is not null").asWhere()
                 + " group by day order by day";
         return jdbc.sql(sql).params(where.params())
@@ -134,8 +133,8 @@ public final class OverviewRepository {
                 .query((RowMapper<StepSample>) (rs, rowNum) -> new StepSample(
                         rs.getString("schema"),
                         rs.getString("source"),
-                        asDouble(rs.getObject("tps")),
-                        asDouble(rs.getObject("ttft"))))
+                        SqlSupport.asDouble(rs.getObject("tps")),
+                        SqlSupport.asDouble(rs.getObject("ttft"))))
                 .list()
                 .forEach(sample -> groups.computeIfAbsent(sample.schema() + '\u0000' + sample.source(),
                         key -> new ArrayList<>()).add(sample));
@@ -169,13 +168,4 @@ public final class OverviewRepository {
         return sorted.size() % 2 == 1 ? sorted.get(mid) : (sorted.get(mid - 1) + sorted.get(mid)) / 2.0;
     }
 
-    private static Double asDouble(final Object value) {
-        return value == null ? null : ((Number) value).doubleValue();
-    }
-
-    private long singleLong(final String sql, final List<Object> params) {
-        return jdbc.sql(sql).params(params)
-                .query((RowMapper<Long>) (rs, rowNum) -> rs.getLong(1))
-                .single();
-    }
 }
