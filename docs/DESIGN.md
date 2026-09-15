@@ -805,34 +805,36 @@ browser test harness in three hours; a real gap, named rather than omitted silen
 ## 12. Running it
 
 ```bash
-./run.sh                     # backend :8091, Angular dev server :4300 proxying /api
+cd backend && mvn spring-boot:run                              # backend :8091
 java -jar backend/target/*.jar --inspector.corpus=$HOME/.dsh/sessions   # real sessions
 ```
 
 **Ports are a design constraint, not a default.** The inspector runs *beside* the tool it
 observes, on a machine already serving a web UI, an inference endpoint and whatever else a
 developer has started — on the build machine all three of the obvious choices were occupied.
-So the backend defaults to **8091** and the dev server to **4300**, both configurable, and a
-collided port fails at startup with the port named in the message rather than an ambiguous
-connection error. Silently failing to bind, or binding something already owned, is precisely
-the failure you do not want in a tool whose whole job is reporting on another process.
+So the backend defaults to **8091**, configurable, and a collided port fails at startup with
+the port named in the message rather than an ambiguous connection error. Silently failing to
+bind, or binding something already owned, is precisely the failure you do not want in a tool
+whose whole job is reporting on another process.
 
 Default data source is the committed synthetic corpus, so a reviewer sees a populated
 dashboard — with real-looking violations and both schema conventions represented — on first
-run, without installing DSH. `--dsh-home` points the same indexer at real sessions for a live
-demo. That split makes the repo reviewable in ten minutes while the numbers stay demonstrably
-real, and it is why nothing personal (session content, project names, `AGENTS.md`) is in this
-repository.
+run, without installing DSH. `--inspector.corpus` points the same indexer at real sessions
+for a live demo. That split makes the repo reviewable in ten minutes while the numbers stay
+demonstrably real, and it is why nothing personal (session content, project names, `AGENTS.md`)
+is in this repository.
 
 **First run needs no button press: on startup, if the database has no sessions and the configured
-corpus has files, the application runs the index synchronously and logs the summary.** Without
+corpus directory exists, the application runs the index synchronously and logs the summary.** Without
 that rule, "clone and run" depends on the reviewer finding the Index action, and the promise that
-`./run.sh` shows a populated dashboard quietly fails on one implementer's interpretation and
+a fresh clone shows a populated dashboard quietly fails on one implementer's interpretation and
 succeeds on another's.
 
-Full scan of the 172.5 MB corpus: **tens of seconds**, and **parse-dominated** — decompressing all
-173 MB measured 2.3 s, so JSON parsing and persistence are the cost, not zstd. Either way §2's
-exclusion of file watching stands: the cheap correct thing is genuinely cheap here.
+Full scan of the 173 MB corpus: **4.3 s over 168 streams, 0 parse failures** — the figure the
+finished indexer logs on a real run. Decompressing the same 173 MB alone measured 2.3 s, roughly
+half of the total, so the scan is not parse-dominated after all: zstd takes about half, and JSON
+parsing, detection and persistence share the rest. Either way §2's exclusion of file watching
+stands: the cheap correct thing is genuinely cheap here.
 
 ### 12.1 Repository layout
 
@@ -867,9 +869,9 @@ deliverable rather than a section buried in the README.
 Java `main`, because `zstd-jni` is already a backend dependency, so writing `.zstd` fixtures
 costs nothing and the repo keeps one language per directory instead of a Node script that must
 agree with Java about the event schema. That also forces the important property: fixtures and
-the real `--dsh-home` corpus go through **the same ingest code path**, so the demo corpus cannot
-drift into a shape the indexer happens to like. A separate root `tools/` would have been the
-natural place and would have quietly invited a second, simpler parser.
+the real `--inspector.corpus` corpus go through **the same ingest code path**, so the demo corpus
+cannot drift into a shape the indexer happens to like. A separate root `tools/` would have been
+the natural place and would have quietly invited a second, simpler parser.
 
 Nothing in the tree exists to satisfy a convention that earns nothing (§2.2, §4.2), and no
 empty directories are committed — they appear with the first commit of code.
@@ -947,6 +949,17 @@ informative than the prose.
    and `ABORTED`, which belong on the guard plane: a human saying no is another case where the
    harness worked and the model paid the cost. Neither defect was visible while reading the
    document; both were visible the moment something had to *use* the definition.
+
+8. **Reconciliation against the finished implementation.** Running the finished indexer
+   against the corpus reproduced every published figure exactly — sessions, the typed-error
+   count, `FS_STALE_VERSION`, fatal turns, and both throughput and TTFT medians per
+   convention — and surfaced two things no measurement of the corpus could show. The default
+   database path could not be opened by a packaged jar, because sqlite-jdbc does not create a
+   parent directory: every test overrode that path, so 137 green tests shipped an unbootable
+   jar. And the rate denominator was inflated by 4.8% by result-only rows, unevenly across
+   the two conventions, which biases the cross-convention comparison in the direction the
+   tool is built to measure. That is the point of the exercise: the spec existed to be
+   falsified by the implementation.
 
 Both directions of that loop matter. A reviewer model with fresh context caught errors I had
 committed to prose, and I caught errors it had committed to a report. Nothing entered this
