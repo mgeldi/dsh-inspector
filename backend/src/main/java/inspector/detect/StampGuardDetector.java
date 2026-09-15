@@ -91,7 +91,7 @@ public final class StampGuardDetector implements Detector {
     private Finding directMutation(final ErrorEvent error, final FileTouch stale, final Match cause) {
         return new Finding(ID, Plane.GUARD, Category.DIRECT_MUTATION, error.code(),
                 cause.absolute() ? Confidence.HIGH : Confidence.MEDIUM, error.absolutePath(),
-                error.seq(), stale.seq(), cause.evidence().seq(), 0L,
+                error.seq(), stale.seq(), cause.evidence().seq(), error.occurredAt(),
                 ("%s refused: stamp stale since seq %d (%s); consistent with a mutating command "
                         + "at seq %d (%s path match)").formatted(
                                 base(error.absolutePath()), stale.seq(), stale.op(),
@@ -103,7 +103,7 @@ public final class StampGuardDetector implements Detector {
     private Finding vcsRestore(final ErrorEvent error, final FileTouch stale, final Match cause) {
         return new Finding(ID, Plane.GUARD, Category.VCS_RESTORE, error.code(),
                 Confidence.HIGH, error.absolutePath(), error.seq(), stale.seq(),
-                cause.evidence().seq(), 0L,
+                cause.evidence().seq(), error.occurredAt(),
                 ("%s refused: stamp stale since seq %d; a version-control restore at seq %d is "
                         + "legitimate work the stamp cannot know about").formatted(
                                 base(error.absolutePath()), stale.seq(), cause.evidence().seq()),
@@ -150,7 +150,7 @@ public final class StampGuardDetector implements Detector {
 
     private Finding external(final ErrorEvent error, final Integer staleSeq, final String reason) {
         return new Finding(ID, Plane.GUARD, Category.EXTERNAL, error.code(), null,
-                error.absolutePath(), error.seq(), staleSeq, null, 0L,
+                error.absolutePath(), error.seq(), staleSeq, null, error.occurredAt(),
                 "%s refused: stamp stale%s; %s".formatted(
                         base(error.absolutePath()),
                         staleSeq == null ? " (stale touch not derivable)" : " since seq " + staleSeq,

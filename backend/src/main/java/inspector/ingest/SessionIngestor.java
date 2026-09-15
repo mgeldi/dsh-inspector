@@ -113,7 +113,7 @@ public final class SessionIngestor {
                 case "tool/call" -> onCall(ev);
                 case "tool/result" -> onResult(ev);
                 case "llm/retry" -> retries.add(new RetryEvent(ev.seq(), orZero(ev.integer("/turn")),
-                        orZero(ev.integer("/step")), ev.text("/failure/code")));
+                        orZero(ev.integer("/step")), ev.text("/failure/code"), ev.time()));
                 case "turn/end" -> onTurnEnd(ev);
                 default -> { }                       // unknown types are ignored, never fatal
             }
@@ -213,7 +213,7 @@ public final class SessionIngestor {
                 errors.add(new ErrorEvent(open == null ? ev.seq() : open.seq,
                         open == null ? orNull(ev.integer("/turn")) : open.turn,
                         open == null ? orNull(ev.integer("/step")) : open.step,
-                        open == null ? null : open.name, code, path));
+                        open == null ? null : open.name, code, path, ev.time()));
             }
         }
 
@@ -224,7 +224,7 @@ public final class SessionIngestor {
             // §5.2 rule 1: the typed code is generic, the specific one is inside the message.
             // Fixed parse of a documented prefix — match or null, never a guess.
             final String message = ev.text("/reason/message");
-            fatal.add(new FatalTurn(orZero(ev.integer("/turn")), parseEmbeddedCode(message)));
+            fatal.add(new FatalTurn(orZero(ev.integer("/turn")), parseEmbeddedCode(message), ev.time()));
         }
 
         StreamFacts finish() {

@@ -30,7 +30,7 @@ public final class RetryStormDetector implements Detector {
                 .map(group -> {
                     final RetryEvent last = group.get(group.size() - 1);
                     return new Finding(ID, Plane.INFRASTRUCTURE, null, last.code(), null, null,
-                            last.seq(), null, null, 0L,
+                            last.seq(), null, null, last.occurredAt(),
                             "step exhausted its retry budget (%d retries, last %s)"
                                     .formatted(group.size(), last.code()),
                             List.of());

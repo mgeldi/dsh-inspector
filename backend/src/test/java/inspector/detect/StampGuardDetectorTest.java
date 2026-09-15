@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 
 final class StampGuardDetectorTest {
 
+    private static final long T0 = 1_760_000_000_000L;
     private static final int TOUCH_SEQ = 145;
     private static final int CAUSE_SEQ = 150;
     private static final int FAIL_SEQ = 300;
@@ -218,6 +219,19 @@ final class StampGuardDetectorTest {
         assertThat(backwards).usingRecursiveComparison().isEqualTo(forwards);
     }
 
+    @Test
+    void theFindingCarriesTheEventTimeOfTheRefusal() {
+        final List<Finding> findings = detect(
+                edit(TOUCH_SEQ, "/home/dev/demo/App.java"),
+                shell(CAUSE_SEQ, VerbClass.MUTATING, "/home/dev/demo/App.java"),
+                staleAt(FAIL_SEQ, "/home/dev/demo/App.java", T0 + 4321));
+
+        assertThat(findings).singleElement().satisfies(f -> {
+            assertThat(f.category()).isEqualTo(Category.DIRECT_MUTATION);
+            assertThat(f.occurredAt()).isEqualTo(T0 + 4321);
+        });
+    }
+
     private List<Finding> detect(final Object... parts) {
         final List<FileTouch> touches = new ArrayList<>();
         final List<ShellEvidence> shell = new ArrayList<>();
@@ -241,7 +255,11 @@ final class StampGuardDetectorTest {
     }
 
     private ErrorEvent stale(final int seq, final String path) {
-        return new ErrorEvent(seq, 0, 0, "edit", "FS_STALE_VERSION", path);
+        return new ErrorEvent(seq, 0, 0, "edit", "FS_STALE_VERSION", path, T0 + seq);
+    }
+
+    private ErrorEvent staleAt(final int seq, final String path, final long occurredAt) {
+        return new ErrorEvent(seq, 0, 0, "edit", "FS_STALE_VERSION", path, occurredAt);
     }
 
     private SessionRecord session() {

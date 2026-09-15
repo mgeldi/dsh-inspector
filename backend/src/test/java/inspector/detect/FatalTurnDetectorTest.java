@@ -33,7 +33,8 @@ final class FatalTurnDetectorTest {
 
     @Test
     void aTurnEndingInErrorBecomesOneInfrastructureFinding() {
-        final List<Finding> findings = detector.detect(facts(new FatalTurn(7, "media_budget_exceeded")));
+        final List<Finding> findings =
+                detector.detect(facts(new FatalTurn(7, "media_budget_exceeded", T0)));
 
         assertThat(findings).singleElement().satisfies(f -> {
             assertThat(f.detector()).isEqualTo(FatalTurnDetector.ID);
@@ -47,10 +48,18 @@ final class FatalTurnDetectorTest {
 
     @Test
     void aFatalTurnWithoutAParsedCodeOmitsTheCodeFromTheSummary() {
-        final List<Finding> findings = detector.detect(facts(new FatalTurn(3, null)));
+        final List<Finding> findings = detector.detect(facts(new FatalTurn(3, null, T0 + 500)));
 
         assertThat(findings).singleElement()
                 .satisfies(f -> assertThat(f.summary()).isEqualTo("turn 3 ended in error"));
+    }
+
+    @Test
+    void theFindingCarriesTheTurnEndEventTime() {
+        final List<Finding> findings = detector.detect(facts(new FatalTurn(7, null, T0 + 777)));
+
+        assertThat(findings).singleElement()
+                .satisfies(f -> assertThat(f.occurredAt()).isEqualTo(T0 + 777));
     }
 
     @Test

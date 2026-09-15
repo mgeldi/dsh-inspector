@@ -34,7 +34,7 @@ public final class ErrorPlaneDetector implements Detector {
         return facts.errors().stream()
                 .filter(e -> !ownedElsewhere.contains(e.code()))
                 .map(e -> new Finding(ID, ErrorPlanes.ofToolCode(e.code()), null, e.code(), null,
-                        e.absolutePath(), e.seq(), null, null, 0L,
+                        e.absolutePath(), e.seq(), null, null, e.occurredAt(),
                         "%s returned %s".formatted(e.tool() == null ? "tool" : e.tool(), e.code()),
                         List.of()))
                 .toList();

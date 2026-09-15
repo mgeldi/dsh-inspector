@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 
 final class ErrorPlaneDetectorTest {
 
+    private static final long T0 = 1_760_000_000_000L;
+
     private final StampGuardDetector stampGuard = new StampGuardDetector();
     private final ErrorPlaneDetector detector = new ErrorPlaneDetector(stampGuard);
 
@@ -54,9 +56,9 @@ final class ErrorPlaneDetectorTest {
                         VerbClass.MUTATING, new RedactedExcerpt("sed -i App.java"))),
                 List.of(
                         new ErrorEvent(300, 0, 0, "edit", "FS_STALE_VERSION",
-                                "/home/dev/demo/App.java"),
+                                "/home/dev/demo/App.java", T0 + 300),
                         new ErrorEvent(301, 0, 0, "edit", "FS_NOT_FOUND",
-                                "/home/dev/demo/missing.java")),
+                                "/home/dev/demo/missing.java", T0 + 301)),
                 List.of(), List.of(), 0L);
 
         final List<Finding> all = new ArrayList<>();
@@ -88,7 +90,19 @@ final class ErrorPlaneDetectorTest {
 
     private ErrorEvent error(final int seq, final String tool, final String code,
                              final String path) {
-        return new ErrorEvent(seq, 0, 0, tool, code, path);
+        return new ErrorEvent(seq, 0, 0, tool, code, path, T0 + seq);
+    }
+
+    @Test
+    void theFindingCarriesTheEventTimeOfTheRefusal() {
+        final List<Finding> findings = detector.detect(facts(
+                new ErrorEvent(101, 0, 0, "edit", "FS_NOT_FOUND", "/home/dev/demo/missing.java",
+                        T0 + 101),
+                new ErrorEvent(102, 0, 0, "bash", "INVALID_ARGS", null, T0 + 102)));
+
+        assertThat(findings)
+                .extracting(Finding::seq, Finding::occurredAt)
+                .containsExactly(tuple(101, T0 + 101), tuple(102, T0 + 102));
     }
 
     private SessionRecord session() {

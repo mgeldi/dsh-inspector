@@ -125,6 +125,43 @@ final class SessionIngestorTest {
         assertThat(facts.parseFailures()).isZero();
     }
 
+    @Test
+    void theErrorEventCarriesTheResultEventTime() throws IOException {
+        final StreamFacts facts = ingest(Convention.V0,
+                toolCall("c1", "edit", T0, "{\"file_path\":\"/home/dev/demo/a.java\"}"),
+                toolResult("c1", T0 + 40, "FS_STALE_VERSION"));
+
+        assertThat(facts.errors()).singleElement()
+                .satisfies(e -> assertThat(e.occurredAt()).isEqualTo(T0 + 40));
+    }
+
+    @Test
+    void theFatalTurnCarriesTheTurnEndEventTime() throws IOException {
+        final StreamFacts facts = ingest(Convention.V0,
+                line("turn/end", T0 + 600,
+                        "{\"turn\":3,\"reason\":{\"kind\":\"error\",\"message\":\"400: {\\\"code\\\":\\\"media_budget_exceeded\\\"}\"}}"));
+
+        assertThat(facts.fatalTurns()).singleElement().satisfies(f -> {
+            assertThat(f.turn()).isEqualTo(3);
+            assertThat(f.code()).isEqualTo("media_budget_exceeded");
+            assertThat(f.occurredAt()).isEqualTo(T0 + 600);
+        });
+    }
+
+    @Test
+    void theRetryEventCarriesTheRetryEventTime() throws IOException {
+        final StreamFacts facts = ingest(Convention.V0,
+                line("llm/retry", T0 + 700,
+                        "{\"turn\":0,\"step\":1,\"failure\":{\"code\":\"TIMEOUT\"}}"));
+
+        assertThat(facts.retries()).singleElement().satisfies(r -> {
+            assertThat(r.turn()).isZero();
+            assertThat(r.step()).isEqualTo(1);
+            assertThat(r.code()).isEqualTo("TIMEOUT");
+            assertThat(r.occurredAt()).isEqualTo(T0 + 700);
+        });
+    }
+
     private StreamFacts ingest(final Convention convention, final String... lines) throws IOException {
         final String fileName = convention == Convention.V0 ? Convention.FILE_V0 : Convention.FILE_V3;
         final Path file = temp.resolve(fileName);

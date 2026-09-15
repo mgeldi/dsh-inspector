@@ -18,7 +18,7 @@ public final class FatalTurnDetector implements Detector {
     public List<Finding> detect(final StreamFacts facts) {
         return facts.fatalTurns().stream()
                 .map(f -> new Finding(ID, Plane.INFRASTRUCTURE, null, f.code(), null, null,
-                        null, null, null, 0L,
+                        null, null, null, f.occurredAt(),
                         "turn %d ended in error%s".formatted(f.turn(),
                                 f.code() == null ? "" : " (" + f.code() + ")"),
                         List.of()))
