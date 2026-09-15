@@ -1,0 +1,108 @@
+<section class="fpage">
+  @if (!loaded()) {
+    <p class="floading muted">Loading findings…</p>
+  } @else if (total() === 0) {
+    <section class="fempty" aria-label="No findings">
+      <p class="fempty-title">No findings match the current filters</p>
+      <p class="fempty-text">
+        The time range and the rail facets exclude every finding. The range is usually the suspect —
+        widen it to All time, or clear the rail facet that excludes everything.
+      </p>
+      <div class="fempty-actions">
+        <button type="button" class="ghost" (click)="useAllTime()">Use All time</button>
+      </div>
+    </section>
+  } @else {
+    <table class="ftable" aria-label="Findings">
+      <thead>
+        <tr>
+          <th scope="col" class="sortable" data-field="time" [class.sorted]="activeSort().field === 'time'" (click)="toggleSort('time')">
+            Time<span class="arrow">{{ arrow('time') }}</span>
+          </th>
+          <th scope="col" class="sortable" data-field="plane" [class.sorted]="activeSort().field === 'plane'" (click)="toggleSort('plane')">
+            Plane<span class="arrow">{{ arrow('plane') }}</span>
+          </th>
+          <th scope="col" class="sortable" data-field="detector" [class.sorted]="activeSort().field === 'detector'" (click)="toggleSort('detector')">
+            Detector<span class="arrow">{{ arrow('detector') }}</span>
+          </th>
+          <th scope="col" class="sortable" data-field="code" [class.sorted]="activeSort().field === 'code'" (click)="toggleSort('code')">
+            Code<span class="arrow">{{ arrow('code') }}</span>
+          </th>
+          <th scope="col">Category</th>
+          <th scope="col" class="sortable" data-field="confidence" [class.sorted]="activeSort().field === 'confidence'" (click)="toggleSort('confidence')">
+            Confidence<span class="arrow">{{ arrow('confidence') }}</span>
+          </th>
+          <th scope="col">Path</th>
+          <th scope="col" class="sortable" data-field="session" [class.sorted]="activeSort().field === 'session'" (click)="toggleSort('session')">
+            Session<span class="arrow">{{ arrow('session') }}</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (f of items(); track f.id) {
+          <tr
+            class="frow"
+            [class.alarm]="f.category === 'DIRECT_MUTATION'"
+            [class.legitimate]="f.category === 'VCS_RESTORE'"
+            (click)="open(f)"
+          >
+            <td class="num time">{{ fmtTimeShort(f.occurredAt) }}</td>
+            <td>
+              <span class="plane">
+                <span class="dot" [style.background]="PLANE_COLOURS[f.plane]"></span>
+                {{ planeName(f.plane) }}
+              </span>
+            </td>
+            <td class="det">{{ f.detector }}</td>
+            <td class="code num">{{ f.code ?? '—' }}</td>
+            <td>
+              @switch (f.category) {
+                @case ('DIRECT_MUTATION') {
+                  <span class="cat cat-mutation">direct mutation</span>
+                }
+                @case ('VCS_RESTORE') {
+                  <span class="cat cat-restore">vcs restore · legitimate</span>
+                }
+                @case ('EXTERNAL') {
+                  <span class="cat cat-external">external</span>
+                }
+                @default {
+                  <span class="cat cat-none muted">—</span>
+                }
+              }
+            </td>
+            <td class="conf" [class.unattributed]="f.confidence === null" [attr.title]="confidenceTipFor(f.confidence)">
+              {{ confidenceWord(f.confidence) }}
+            </td>
+            <td class="path">{{ f.pathHint ?? '—' }}</td>
+            <td class="sid num">{{ f.sessionId }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <div class="pager">
+      <button type="button" class="ghost" [disabled]="!canPrev()" (click)="goPage(-1)">Prev</button>
+      <span class="pager-text num">
+        @let s = slice();
+        @if (s) {
+          {{ s.first }}–{{ s.last }} of {{ s.total }}
+        } @else {
+          0 of 0
+        }
+      </span>
+      <button type="button" class="ghost" [disabled]="!canNext()" (click)="goPage(1)">Next</button>
+    </div>
+  }
+
+  @if (openDetail() !== null || detailLoading()) {
+    <div class="detail-backdrop" (click)="close()"></div>
+  }
+  @if (openDetail() !== null) {
+    <app-finding-detail [detail]="openDetail()!" (close)="close()"></app-finding-detail>
+  } @else if (detailLoading()) {
+    <aside class="detail loading">
+      <p class="muted">Loading finding…</p>
+    </aside>
+  }
+</section>
