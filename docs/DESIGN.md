@@ -384,7 +384,7 @@ A raw error count makes a useless dashboard here, because three unlike things al
 | Plane | Codes / events | Owner | How to read it |
 |---|---|---|---|
 | **Infrastructure fault** | `WEB_PROVIDER_CREDENTIAL_MISSING`, `CODEGRAPH_UNAVAILABLE`, `TOOL_OUTCOME_UNKNOWN`, `INVALID_TOOL_OUTPUT`; **any** `llm/retry` failure code; fatal `turn/end` | operator | **Counts.** A spike is a broken build. This is the "the upgrade broke a plugin" signal. Observed retry codes: `TIMEOUT` 190, `TRANSPORT` 34, `SERVER` 30. |
-| **Guard rejection** | `FS_STALE_VERSION`, `FS_NOT_OBSERVED`, `FS_SANDBOX_DENIED`, `GOAL_TOOL_AUTHORITY_REQUIRED`, approval-required | *nobody* — the harness worked | **Rate against baseline.** A denial is a success for the harness and a cost for the model. A rising rate after rollout means the model drifted or the guard tightened. |
+| **Guard rejection** | `FS_STALE_VERSION`, `FS_NOT_OBSERVED`, `FS_SANDBOX_DENIED`, `GOAL_TOOL_AUTHORITY_REQUIRED`, `ASK_ABORTED`, `ABORTED` (approval denials — a human declining is the harness working, not a fault, so the same rate-against-baseline reading as a sandbox denial) | *nobody* — the harness worked | **Rate against baseline.** A denial is a success for the harness and a cost for the model. A rising rate after rollout means the model drifted or the guard tightened. |
 | **Model misuse** | `FS_EDIT_NOT_FOUND`, `FS_NOT_FOUND`, `INVALID_ARGS`, `SEARCH_INVALID_PATTERN`, `SEARCH_FAILED`, `FS_NOT_REGULAR_FILE` | model / instructions | Rate, attributed to a detector that explains intent. |
 
 The middle row is the subtle one and worth five minutes in the room: a sandbox denial is a
