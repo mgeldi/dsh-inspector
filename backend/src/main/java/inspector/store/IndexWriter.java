@@ -7,6 +7,7 @@ import inspector.ingest.SessionSource;
 import inspector.ingest.ShellEvidence;
 import inspector.ingest.StreamFacts;
 import inspector.ingest.ToolCallRecord;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
@@ -214,6 +215,47 @@ public final class IndexWriter {
     }
 
     /**
+     * Records which corpus this index was built from. The database is keyed by nothing that
+     * says where its rows came from, so a file that once held a live index would happily
+     * serve 389 findings to a run configured for the fixture corpus — a dashboard quietly
+     * describing data it never read. Never logged and never served: the path carries the
+     * username, so it stays inside the gitignored database file.
+     */
+    public void seedCorpus(final String absoluteCorpusPath) {
+        jdbc.update("insert into meta (key, value) values ('corpus', ?)"
+                + " on conflict(key) do update set value = excluded.value", absoluteCorpusPath);
+    }
+
+    /**
+     * Empties the index when it was built from a different corpus than the one now
+     * configured. A database with sessions but no recorded corpus also resets: an index
+     * of unknown provenance cannot be trusted to describe the configured corpus, and
+     * re-indexing costs seconds (DESIGN.md §12).
+     *
+     * @return how many streams were discarded; zero when the index already matches
+     */
+    public int resetIfCorpusChanged(final Path corpus) {
+        return tx.execute(status -> {
+            final String stored = jdbc.query("select value from meta where key = 'corpus'",
+                    rs -> rs.next() ? rs.getString(1) : null);
+            final String expected = corpus.toAbsolutePath().normalize().toString();
+            if (expected.equals(stored)) {
+                return 0;
+            }
+            final int discarded = jdbc.queryForObject("select count(distinct id) from session", Integer.class);
+            if (discarded == 0 && stored == null) {
+                // nothing in it to invalidate; the corpus is recorded by the run that fills it
+                return 0;
+            }
+            final int streams = jdbc.queryForObject("select count(*) from session", Integer.class);
+            wipe();
+            LOG.info("the index was built from a different corpus than the one configured;"
+                    + " reset it, discarding {} streams and {} sessions", streams, discarded);
+            return discarded;
+        });
+    }
+
+    /**
      * The invalidation behind the no-migration-engine decision (DESIGN.md §4.2). When the
      * stored schema version does not match the one the running build expects — including
      * "no value stored" — every table is emptied, child-to-parent so the order holds with
@@ -231,18 +273,23 @@ public final class IndexWriter {
                 return 0;
             }
             final int discarded = jdbc.queryForObject("select count(*) from session", Integer.class);
-            // child-to-parent: evidence rows reference the findings that own them, and
-            // findings, tool calls and steps reference the sessions that own them
-            jdbc.update("delete from shell_evidence");
-            jdbc.update("delete from finding");
-            jdbc.update("delete from tool_call");
-            jdbc.update("delete from step");
-            jdbc.update("delete from session");
+            wipe();
             seedMeta(expectedSchemaVersion);
             LOG.info("index schema version is stale (stored: {}, expected: {}); reset the index,"
                     + " discarding {} streams", stored, expectedSchemaVersion, discarded);
             return discarded;
         });
+    }
+
+    /** Child-to-parent, so the order holds with {@code foreign_keys=on}. */
+    private void wipe() {
+        // evidence rows reference the findings that own them; findings, tool calls and
+        // steps reference the sessions that own them
+        jdbc.update("delete from shell_evidence");
+        jdbc.update("delete from finding");
+        jdbc.update("delete from tool_call");
+        jdbc.update("delete from step");
+        jdbc.update("delete from session");
     }
 
     /** The stored schema version; null on a database no index run has versioned yet. */

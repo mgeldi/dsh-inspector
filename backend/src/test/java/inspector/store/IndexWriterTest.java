@@ -363,6 +363,66 @@ final class IndexWriterTest {
     }
 
     @Test
+    void anIndexBuiltFromAnotherCorpusIsResetRatherThanServed() {
+        // The defect this closes: run.sh demo, then run.sh live, both on the default database
+        // file. The gate read "sessions present" as "already indexed" and served 389 findings
+        // from the real corpus to a run configured for the fixtures — a dashboard quietly
+        // describing data it had not read. Provenance, not population, decides reuse.
+        writeAll();
+        writer.seedCorpus(temp.resolve("corpus-a").toString());
+
+        final int discarded = writer.resetIfCorpusChanged(temp.resolve("corpus-b"));
+
+        assertThat(discarded).isEqualTo(1);
+        assertThat(count("session")).isZero();
+        assertThat(count("step")).isZero();
+        assertThat(count("tool_call")).isZero();
+        assertThat(count("finding")).isZero();
+        assertThat(count("shell_evidence")).isZero();
+    }
+
+    @Test
+    void anIndexBuiltFromTheCorpusNowConfiguredIsNotReset() {
+        // The other half: a reboot against the same corpus keeps its index. Without this the
+        // provenance check would degrade into "wipe on every boot" and the gate would buy
+        // nothing.
+        writeAll();
+        final Path corpus = temp.resolve("corpus-a");
+        writer.seedCorpus(corpus.toString());
+
+        final int discarded = writer.resetIfCorpusChanged(corpus);
+
+        assertThat(discarded).isZero();
+        assertThat(count("session")).isEqualTo(1);
+        assertThat(count("finding")).isEqualTo(2);
+        assertThat(count("shell_evidence")).isEqualTo(1);
+    }
+
+    @Test
+    void theSameCorpusSpelledDifferentlyIsRecognisedAsOneDirectory() {
+        // run.sh hands the JVM a relative path and the record holds an absolute one; a check
+        // on raw strings would wipe a good index over a "./" nobody meant as a new corpus.
+        final Path corpus = temp.resolve("corpus-a");
+        writeAll();
+        writer.seedCorpus(corpus.toAbsolutePath().normalize().toString());
+
+        assertThat(writer.resetIfCorpusChanged(
+                Path.of(temp.toString(), "corpus-a", "..", "corpus-a"))).isZero();
+        assertThat(count("session")).isEqualTo(1);
+    }
+
+    @Test
+    void anIndexOfUnknownProvenanceIsResetRatherThanServed() {
+        // A database written before the corpus was recorded has nothing to compare against.
+        // Guessing "same corpus" is what produced the bug; the safe reading is that an index
+        // which cannot say where it came from does not describe the run.
+        writeAll();
+
+        assertThat(writer.resetIfCorpusChanged(temp.resolve("corpus-a"))).isEqualTo(1);
+        assertThat(count("session")).isZero();
+    }
+
+    @Test
     void theResetKeepsForeignKeysEnabled() throws IOException {
         // Production turns the guard on in the JDBC URL; a single-connection pool means the
         // reset runs on the same connection the assertions read, so a "fix" that disables

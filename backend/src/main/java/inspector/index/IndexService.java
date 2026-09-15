@@ -79,6 +79,8 @@ public final class IndexService {
             parseFailures += facts.parseFailures();
         }
         writer.seedMeta(SCHEMA_VERSION);
+        // What this index came from, so a later boot pointing at a different corpus can tell.
+        writer.seedCorpus(corpus.toAbsolutePath().normalize().toString());
 
         final IndexSummary summary = new IndexSummary(sources.size(), writer.countSessions(),
                 steps, calls, findings, parseFailures, System.currentTimeMillis() - started);

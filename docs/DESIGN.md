@@ -357,9 +357,16 @@ exist here. `JdbcClient` owns the reads.
 disagree about the schema. This project has exactly one migration, so Flyway would be
 configuring a tool to solve the problem of having used that tool. The cheaper shape: DDL in
 `schema.sql` via `spring.sql.init`, written idempotently (`CREATE TABLE IF NOT EXISTS`), plus a
-single `meta(key, value)` row carrying `schema_version` (§6). That row is the honest hook — it
-makes "a real install versions these" mechanical later without importing an engine now, and
-adopting Flyway is a §9 next step rather than a shipped dependency.
+single `meta(key, value)` table carrying `schema_version` and `corpus` (§6). Those rows are
+the honest hook — the first makes "a real install versions these" mechanical later without
+importing an engine now, and adopting Flyway is a §9 next step rather than a shipped
+dependency. The second records **which corpus the rows came from**, which is what makes the
+wipe-and-reindex rule safe to state as "the database is a cache of the corpus": without it,
+a database holding one corpus's findings answers a run configured for another, and
+"populated" gets read as "current". A mismatch on either row empties the index in one
+transaction rather than migrating it; an index that cannot say where it came from is treated
+the same way, since re-indexing costs seconds (§12) and a wrong dashboard costs the tool its
+one claim.
 
 There is also an unpriced risk that settles it: Flyway 13.x is newer than whatever Boot 4.1's
 BOM manages, SQLite support lives in a separate `flyway-database-sqlite` module since v10, and
@@ -538,7 +545,7 @@ finding    (id, session_id, source_file, detector, plane, category, code,
             occurred_at, summary)          -- occurred_at is the EVENT time, not the index time;
                                            -- summary is a generated sentence, no user text
 shell_evidence (finding_id, seq, verb_class, path_hint, excerpt_redacted)   -- config-gated §4.1
-meta       (key, value)   -- schema_version, and nothing else
+meta       (key, value)   -- schema_version and corpus, and nothing else
 ```
 
 Six tables, counting `meta`, which holds exactly one row. `last_run`, `corpus_root` and `evidence_store` were
@@ -860,7 +867,9 @@ any file is opened, and renaming a stack decision later does not rename the tree
 ```
 dsh-inspector/
 ├── README.md                 ← what this is, quickstart, the 3–5 decision sentences
-├── run.sh                    ← the one command; orchestrates both sides, so it lives at root
+├── run.sh                    ← the engine: mode demo|live, orchestrates both sides
+├── run-demo.sh               ← the two names a human is meant to remember
+├── run-live.sh               ← same engine, real corpus, separate index file
 ├── .gitignore
 ├── docs/
 │   ├── DESIGN.md             ← this document

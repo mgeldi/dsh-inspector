@@ -38,9 +38,7 @@ public final class StartupIndexRunner implements ApplicationRunner {
         // A schema bump is an invalidation, not a migration: the reset runs whether or not
         // this boot goes on to index, because a stale index is broken either way.
         writer.resetIfStale(IndexService.SCHEMA_VERSION);
-        // The database gate comes next: a populated index is never rescanned, whatever the
-        // corpus directory looks like.
-        if (args.containsOption("no-index") || writer.countSessions() > 0) {
+        if (args.containsOption("no-index")) {
             return;
         }
         final Path corpus = Path.of(properties.corpus());
@@ -51,6 +49,17 @@ public final class StartupIndexRunner implements ApplicationRunner {
                     + " empty until --inspector.corpus points at session logs");
             return;
         }
-        indexService.run();
+        // Ahead of the populated gate. A database full of findings from a *different* corpus
+        // is not "already indexed": the gate used to read it as a finished job and serve
+        // 389 live-corpus findings to a run configured for the fixtures, silently.
+        writer.resetIfCorpusChanged(corpus);
+        if (writer.countSessions() > 0) {
+            // A populated index of the corpus now configured is never rescanned.
+            return;
+        }
+        // The corpus this method just validated is the one handed over, rather than a
+        // no-arg run() re-reading the property: the check and the work cannot then drift
+        // apart over which directory is authoritative.
+        indexService.run(corpus, properties.harnessVersion());
     }
 }

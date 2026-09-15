@@ -195,9 +195,12 @@ final class IndexServiceTest {
                     .run(new DefaultApplicationArguments());
 
             assertThat(writer.countSessions()).isEqualTo(2);
+            // two rows: the schema version, and which corpus the rows came from
             assertThat(jdbc.queryForList("select key, value from meta"))
-                    .containsExactly(Map.of("key", "schema_version", "value",
-                            IndexService.SCHEMA_VERSION));
+                    .containsExactlyInAnyOrder(
+                            Map.of("key", "schema_version", "value", IndexService.SCHEMA_VERSION),
+                            Map.of("key", "corpus", "value", corpus.toAbsolutePath()
+                                    .normalize().toString()));
         }
 
         @Test
@@ -227,8 +230,10 @@ final class IndexServiceTest {
             assertThat(count("tool_call")).isEqualTo(4);
             assertThat(count("finding")).isEqualTo(3);
             assertThat(jdbc.queryForList("select key, value from meta"))
-                    .containsExactly(Map.of("key", "schema_version", "value",
-                            IndexService.SCHEMA_VERSION));
+                    .containsExactlyInAnyOrder(
+                            Map.of("key", "schema_version", "value", IndexService.SCHEMA_VERSION),
+                            Map.of("key", "corpus", "value", corpus.toAbsolutePath()
+                                    .normalize().toString()));
             // the reset is logged with counts only: how many streams were discarded, never
             // a corpus path or content
             final List<String> info = logMessages(Level.INFO);
@@ -244,9 +249,43 @@ final class IndexServiceTest {
             new StartupIndexRunner(service, propertiesOf(temp.resolve("nowhere")), writer)
                     .run(new DefaultApplicationArguments());
 
-            // the database gate fires before the corpus check: no warning at all
-            assertThat(logMessages(Level.WARN)).isEmpty();
+            // Never rescanned: the counts are exactly what the first run wrote. The warning is
+            // now expected and is the point — a corpus path that does not resolve means the
+            // screen is showing an index this run cannot refresh, and silence used to hide that.
+            assertThat(logMessages(Level.WARN))
+                    .anyMatch(msg -> msg.contains("corpus directory does not exist"));
+            assertThat(logMessages(Level.INFO)).noneMatch(msg -> msg.startsWith("indexed "));
             assertThat(writer.countSessions()).isEqualTo(2);
+            // and the index survives: an unmounted directory invalidates nothing
+            assertThat(count("finding")).isEqualTo(3);
+        }
+
+        @Test
+        void aDatabaseBuiltFromAnotherCorpusIsReindexedRatherThanServed() throws IOException {
+            // The defect as a user met it: run.sh demo, then run.sh live, sharing one database
+            // file. "Sessions present" read as "already indexed", so the second boot served the
+            // first corpus's findings and the dashboard quietly described data it had not read.
+            new StartupIndexRunner(service, propertiesOf(corpus), writer)
+                    .run(new DefaultApplicationArguments());
+            assertThat(writer.countSessions()).isEqualTo(2);
+
+            final Path other = temp.resolve("other-corpus");
+            writeS1(other);
+            logAppender.list.clear();
+
+            new StartupIndexRunner(service, propertiesOf(other), writer)
+                    .run(new DefaultApplicationArguments());
+
+            assertThat(writer.countSessions())
+                    .as("the configured corpus's own streams, not the previous corpus's")
+                    .isEqualTo(1);
+            assertThat(count("finding")).as("the new corpus's findings, not the previous corpus's 3")
+                    .isEqualTo(2);
+            final List<String> info = logMessages(Level.INFO);
+            assertThat(info).anyMatch(msg -> msg.contains("different corpus"));
+            assertThat(info).anyMatch(msg -> msg.startsWith("indexed 1 stream"));
+            // counts only: a corpus path carries the username
+            assertThat(info).noneMatch(msg -> msg.contains(other.toString()));
         }
 
         @Test
