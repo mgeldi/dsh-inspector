@@ -95,7 +95,10 @@ public final class ShellAnalyzer {
     private void collect(final Matcher matcher, final Set<String> sink) {
         while (matcher.find() && sink.size() < MAX_PATHS) {
             final String candidate = matcher.group();
-            if (!candidate.contains("/dev/") && !candidate.startsWith("/proc/")) {
+            // Only device files are excluded — a path *under* /dev (null, stdout, urandom),
+            // never any path that merely contains the segment: /home/dev/demo/app.java is a
+            // real file and dropping it would blind the attribution that depends on it.
+            if (!candidate.startsWith("/dev/") && !candidate.startsWith("/proc/")) {
                 sink.add(candidate);
             }
         }

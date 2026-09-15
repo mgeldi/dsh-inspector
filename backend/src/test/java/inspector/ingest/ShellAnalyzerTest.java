@@ -30,6 +30,28 @@ final class ShellAnalyzerTest {
     }
 
     @Test
+    void aHomeDirectoryContainingDevAsAPathSegmentIsStillAPath() {
+        // /dev/ excludes device files only. The segment must not be matched anywhere: a
+        // working directory like /home/dev/demo/app.java is a real file, and dropping it
+        // would blind the absolute-path attribution that depends on it.
+        final Optional<ShellEvidence> evidence =
+                analyze("sed -i 's/a/b/' /home/dev/demo/App.java");
+        assertThat(evidence).get()
+                .hasFieldOrPropertyWithValue("verbClass", VerbClass.MUTATING);
+        assertThat(evidence.map(ShellEvidence::referencedPaths).orElseThrow())
+                .contains("/home/dev/demo/App.java");
+    }
+
+    @Test
+    void deviceFilesAreStillExcludedFromTheReferencedPaths() {
+        final Optional<ShellEvidence> evidence =
+                analyze("cat /home/dev/demo/notes.txt 2>/dev/null");
+        assertThat(evidence.map(ShellEvidence::referencedPaths).orElseThrow())
+                .contains("/home/dev/demo/notes.txt")
+                .doesNotContain("/dev/null");
+    }
+
+    @Test
     void gitRestoreIsAVcsRestoreNotAViolation() {
         assertThat(analyze("git checkout README.md")).get()
                 .hasFieldOrPropertyWithValue("verbClass", VerbClass.VCS_RESTORE);
