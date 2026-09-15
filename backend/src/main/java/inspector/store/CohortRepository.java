@@ -42,8 +42,12 @@ public final class CohortRepository {
      * @param axisColumn the whitelisted bare session column, e.g. {@code harness_version}
      */
     public Result cohorts(final String axisColumn) {
+        // Distinct ids, not rows: `session` is keyed (id, source file), so a session stored
+        // under both conventions is two rows. Counting rows here reports a session twice in
+        // any cohort whose axis value both files share, and contradicts the Overview tile.
         final Map<String, Long> sessions = groupCount(
-                "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n from session s group by 1");
+                "select coalesce(s." + axisColumn + ", 'unknown') as key, count(distinct s.id) as n "
+                        + "from session s group by 1");
         // Observed calls only: the rate denominator must not count outcome-only rows
         final Map<String, Long> toolCalls = groupCount(
                 "select coalesce(s." + axisColumn + ", 'unknown') as key, count(*) as n from tool_call t "

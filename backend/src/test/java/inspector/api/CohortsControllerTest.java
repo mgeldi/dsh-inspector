@@ -81,7 +81,7 @@ class CohortsControllerTest {
     @Test
     void twoRowCohortsComputeRatesAndDeltasInPercentagePoints() throws Exception {
         // ground truth from the indexed fixture corpora:
-        //   0.1.5-rc.2: 12 sessions, 32 tool calls, 9 findings, 4 guard findings
+        //   0.1.5-rc.2: 11 sessions in 12 stored files, 32 tool calls, 9 findings, 4 guard findings
         //   0.1.4:       3 sessions,  9 tool calls, 3 findings, 2 guard findings
         assertThat(count("select count(*) from session")).isEqualTo(15);
         assertThat(count("select count(*) from tool_call")).isEqualTo(41);
@@ -100,7 +100,8 @@ class CohortsControllerTest {
         assertThat(byKey.keySet()).containsExactlyInAnyOrder(IndexedCorpus.MAIN_VERSION, IndexedCorpus.SECOND_VERSION);
 
         final JsonNode main = byKey.get(IndexedCorpus.MAIN_VERSION);
-        assertThat(main.path("sessions").asLong()).isEqualTo(12);
+        // 11 distinct sessions from 12 stored files: s-06 exists under both conventions
+        assertThat(main.path("sessions").asLong()).isEqualTo(11);
         assertThat(main.path("toolCalls").asLong()).isEqualTo(32);
         assertThat(main.path("findings").asLong()).isEqualTo(9);
         assertThat(main.path("guardFindings").asLong()).isEqualTo(4);
@@ -175,16 +176,48 @@ class CohortsControllerTest {
             sessions.add(row.path("sessions").asLong());
             calls.add(row.path("toolCalls").asLong());
         });
-        assertThat(sessions.stream().mapToLong(Long::longValue).sum()).isEqualTo(15);
+        assertThat(sessions.stream().mapToLong(Long::longValue).sum())
+                .isEqualTo(distinctSessionsPerCohortSum("model"));
         assertThat(calls.stream().mapToLong(Long::longValue).sum()).isEqualTo(41);
     }
 
     @Test
     void emptyFilterStillCoversEveryCohort() throws Exception {
-        // no InsightFilter parameters: the whole index is grouped
+        // no InsightFilter parameters: the whole index is grouped. 14, not 15: the session
+        // table has one row per stored file and s-06 is stored under both conventions.
         final JsonNode root = asJson(get("/api/cohorts?groupBy=harnessVersion"));
         final long[] sessions = {0};
         root.path("cohorts").forEach(row -> sessions[0] += row.path("sessions").asLong());
-        assertThat(sessions[0]).isEqualTo(15);
+        assertThat(sessions[0]).isEqualTo(14);
+    }
+
+    /**
+     * The session table is keyed (id, source file), so a session stored under both
+     * conventions is two rows. A cohort counts <i>sessions</i>, because that is what the
+     * number is read as: a reviewer who sees 11 in the Overview tile and 12 in the cohort
+     * row for the same corpus concludes the two screens disagree. On an axis whose value
+     * both files share, the session must count once.
+     */
+    @Test
+    void aSessionStoredUnderBothConventionsCountsOnceInItsCohort() throws Exception {
+        assertThat(count("select count(distinct id) from session")).isEqualTo(14);
+        assertThat(count("select count(*) from session where id = 's-06'")).isEqualTo(2);
+
+        final Map<String, JsonNode> byVersion = cohortsByKey(asJson(get("/api/cohorts?groupBy=harnessVersion")));
+        assertThat(byVersion.get(IndexedCorpus.MAIN_VERSION).path("sessions").asLong()).isEqualTo(11);
+        assertThat(byVersion.get(IndexedCorpus.SECOND_VERSION).path("sessions").asLong()).isEqualTo(3);
+
+        // on the schema axis the same session legitimately belongs to both cohorts.
+        // V3 = s-06's v3 file, s-07, s-08, s-10; V0 = the other 8 of this corpus plus all
+        // three of sessions-b. The two cohorts sum to 15 for 14 sessions, and that is the
+        // correct reading: s-06 is genuinely in both.
+        final Map<String, JsonNode> bySchema = cohortsByKey(asJson(get("/api/cohorts?groupBy=schema")));
+        assertThat(bySchema.get("V3").path("sessions").asLong()).isEqualTo(4);
+        assertThat(bySchema.get("V0").path("sessions").asLong()).isEqualTo(11);
+    }
+
+    /** Distinct sessions summed over every cohort of an axis: a session that belongs to two cohorts counts twice. */
+    private long distinctSessionsPerCohortSum(final String axisColumn) {
+        return count("select count(distinct coalesce(" + axisColumn + ", 'unknown') || '#' || id) from session");
     }
 }
