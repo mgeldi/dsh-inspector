@@ -17,6 +17,10 @@ import org.springframework.stereotype.Component;
  * DESIGN.md §5.3. The log gives the failed write and its path; the stale touch and the cause
  * are derived, and the finding says which is which. Attribution is abductive: the summary says
  * "consistent with", because the log never records what modified the file.
+ *
+ * <p>{@link ShellEvidence} crosses this boundary only as a parameter or a list element: no type
+ * outside {@code inspector.ingest} may declare a field of its type (§4.1), and
+ * {@code PrivacyBoundaryTest} keeps that rule executable.
  */
 @Component
 public final class StampGuardDetector implements Detector {
@@ -74,40 +78,45 @@ public final class StampGuardDetector implements Detector {
         // one that actually moved the stamp. Scanning for MUTATING before VCS_RESTORE, as an
         // earlier version did, lets a later `sed -i` claim a stamp that an earlier `git checkout`
         // had already broken, and the seqs on screen would then disagree with the summary.
-        final Match cause = firstInWindow(shell, stale, error, CAUSAL_VERBS);
+        final ShellEvidence cause = firstInWindow(shell, stale, error, CAUSAL_VERBS);
         if (cause != null) {
-            return cause.evidence().verbClass() == VerbClass.VCS_RESTORE
+            return cause.verbClass() == VerbClass.VCS_RESTORE
                     ? vcsRestore(error, stale, cause)
                     : directMutation(error, stale, cause);
         }
-        final Match mention = firstInWindow(shell, stale, error, null);
+        final ShellEvidence mention = firstInWindow(shell, stale, error, null);
         // READ_ONLY and OTHER are never a cause: a mention is not a write (§5.3). The finding
         // stays visible, but the mention is discarded, not stored as evidence.
         return external(error, stale.seq(), mention == null
                 ? "no shell command in the window referenced this path"
-                : "in-window mention at seq " + mention.evidence().seq() + " is not a mutation");
+                : "in-window mention at seq " + mention.seq() + " is not a mutation");
     }
 
-    private Finding directMutation(final ErrorEvent error, final FileTouch stale, final Match cause) {
+    private Finding directMutation(final ErrorEvent error, final FileTouch stale,
+                                   final ShellEvidence cause) {
+        // The match is absolute when the evidence names the path as the log writes it, not
+        // merely by basename: that is what separates a HIGH from a MEDIUM attribution.
+        final boolean absolute = cause.referencedPaths().contains(error.absolutePath());
         return new Finding(ID, Plane.GUARD, Category.DIRECT_MUTATION, error.code(),
-                cause.absolute() ? Confidence.HIGH : Confidence.MEDIUM, error.absolutePath(),
-                error.seq(), stale.seq(), cause.evidence().seq(), error.occurredAt(),
+                absolute ? Confidence.HIGH : Confidence.MEDIUM, error.absolutePath(),
+                error.seq(), stale.seq(), cause.seq(), error.occurredAt(),
                 ("%s refused: stamp stale since seq %d (%s); consistent with a mutating command "
                         + "at seq %d (%s path match)").formatted(
                                 base(error.absolutePath()), stale.seq(), stale.op(),
-                                cause.evidence().seq(),
-                                cause.absolute() ? "absolute" : "basename"),
-                List.of(cause.evidence()));
+                                cause.seq(),
+                                absolute ? "absolute" : "basename"),
+                List.of(cause));
     }
 
-    private Finding vcsRestore(final ErrorEvent error, final FileTouch stale, final Match cause) {
+    private Finding vcsRestore(final ErrorEvent error, final FileTouch stale,
+                               final ShellEvidence cause) {
         return new Finding(ID, Plane.GUARD, Category.VCS_RESTORE, error.code(),
                 Confidence.HIGH, error.absolutePath(), error.seq(), stale.seq(),
-                cause.evidence().seq(), error.occurredAt(),
+                cause.seq(), error.occurredAt(),
                 ("%s refused: stamp stale since seq %d; a version-control restore at seq %d is "
                         + "legitimate work the stamp cannot know about").formatted(
-                                base(error.absolutePath()), stale.seq(), cause.evidence().seq()),
-                List.of(cause.evidence()));
+                                base(error.absolutePath()), stale.seq(), cause.seq()),
+                List.of(cause));
     }
 
     /**
@@ -119,8 +128,8 @@ public final class StampGuardDetector implements Detector {
      * mutation and the first restore independently and let whichever verb class is checked first
      * win a race it lost on the clock.
      */
-    private Match firstInWindow(final List<ShellEvidence> shell, final FileTouch stale,
-                                final ErrorEvent error, final Set<VerbClass> causal) {
+    private ShellEvidence firstInWindow(final List<ShellEvidence> shell, final FileTouch stale,
+                                        final ErrorEvent error, final Set<VerbClass> causal) {
         for (final ShellEvidence evidence : shell) {
             if (evidence.seq() <= stale.seq() || evidence.seq() >= error.seq()) {
                 continue;
@@ -128,13 +137,10 @@ public final class StampGuardDetector implements Detector {
             if (causal != null && !causal.contains(evidence.verbClass())) {
                 continue;
             }
-            for (final String referenced : evidence.referencedPaths()) {
-                if (referenced.equals(error.absolutePath())) {
-                    return new Match(evidence, true);
-                }
-                if (base(referenced).equals(base(error.absolutePath()))) {
-                    return new Match(evidence, false);
-                }
+            if (evidence.referencedPaths().contains(error.absolutePath())
+                    || evidence.referencedPaths().stream()
+                            .anyMatch(referenced -> base(referenced).equals(base(error.absolutePath())))) {
+                return evidence;
             }
         }
         return null;
@@ -164,8 +170,5 @@ public final class StampGuardDetector implements Detector {
         }
         final int slash = path.lastIndexOf('/');
         return slash < 0 ? path : path.substring(slash + 1);
-    }
-
-    private record Match(ShellEvidence evidence, boolean absolute) {
     }
 }
