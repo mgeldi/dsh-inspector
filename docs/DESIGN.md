@@ -451,9 +451,12 @@ Algorithm, per event stream (§3.2), streaming:
    all.
 2. On `FS_STALE_VERSION`, emit a finding `{path, failedSeq, staleSeq}`.
 3. Search `ShellEvidence` in `(staleSeq, failedSeq)` **within the same stream** for that path
-   (absolute path *and* basename), and take **the first mutating command after the stale
-   touch** as the cause — it is the one that moved the stamp. Later matches are noise. Real
-   windows contain up to 9 matches, so this tie-break is load-bearing and cannot be left
+   (absolute path *and* basename), and take **the first command that could have moved the stamp**
+   as the cause — mutating *or* version-control restore, chosen by sequence number and never by
+   verb class. A `git checkout` rewrites the file just as `sed -i` does, so the two compete on
+   time; preferring "the first mutating one, or else a restore" reports the later event and puts
+   a `cause_seq` on screen that contradicts its own summary sentence. Later matches are noise.
+   Real windows contain up to 9 matches, so this tie-break is load-bearing and cannot be left
    implicit.
 4. Classify:
 
