@@ -79,6 +79,32 @@ CREATE TABLE IF NOT EXISTS meta (
     value TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_finding_occurred      ON finding (plane, category, occurred_at);
-CREATE INDEX IF NOT EXISTS idx_tool_call_name_error  ON tool_call (name, error_code);
-CREATE INDEX IF NOT EXISTS idx_step_stream           ON step (session_id, source_file, turn, step);
+-- Every index below names the query it serves. An index nothing uses is write cost paid on
+-- every re-index plus a standing false claim about what the reads do — the reason
+-- idx_tool_call_name_error is gone rather than commented. There is no migration engine
+-- (DESIGN.md §4.2) and a reset only empties tables, so a removed index needs its own DROP:
+-- without this line an index deleted here would live on in every existing database file.
+DROP INDEX IF EXISTS idx_tool_call_name_error;
+
+-- The finding-detail join: left join tool_call t on (session_id, source_file, seq).
+-- The two equality columns come first and seq last because that is the shape the join
+-- constrains on all three at once.
+CREATE INDEX IF NOT EXISTS idx_tool_call_stream    ON tool_call (session_id, source_file, seq);
+
+-- The (session_id, source_file) join key every read carries (FINDING_JOIN, TOOL_CALL_JOIN),
+-- the session_id filter on the findings page, and the per-stream deletes of a re-index.
+CREATE INDEX IF NOT EXISTS idx_finding_stream      ON finding (session_id, source_file);
+
+-- The default findings sort: order by f.occurred_at desc, f.id desc. SQLite satisfies the
+-- whole clause — tiebreaker included — by scanning this index backwards, because a non-unique
+-- index key is internally (occurred_at, rowid) and finding.id is the rowid. Adding id to the
+-- index would be decoration: the plan is identical with and without it.
+CREATE INDEX IF NOT EXISTS idx_finding_time        ON finding (occurred_at);
+
+-- The plane mix and the plane-filtered findings page, both grouped or filtered on plane
+-- first. Note this cannot serve the default sort: occurred_at is third, and a sort column is
+-- only free after the equality columns that precede it in the index are themselves constrained.
+CREATE INDEX IF NOT EXISTS idx_finding_occurred    ON finding (plane, category, occurred_at);
+
+-- The step rows of one stream, and the throughput table's join to session.
+CREATE INDEX IF NOT EXISTS idx_step_stream         ON step (session_id, source_file, turn, step);

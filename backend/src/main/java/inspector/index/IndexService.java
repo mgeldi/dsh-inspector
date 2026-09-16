@@ -31,8 +31,12 @@ import org.springframework.stereotype.Service;
 public final class IndexService {
 
     private static final Logger LOG = LoggerFactory.getLogger(IndexService.class);
-    /** The index schema the running build writes; the startup reset compares it against the stored row. */
-    public static final String SCHEMA_VERSION = "1";
+    /**
+     * The index schema the running build writes; the startup reset compares it against the
+     * stored row. Bumped to 2 by the join-key indexes: the DDL gained a DROP, and a reset only
+     * empties tables, so an index retired since the last boot needs a wipe to actually go.
+     */
+    public static final String SCHEMA_VERSION = "2";
 
     private final CorpusScanner scanner;
     private final SessionIngestor ingestor;
