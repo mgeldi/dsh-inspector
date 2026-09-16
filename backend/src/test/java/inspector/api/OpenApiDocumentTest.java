@@ -104,6 +104,68 @@ class OpenApiDocumentTest {
         assertThat(body).doesNotContain("fixtures/sessions").doesNotContain("/home/");
     }
 
+    /**
+     * Structure is what a generator gives away; prose is not. Before these two assertions the
+     * document had all five routes, all twenty-eight parameters and their types, and an empty
+     * Description column on every row of the rendered page — correct, and no use to the first
+     * person trying to call it.
+     *
+     * <p>The descriptions come from {@code @Parameter} and {@code @Schema}, not from the javadoc
+     * that already says the same thing, because springdoc reads javadoc only through
+     * {@code therapi-runtime-javadoc-scribe}, which produces nothing under JDK 26 even with
+     * {@code -proc:full} — a green build and an empty document, which is the failure mode these
+     * tests exist to make loud. They fail on the next parameter added without a sentence, which
+     * is the only way a document like this stays written.
+     */
+    @Test
+    void everyParameterCarriesADescription() throws Exception {
+        final DocumentContext doc = document();
+        final List<String> undescribed = new java.util.ArrayList<>();
+
+        for (final Map.Entry<String, Map<String, Object>> route
+                : doc.<Map<String, Map<String, Object>>>read("$.paths").entrySet()) {
+            for (final Object operation : route.getValue().values()) {
+                // Read from the map rather than with a second JsonPath: a route that takes no
+                // parameters has no `parameters` key at all, and JsonPath throws PathNotFound for
+                // an absent key instead of returning null — /api/index/run is exactly that route.
+                final Object parameters = ((Map<?, ?>) operation).get("parameters");
+                if (!(parameters instanceof List<?> rows)) {
+                    continue;
+                }
+                rows.stream()
+                        .map(row -> (Map<?, ?>) row)
+                        .filter(row -> isBlank(row.get("description")))
+                        .forEach(row -> undescribed.add(route.getKey() + " " + row.get("name")));
+            }
+        }
+
+        assertThat(undescribed)
+                .as("every documented parameter says what it is for")
+                .isEmpty();
+    }
+
+    /** The operation summary is the line a reader sees before they open anything. */
+    @Test
+    void everyOperationCarriesASummary() throws Exception {
+        final DocumentContext doc = document();
+        final List<String> unsummarised = new java.util.ArrayList<>();
+
+        for (final Map.Entry<String, Map<String, Object>> route
+                : doc.<Map<String, Map<String, Object>>>read("$.paths").entrySet()) {
+            route.getValue().forEach((method, operation) -> {
+                if (isBlank(((Map<?, ?>) operation).get("summary"))) {
+                    unsummarised.add(method.toUpperCase(java.util.Locale.ROOT) + " " + route.getKey());
+                }
+            });
+        }
+
+        assertThat(unsummarised).as("every operation is introduced by a sentence").isEmpty();
+    }
+
+    private static boolean isBlank(final Object value) {
+        return value == null || value.toString().isBlank();
+    }
+
     private DocumentContext document() throws Exception {
         return com.jayway.jsonpath.JsonPath.parse(mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())

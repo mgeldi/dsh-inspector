@@ -7,12 +7,23 @@ author — see the last section for what that means in practice.*
 
 ## 0. The setup, named
 
-Every line of this application was written by a locally hosted stack, on one machine, with
-no request leaving it. No cloud coding assistant wrote any of the implementation — no
-Claude Code, no Codex, no hosted API. (One exception, stated so the claim stays exact: the
-finished codebase was put through a review pass by a hosted assistant, which read it and
-reported defects. It wrote no application code. Where a fix of its follows, §3 marks the
-entry — the ledger says which loop found what.)
+The application was written by a locally hosted stack, on one machine, with no request
+leaving it. No cloud coding assistant designed it, planned it, or implemented a feature of
+it — no Claude Code, no Codex, no hosted API.
+
+The claim is worth stating exactly rather than broadly, because a hosted assistant was used
+twice, and both times are on the record:
+
+- **A review pass.** It read the finished codebase and reported defects. Every one of the
+  fifteen fixes in §3 was then written by the local stack, and two of them corrected the
+  reviewer: the severity it reported was understated in one case, and its instruction for
+  the foreign keys could not have worked at all.
+- **A finishing pass, where it edited files directly.** Bounded and listed here: the
+  `@Operation`/`@Parameter`/`@Schema` descriptions on the five routes and the shared filter,
+  the two tests in `OpenApiDocumentTest` that fail when a parameter arrives without a
+  sentence, the README's screenshots and reading order, and the restructuring of §3 below.
+  No behaviour changed; the suite went 241 → 243. Everything that decides what this program
+  *does* was written locally.
 
 - **DSH** — the DeepSeek Harness, the agent runtime: tool dispatch, session logging, the
   permission model, the web UI on `:3080`. It is also the subject of this project. The
@@ -122,32 +133,187 @@ signals force-ignored for background jobs. Each was preceded by a green run.
 | Re-index against an old schema → HTTP 500 | Review of the version gate; `meta.schema_version` check now wipes and re-indexes in one transaction | Any schema evolution between two runs of one clone: the Index button returning a stack trace |
 | `@SpringBootTest` runs `ApplicationRunner` beans under Boot 4, against the author's belief that it does not | The implementer verified it empirically; every test context now passes `--no-index` | Every store-touching test running the indexer against whatever the classpath holds — slow, flaky, machine-dependent |
 | `/api/cohorts` accepted the shared filter parameters and ignored them: the store sent them, the client encoded them, the controller did not declare them, the repository had no `WHERE` at all. Concealed by an HTTP test double that answers whatever it is handed, and by the spec asserting the contract was shared | Running the shipped artifact: filtering to one of five models returned byte-identical totals to the unfiltered read, and a value that exists nowhere was answered with HTTP 200 | A comparison screen showing unfiltered rates under any filter — the cohorts view answering a question about this window with the whole corpus, with no error and no warning |
-| A re-index merged into the index instead of replacing it: `writeStream` deleted the stream it was about to write and nothing else, so a session removed from the corpus kept every row it had and kept being served | Found by the external review pass (§0), then confirmed by re-running its reproduction against the packaged jar — `pruned` is now on the wire and on the toolbar line | One screen giving one question two answers on the tool's only mutating action: the run's summary line reporting 7 findings while the tiles beside it reported 9, the difference being a session no longer on disk |
-| The single index on `tool_call` covered `(name, error_code)` — a pair no query filters or joins on — while the `(session_id, source_file, seq)` every query does join on was unindexed; the default findings sort ran in a temp b-tree because the one time index led with `plane` and had an unconstrained `category` behind it | Found by the external review pass (§0), read out of `EXPLAIN QUERY PLAN` before and after; the plans are now asserted by `QueryPlanTest` so the shape cannot quietly rot again | Every finding-detail request scanning all 17,244 tool-call rows, and every findings page sorting the whole table to show twenty rows — on a read API whose entire argument for existing is being fast enough to look at |
-| `inspector.api` and `inspector.store` imported each other — the store reached into the web package for the filter contract and the wire shapes, the controllers reached back for the repositories — so the layer names described nothing and a 153-line SQL `WHERE` builder lived in the web package | Found by the external review pass (§0); the direction is now a build failure — `PackageCycleTest` reads the compiled constant pool, and was checked against a deliberate violation so it is known to fail with the offending class named | Not a crash but a ceiling: neither package readable, movable or testable alone, and the one rule that keeps SQL out of the controller layer unenforceable — every later refactor pays for it, and `store` reading `api` is the shape that turns a small tool into the thing that cannot be extended |
-| There was no layer between HTTP and SQL: `CohortsController` computed the per-1,000 rates, chose the baseline and generated the basis-note prose, `FindingsController` parsed the sort syntax, `OverviewController` merged the chart series — so 8 of 28 test classes booted a Spring application to check arithmetic, and the project had not one `@WebMvcTest` slice | Found by the external review pass (§0); three `inspector.insight` services now own it, the rate/baseline/note/sort cases run as plain JUnit against a stubbed repository, and `PackageCycleTest` forbids `insight → api` so the 404 cannot creep back down | Not a wrong number but a slow, dim one: every check of `Math.round` cost a context boot and an indexed corpus, so the cheapest possible regression (a flipped delta sign) had the most expensive possible test around it — and the arithmetic was only reachable through HTTP, which is how a domain rule ends up untested rather than tested badly |
+### The external review pass
 
-| `POST /api/index/run` wiped and rewrote six tables with no lock, on a per-stream transaction boundary, so a second POST — another tab, a curl, a startup run racing a manual one — interleaved with the first, and since the prune landed its prune could delete rows the first run was still writing | Found by the external review pass (§0); a lock held for the whole run now answers the second request with 409, and writing it exposed a second hole: the startup resets run *before* the index call, so a literal reading of the fix left "empty the tables" outside the guard, a moment for a boot to wipe rows a run was filling — the guard covers the whole decide-and-rebuild sequence now | An index whose contents depended on thread order, reachable with one impatient click in a second tab, and an application that would have aborted its own startup had that click beaten the startup runner to the lock |
+A hosted assistant read the finished codebase and reported defects; the fixes were written
+by the local stack (§0). Fifteen landed. The table is the scannable form — one line each,
+with the commit that carries the full reasoning in its body. The account under each row is
+the working one, kept because in several cases the interesting part is not the defect but
+what the fix exposed on the way.
 
-| Every `/api/overview` response carried the id of every session in the index — 6,812 of its 8,997 bytes on the author's corpus, and a list no control reads, since the rail has four facets | Found by the external review pass (§0), then **split by measuring it**: the seven `select distinct` queries blamed for the cost turn out to be 0.9 ms of an 18.6 ms request, so the cache the task proposed was dropped and only the unbounded list was cut from the wire (`dto.VocabularyOptions`: six bounded lists, validated against the seventh) | A dashboard that grew heavier in proportion to how much it had been used, quietly — 4.1× the bytes per load, all of it ids, rising with every session ever indexed, on a screen whose tiles never changed |
+| # | Defect | Fix |
+|---|---|---|
+| T09 | A re-index merged into the index instead of replacing it, so a deleted session kept being served | `7d40b9d` |
+| T10 | The only `tool_call` index served no query, while every join key was unindexed | `08061b4` |
+| T01 | `api` and `store` imported each other; a 153-line SQL builder lived in the web package | `077a09f` |
+| T02 | No layer between HTTP and SQL: the controllers owned the rate maths, the sort parser and the chart merge | `4348f32` |
+| T06 | `POST /api/index/run` had no lock, so two runs interleaved across six tables | `e967246` |
+| T11 | Every overview response shipped every session id — 6,812 of 8,997 bytes, read by nothing | `00bbfb7` |
+| T03 | The JSON contract and the `ResultSet` mappers were the same types | `5fc18b8` |
+| T05 | `schema.sql` declared no foreign keys while two comments justified their ordering by that enforcement | `8f32a7c` |
+| T04 | The 634-line fixture generator shipped inside the deployable jar | `5e1ddf5` |
+| T07 | The `Detector` contract was honoured for one implementation; production parsed with a mapper the tests never saw | `6375836` |
+| T08 | The generated spec described a request no route serves, and the actuator key asserted its own default | `cb970a0` |
+| T12 | One rejected filter value answered with 13,726 bytes, the allowed set twice over | `299f110` |
+| T13 | `sort` folded its direction but not its key, so `TIME:desc` was a 400 and `time:DESC` was not | `f6e0dce` |
+| T15 | The plane-filtered findings sort built a temp B-tree the one time index could not serve | `01c0849` |
+| T14 | DESIGN.md §6 enumerated two indexes the code had already retired | `68f0155` |
 
-| `FindingRepository` mapped a `ResultSet` straight into `FindingDto` and `OverviewRepository` returned a nested DTO record, so the JSON contract and the SQL row mappers were the same types | Found by the external review pass (§0), then made unfalsifiable: `PackageCycleTest`'s new rule reads compiled constant pools, so even an inline fully-qualified import across the boundary fails the build. The blast radius was measured on both sides of the change — adding one wire field broke `FindingsService:104` afterwards and `FindingRepository:95`, a SQL mapper, before it | Every API change reaching into SQL: answering "the UI needs one more field" meant editing a query, so the two shapes could drift apart by the amount of whoever happened to notice the compile error — and the fix's own grep was passing on a javadoc exception until it was cleaned |
+Two of these were reported with the severity understated, and one review instruction was
+wrong: the plan for the foreign keys could not have worked as written, because the reset only
+deletes rows and SQLite has no `ALTER TABLE ADD CONSTRAINT`. Following it would have produced
+a green suite and a comment that was still false. That is the argument for the loop below
+rather than for the reviewer.
 
-| `schema.sql` declared no foreign keys at all while the JDBC URL set `foreign_keys=on` and two `IndexWriter` comments justified their delete ordering by that enforcement — and the planned fix (declare them, bump `SCHEMA_VERSION`) could not have worked: the reset only deleted rows, `CREATE TABLE IF NOT EXISTS` skips a table that exists, and SQLite has no `ALTER TABLE ADD CONSTRAINT` | Found by the external review pass (§0); the second half was caught mid-task by arithmetic — T10 had already spent the `1 → 2` bump, so a committed-but-constraintless version 2 database existed and the schema change had nowhere to land. Enforcement itself was then pinned by tests rather than by reading: two connections borrowed at once both report `pragma foreign_keys = 1`, and one connection with the pragma off accepts the orphan row the same schema rejects with it on | The comments would have stayed false, which costs the credibility of the redaction and stream-key comments next to them that are true. Worse, shipping the declared keys alone would have made the claim true only on fresh clones: an existing `inspector.sqlite` keeps its keyless tables forever while the DDL file describes constraints it does not have — a fresh green `mvn test` and a reset log line saying the migration happened |
+<details><summary><b>T09</b> — A re-index merged into the index instead of replacing it, so a deleted session kept being served (<code>7d40b9d</code>)</summary>
 
-| `FixtureGenerator` — 634 lines, the largest class in the project, and a development tool nothing at runtime calls — shipped inside the deployable jar, and DESIGN.md §12's tree claimed the committed corpus lived at `src/main/resources/fixtures/`, a path that does not exist | Found by the external review pass (§0); the path was found while checking step 5, and the byte-identity the corpus's whole provenance claim rests on was checked with a `sha256sum` list over all 15 files before and after a regeneration rather than with `git status`, which cannot see an untracked difference | A reviewer opening the artifact finds the biggest thing in it is a generator, which reads as carelessness about what ships — and anyone trying to verify "these fixtures are generated, not hand-edited" had a documented path to a directory that isn't there, with no command named anywhere outside the pom |
+**What it was.** A re-index merged into the index instead of replacing it: `writeStream` deleted the stream it was about to write and nothing else, so a session removed from the corpus kept every row it had and kept being served
 
-| `ErrorPlaneDetector` asked `StampGuardDetector` by concrete type for the tool codes it owns, so the `Detector` contract that says "adding a detector is one class plus a bean declaration" was true of one implementation only; and `ShellAnalyzer` carried a second, no-arg constructor, which is the one Spring reaches for when no constructor is annotated — meaning the running application parsed shell commands with an `ObjectMapper` the class had built itself, and the injected mapper was reachable only from a test | Found by the review pass, then pinned instead of asserted. The skip set is a `List<Detector>` union with stub-detector cases and the compiled class has zero references to `StampGuard` in its constant pool; the mapper claim was tested by restoring the two-constructor version from `HEAD`, against which the new context assertion fails (`Tests run: 5, Failures: 1`) and passes again once one constructor is left. Reaching the wiring also turned up three test harnesses handing the error detector a list the application never injects, and one building a throwaway second copy of a detector already in the pipeline | The duplicate-finding half was the silent one: the corpus-level duplicate check only catches it if the fixture corpus happens to contain the newly owned code, so the one-owner-per-error invariant would have broken on the author's own corpus with a green suite. The other half cost less loudly — the object the tests described was not the object production used, which is the arrangement where a parsing difference shows up first in real data |
+**What caught it.** Found by the external review pass (§0), then confirmed by re-running its reproduction against the packaged jar — `pruned` is now on the wire and on the toolbar line
 
-| The generated API documentation described a request the application cannot answer: `InsightFilter` binds as a model attribute, so springdoc rendered it as a single query parameter named `filter` whose schema was the record, on three of the five routes. Next to it sat the more uncomfortable shape: `management.endpoints.web.exposure.include: health` in `application.yml`, asserted by "env is 404" — except Boot's default exposure *is* health alone, so a misspelled key keeps every one of those assertions passing while the line does nothing | Found by the review pass as a "check what the generator makes of `@ModelAttribute`" step, then measured on both halves. Before the fix the document printed `filter in=query type=#/components/schemas/InsightFilter`; the fix is `@ParameterObject` on all three bindings — Spring's own version of that annotation is gone from Framework 7, so it is the one springdoc ships — and the new document test was checked by deleting the annotation from a controller and watching it fail, then restoring the file byte-identically. The exposure hazard bought two test classes instead of one: the shipped 404s plus the three config keys read back from the `Environment` under their canonical names, and a second context that opens another endpoint through the same property to prove the property is honoured | A published spec that points a client at a URL no route serves is worse than no spec at all: the first integration a reviewer attempts fails, and the wrong thing is the document. The config half is quieter — an unread line that reads as the §4.1 boundary being drawn, and in the same file a readiness widening that is the only one of those three lines moving away from a default, so a dead key there means "ready" slides back to meaning "the process started", with nothing anywhere saying so |
+**What it would have cost.** One screen giving one question two answers on the tool's only mutating action: the run's summary line reporting 7 findings while the tiles beside it reported 9, the difference being a session no longer on disk
 
-| `?session=<unknown>` answered one wrong value with **13,726 bytes**: `UnknownFilterValueException` joined the allowed set into its message and the handler then put the same list on the problem as the `allowed` property, while the rail's own sentence builder `join`ed all 165 ids into a bar one line tall | Found while measuring 400 bodies for T07's page-size cap, then measured on both sides of the wire — `detail` alone was 6,727 characters of that body. The message stops at the filter and the value now, and the builder caps its list at six values plus a count, a ceiling read off the measured vocabularies (schemas 2, presets 3, detectors 4, models 5, the `sort` key list exactly 6) so nothing any screen can send is ever truncated. Reproduced live against a scratch copy of the fixture corpus: pick a schema, delete the streams that carried it, re-index — the bar reads `Unknown filter value: 'V3' is not a valid schema. Valid: V0` over the previous data, which stays put | The byte count is the cheap half, paid by whoever reads a log. The bar was the expensive one: a repair message that lists 165 things you could have typed is not a repair message, and it is the one element that appears only when something has already gone wrong — the moment the interface cannot afford to be unreadable |
+</details>
 
-| `?sort=time:DESC` was accepted and `?sort=TIME:desc` was a 400: the direction was lowercased before its check while the key was looked up raw. The case had been written down as intent, with a comment arguing that folding the key "would let two spellings of a sort mean the same thing in two different places". The list that 400 prints came from a `Map.of` keySet, whose order the JDK leaves to a hash | Found reading the sort whitelist for T07's page-size cap, and pinned on both halves: the four spellings of the token now answer with the same ids (`[9, 8, 7]`) on the running application, so the fold is an acceptance change rather than a change of meaning; the offender is quoted as sent; and the allowed keys are asserted `containsExactly` in the written order instead of `containsExactlyInAnyOrder`, which could not have caught a reordering. `?plane=guard` is still a 400 — data values are case-sensitive for a different reason, and the new pair of tests names which rule is which | The trap was aimed at the one reader most likely to spring it: someone with a terminal checking whether the API does what the README claims, handed a rejection for a spelling the same method accepts five characters later, with no hint which half of the token they mistyped. The hash-ordered list cost less and bit quieter — an error message whose word order can change under an unrelated edit is a message nobody can quote back |
+<details><summary><b>T10</b> — The only `tool_call` index served no query, while every join key was unindexed (<code>08061b4</code>)</summary>
 
-| `idx_finding_occurred (plane, category, occurred_at)` could not serve the plane-filtered findings sort. Nothing filters findings by `category`, so the order remaining after the equality the query carries was by a column no query constrains, and the planner answered the findings page with `USE TEMP B-TREE FOR ORDER BY` — sorting the filtered rows per request, paid for by an index that did not prevent it | Found reading the index list after T08, named by SQLite's own optimizer overview (§10.1 *Partial ORDER BY via Index*: a satisfied prefix with an unsatisfied later term means block sorting), then measured as a plan before and after on the author's corpus — the sorter line disappeared, the median went 0.067 ms → 0.025 ms over 300 runs, and the index count stayed the same. The first "after" measurement showed no change whatsoever and read as a schema-version finding; it was my own jar still carrying the old `schema.sql`, caught by `unzip -p … BOOT-INF/classes/schema.sql` | 0.042 ms at 389 findings, so nothing a screen can show — the cost was the standing claim, an index whose declared column order advertises a sort it cannot deliver, which is precisely what a later reader trusts while choosing the next one. Plus write cost on every re-index for a middle column no query uses. The measurement that looked like a null result is the transferable part: a stale artifact reports a clean negative |
+**What it was.** The single index on `tool_call` covered `(name, error_code)` — a pair no query filters or joins on — while the `(session_id, source_file, seq)` every query does join on was unindexed; the default findings sort ran in a temp b-tree because the one time index led with `plane` and had an unconstrained `category` behind it
 
-| DESIGN.md §6 enumerated indexes the code had stopped shipping: `tool_call(name, error_code)` was retired by T10's own commit and `finding(plane, category, occurred_at)` by T15's, and neither left a mark on the paragraph that listed them. Alongside it, the four foreign keys whose child-first delete order the writer's comments depend on had no assertion on their declared action | Found by the hygiene pass while assembling the schema-version history: writing that table meant reading the DDL and the document side by side, and the two disagreed. The FK half arrived already half-covered — `aSessionStillHoldingFindingsCannotBeDeleted` would have failed under `ON DELETE CASCADE` — so what was missing was the declared rule, which `ON UPDATE CASCADE` would have changed in nothing observable; the new assertion runs both actions over all four keys and was checked by typing `cascade` into the DDL and watching it fail (`expected: "NO ACTION" but was: "CASCADE"`) | A reviewer who trusts §6 goes looking for an index that is not there and decides the document is decorative — which is how documents stop being read and settled decisions start getting re-litigated. This is the second instance of the shape in this repository (T04 found §12's tree naming a fixtures directory that never existed), and the pattern is the same: a commit changed an artifact while the prose describing it was nobody's file to touch |
+**What caught it.** Found by the external review pass (§0), read out of `EXPLAIN QUERY PLAN` before and after; the plans are now asserted by `QueryPlanTest` so the shape cannot quietly rot again
+
+**What it would have cost.** Every finding-detail request scanning all 17,244 tool-call rows, and every findings page sorting the whole table to show twenty rows — on a read API whose entire argument for existing is being fast enough to look at
+
+</details>
+
+<details><summary><b>T01</b> — `api` and `store` imported each other; a 153-line SQL builder lived in the web package (<code>077a09f</code>)</summary>
+
+**What it was.** `inspector.api` and `inspector.store` imported each other — the store reached into the web package for the filter contract and the wire shapes, the controllers reached back for the repositories — so the layer names described nothing and a 153-line SQL `WHERE` builder lived in the web package
+
+**What caught it.** Found by the external review pass (§0); the direction is now a build failure — `PackageCycleTest` reads the compiled constant pool, and was checked against a deliberate violation so it is known to fail with the offending class named
+
+**What it would have cost.** Not a crash but a ceiling: neither package readable, movable or testable alone, and the one rule that keeps SQL out of the controller layer unenforceable — every later refactor pays for it, and `store` reading `api` is the shape that turns a small tool into the thing that cannot be extended
+
+</details>
+
+<details><summary><b>T02</b> — No layer between HTTP and SQL: the controllers owned the rate maths, the sort parser and the chart merge (<code>4348f32</code>)</summary>
+
+**What it was.** There was no layer between HTTP and SQL: `CohortsController` computed the per-1,000 rates, chose the baseline and generated the basis-note prose, `FindingsController` parsed the sort syntax, `OverviewController` merged the chart series — so 8 of 28 test classes booted a Spring application to check arithmetic, and the project had not one `@WebMvcTest` slice
+
+**What caught it.** Found by the external review pass (§0); three `inspector.insight` services now own it, the rate/baseline/note/sort cases run as plain JUnit against a stubbed repository, and `PackageCycleTest` forbids `insight → api` so the 404 cannot creep back down
+
+**What it would have cost.** Not a wrong number but a slow, dim one: every check of `Math.round` cost a context boot and an indexed corpus, so the cheapest possible regression (a flipped delta sign) had the most expensive possible test around it — and the arithmetic was only reachable through HTTP, which is how a domain rule ends up untested rather than tested badly
+
+</details>
+
+<details><summary><b>T06</b> — `POST /api/index/run` had no lock, so two runs interleaved across six tables (<code>e967246</code>)</summary>
+
+**What it was.** `POST /api/index/run` wiped and rewrote six tables with no lock, on a per-stream transaction boundary, so a second POST — another tab, a curl, a startup run racing a manual one — interleaved with the first, and since the prune landed its prune could delete rows the first run was still writing
+
+**What caught it.** Found by the external review pass (§0); a lock held for the whole run now answers the second request with 409, and writing it exposed a second hole: the startup resets run *before* the index call, so a literal reading of the fix left "empty the tables" outside the guard, a moment for a boot to wipe rows a run was filling — the guard covers the whole decide-and-rebuild sequence now
+
+**What it would have cost.** An index whose contents depended on thread order, reachable with one impatient click in a second tab, and an application that would have aborted its own startup had that click beaten the startup runner to the lock
+
+</details>
+
+<details><summary><b>T11</b> — Every overview response shipped every session id — 6,812 of 8,997 bytes, read by nothing (<code>00bbfb7</code>)</summary>
+
+**What it was.** Every `/api/overview` response carried the id of every session in the index — 6,812 of its 8,997 bytes on the author's corpus, and a list no control reads, since the rail has four facets
+
+**What caught it.** Found by the external review pass (§0), then **split by measuring it**: the seven `select distinct` queries blamed for the cost turn out to be 0.9 ms of an 18.6 ms request, so the cache the task proposed was dropped and only the unbounded list was cut from the wire (`dto.VocabularyOptions`: six bounded lists, validated against the seventh)
+
+**What it would have cost.** A dashboard that grew heavier in proportion to how much it had been used, quietly — 4.1× the bytes per load, all of it ids, rising with every session ever indexed, on a screen whose tiles never changed
+
+</details>
+
+<details><summary><b>T03</b> — The JSON contract and the `ResultSet` mappers were the same types (<code>5fc18b8</code>)</summary>
+
+**What it was.** `FindingRepository` mapped a `ResultSet` straight into `FindingDto` and `OverviewRepository` returned a nested DTO record, so the JSON contract and the SQL row mappers were the same types
+
+**What caught it.** Found by the external review pass (§0), then made unfalsifiable: `PackageCycleTest`'s new rule reads compiled constant pools, so even an inline fully-qualified import across the boundary fails the build. The blast radius was measured on both sides of the change — adding one wire field broke `FindingsService:104` afterwards and `FindingRepository:95`, a SQL mapper, before it
+
+**What it would have cost.** Every API change reaching into SQL: answering "the UI needs one more field" meant editing a query, so the two shapes could drift apart by the amount of whoever happened to notice the compile error — and the fix's own grep was passing on a javadoc exception until it was cleaned
+
+</details>
+
+<details><summary><b>T05</b> — `schema.sql` declared no foreign keys while two comments justified their ordering by that enforcement (<code>8f32a7c</code>)</summary>
+
+**What it was.** `schema.sql` declared no foreign keys at all while the JDBC URL set `foreign_keys=on` and two `IndexWriter` comments justified their delete ordering by that enforcement — and the planned fix (declare them, bump `SCHEMA_VERSION`) could not have worked: the reset only deleted rows, `CREATE TABLE IF NOT EXISTS` skips a table that exists, and SQLite has no `ALTER TABLE ADD CONSTRAINT`
+
+**What caught it.** Found by the external review pass (§0); the second half was caught mid-task by arithmetic — T10 had already spent the `1 → 2` bump, so a committed-but-constraintless version 2 database existed and the schema change had nowhere to land. Enforcement itself was then pinned by tests rather than by reading: two connections borrowed at once both report `pragma foreign_keys = 1`, and one connection with the pragma off accepts the orphan row the same schema rejects with it on
+
+**What it would have cost.** The comments would have stayed false, which costs the credibility of the redaction and stream-key comments next to them that are true. Worse, shipping the declared keys alone would have made the claim true only on fresh clones: an existing `inspector.sqlite` keeps its keyless tables forever while the DDL file describes constraints it does not have — a fresh green `mvn test` and a reset log line saying the migration happened
+
+</details>
+
+<details><summary><b>T04</b> — The 634-line fixture generator shipped inside the deployable jar (<code>5e1ddf5</code>)</summary>
+
+**What it was.** `FixtureGenerator` — 634 lines, the largest class in the project, and a development tool nothing at runtime calls — shipped inside the deployable jar, and DESIGN.md §12's tree claimed the committed corpus lived at `src/main/resources/fixtures/`, a path that does not exist
+
+**What caught it.** Found by the external review pass (§0); the path was found while checking step 5, and the byte-identity the corpus's whole provenance claim rests on was checked with a `sha256sum` list over all 15 files before and after a regeneration rather than with `git status`, which cannot see an untracked difference
+
+**What it would have cost.** A reviewer opening the artifact finds the biggest thing in it is a generator, which reads as carelessness about what ships — and anyone trying to verify "these fixtures are generated, not hand-edited" had a documented path to a directory that isn't there, with no command named anywhere outside the pom
+
+</details>
+
+<details><summary><b>T07</b> — The `Detector` contract was honoured for one implementation; production parsed with a mapper the tests never saw (<code>6375836</code>)</summary>
+
+**What it was.** `ErrorPlaneDetector` asked `StampGuardDetector` by concrete type for the tool codes it owns, so the `Detector` contract that says "adding a detector is one class plus a bean declaration" was true of one implementation only; and `ShellAnalyzer` carried a second, no-arg constructor, which is the one Spring reaches for when no constructor is annotated — meaning the running application parsed shell commands with an `ObjectMapper` the class had built itself, and the injected mapper was reachable only from a test
+
+**What caught it.** Found by the review pass, then pinned instead of asserted. The skip set is a `List<Detector>` union with stub-detector cases and the compiled class has zero references to `StampGuard` in its constant pool; the mapper claim was tested by restoring the two-constructor version from `HEAD`, against which the new context assertion fails (`Tests run: 5, Failures: 1`) and passes again once one constructor is left. Reaching the wiring also turned up three test harnesses handing the error detector a list the application never injects, and one building a throwaway second copy of a detector already in the pipeline
+
+**What it would have cost.** The duplicate-finding half was the silent one: the corpus-level duplicate check only catches it if the fixture corpus happens to contain the newly owned code, so the one-owner-per-error invariant would have broken on the author's own corpus with a green suite. The other half cost less loudly — the object the tests described was not the object production used, which is the arrangement where a parsing difference shows up first in real data
+
+</details>
+
+<details><summary><b>T08</b> — The generated spec described a request no route serves, and the actuator key asserted its own default (<code>cb970a0</code>)</summary>
+
+**What it was.** The generated API documentation described a request the application cannot answer: `InsightFilter` binds as a model attribute, so springdoc rendered it as a single query parameter named `filter` whose schema was the record, on three of the five routes. Next to it sat the more uncomfortable shape: `management.endpoints.web.exposure.include: health` in `application.yml`, asserted by "env is 404" — except Boot's default exposure *is* health alone, so a misspelled key keeps every one of those assertions passing while the line does nothing
+
+**What caught it.** Found by the review pass as a "check what the generator makes of `@ModelAttribute`" step, then measured on both halves. Before the fix the document printed `filter in=query type=#/components/schemas/InsightFilter`; the fix is `@ParameterObject` on all three bindings — Spring's own version of that annotation is gone from Framework 7, so it is the one springdoc ships — and the new document test was checked by deleting the annotation from a controller and watching it fail, then restoring the file byte-identically. The exposure hazard bought two test classes instead of one: the shipped 404s plus the three config keys read back from the `Environment` under their canonical names, and a second context that opens another endpoint through the same property to prove the property is honoured
+
+**What it would have cost.** A published spec that points a client at a URL no route serves is worse than no spec at all: the first integration a reviewer attempts fails, and the wrong thing is the document. The config half is quieter — an unread line that reads as the §4.1 boundary being drawn, and in the same file a readiness widening that is the only one of those three lines moving away from a default, so a dead key there means "ready" slides back to meaning "the process started", with nothing anywhere saying so
+
+</details>
+
+<details><summary><b>T12</b> — One rejected filter value answered with 13,726 bytes, the allowed set twice over (<code>299f110</code>)</summary>
+
+**What it was.** `?session=<unknown>` answered one wrong value with **13,726 bytes**: `UnknownFilterValueException` joined the allowed set into its message and the handler then put the same list on the problem as the `allowed` property, while the rail's own sentence builder `join`ed all 165 ids into a bar one line tall
+
+**What caught it.** Found while measuring 400 bodies for T07's page-size cap, then measured on both sides of the wire — `detail` alone was 6,727 characters of that body. The message stops at the filter and the value now, and the builder caps its list at six values plus a count, a ceiling read off the measured vocabularies (schemas 2, presets 3, detectors 4, models 5, the `sort` key list exactly 6) so nothing any screen can send is ever truncated. Reproduced live against a scratch copy of the fixture corpus: pick a schema, delete the streams that carried it, re-index — the bar reads `Unknown filter value: 'V3' is not a valid schema. Valid: V0` over the previous data, which stays put
+
+**What it would have cost.** The byte count is the cheap half, paid by whoever reads a log. The bar was the expensive one: a repair message that lists 165 things you could have typed is not a repair message, and it is the one element that appears only when something has already gone wrong — the moment the interface cannot afford to be unreadable
+
+</details>
+
+<details><summary><b>T13</b> — `sort` folded its direction but not its key, so `TIME:desc` was a 400 and `time:DESC` was not (<code>f6e0dce</code>)</summary>
+
+**What it was.** `?sort=time:DESC` was accepted and `?sort=TIME:desc` was a 400: the direction was lowercased before its check while the key was looked up raw. The case had been written down as intent, with a comment arguing that folding the key "would let two spellings of a sort mean the same thing in two different places". The list that 400 prints came from a `Map.of` keySet, whose order the JDK leaves to a hash
+
+**What caught it.** Found reading the sort whitelist for T07's page-size cap, and pinned on both halves: the four spellings of the token now answer with the same ids (`[9, 8, 7]`) on the running application, so the fold is an acceptance change rather than a change of meaning; the offender is quoted as sent; and the allowed keys are asserted `containsExactly` in the written order instead of `containsExactlyInAnyOrder`, which could not have caught a reordering. `?plane=guard` is still a 400 — data values are case-sensitive for a different reason, and the new pair of tests names which rule is which
+
+**What it would have cost.** The trap was aimed at the one reader most likely to spring it: someone with a terminal checking whether the API does what the README claims, handed a rejection for a spelling the same method accepts five characters later, with no hint which half of the token they mistyped. The hash-ordered list cost less and bit quieter — an error message whose word order can change under an unrelated edit is a message nobody can quote back
+
+</details>
+
+<details><summary><b>T15</b> — The plane-filtered findings sort built a temp B-tree the one time index could not serve (<code>01c0849</code>)</summary>
+
+**What it was.** `idx_finding_occurred (plane, category, occurred_at)` could not serve the plane-filtered findings sort. Nothing filters findings by `category`, so the order remaining after the equality the query carries was by a column no query constrains, and the planner answered the findings page with `USE TEMP B-TREE FOR ORDER BY` — sorting the filtered rows per request, paid for by an index that did not prevent it
+
+**What caught it.** Found reading the index list after T08, named by SQLite's own optimizer overview (§10.1 *Partial ORDER BY via Index*: a satisfied prefix with an unsatisfied later term means block sorting), then measured as a plan before and after on the author's corpus — the sorter line disappeared, the median went 0.067 ms → 0.025 ms over 300 runs, and the index count stayed the same. The first "after" measurement showed no change whatsoever and read as a schema-version finding; it was my own jar still carrying the old `schema.sql`, caught by `unzip -p … BOOT-INF/classes/schema.sql`
+
+**What it would have cost.** 0.042 ms at 389 findings, so nothing a screen can show — the cost was the standing claim, an index whose declared column order advertises a sort it cannot deliver, which is precisely what a later reader trusts while choosing the next one. Plus write cost on every re-index for a middle column no query uses. The measurement that looked like a null result is the transferable part: a stale artifact reports a clean negative
+
+</details>
+
+<details><summary><b>T14</b> — DESIGN.md §6 enumerated two indexes the code had already retired (<code>68f0155</code>)</summary>
+
+**What it was.** DESIGN.md §6 enumerated indexes the code had stopped shipping: `tool_call(name, error_code)` was retired by T10's own commit and `finding(plane, category, occurred_at)` by T15's, and neither left a mark on the paragraph that listed them. Alongside it, the four foreign keys whose child-first delete order the writer's comments depend on had no assertion on their declared action
+
+**What caught it.** Found by the hygiene pass while assembling the schema-version history: writing that table meant reading the DDL and the document side by side, and the two disagreed. The FK half arrived already half-covered — `aSessionStillHoldingFindingsCannotBeDeleted` would have failed under `ON DELETE CASCADE` — so what was missing was the declared rule, which `ON UPDATE CASCADE` would have changed in nothing observable; the new assertion runs both actions over all four keys and was checked by typing `cascade` into the DDL and watching it fail (`expected: "NO ACTION" but was: "CASCADE"`)
+
+**What it would have cost.** A reviewer who trusts §6 goes looking for an index that is not there and decides the document is decorative — which is how documents stop being read and settled decisions start getting re-litigated. This is the second instance of the shape in this repository (T04 found §12's tree naming a fixtures directory that never existed), and the pattern is the same: a commit changed an artifact while the prose describing it was nobody's file to touch
+
+</details>
 
 ### Frontend
 

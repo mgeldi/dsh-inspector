@@ -3,6 +3,7 @@ package inspector.api;
 import inspector.dto.OverviewDto;
 import inspector.insight.OverviewService;
 import inspector.query.InsightFilter;
+import io.swagger.v3.oas.annotations.Operation;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
@@ -24,6 +25,10 @@ public final class OverviewController {
         this.overviewService = overviewService;
     }
 
+    @Operation(summary = "The dashboard board",
+            description = "Tiles, plane mix, top detectors, the two daily series, step throughput, "
+                    + "and the bounded filter vocabulary the rail offers. Counts are over the "
+                    + "filtered index; tool-call counts exclude outcome-only rows. No evidence text.")
     @GetMapping
     public OverviewDto overview(@ParameterObject @ModelAttribute final InsightFilter filter) {
         return overviewService.overview(filter);

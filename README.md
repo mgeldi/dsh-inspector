@@ -6,12 +6,38 @@ attributed causes. It answers two questions: "is this build worse than the last 
 answered as a rate against a baseline cohort, and "why did this one go wrong?", answered as
 the causal chain behind a single finding.
 
-It is self-referential by design: every line of it was written inside DSH by a locally
-hosted agent stack — no cloud coding assistant wrote any of the implementation, no hosted
-API, nothing leaving the machine — so on the author's own corpus the tool measures the
-harness that built it. The committed fixtures
+It is self-referential by design: it was written inside DSH by a locally hosted agent stack
+— no cloud coding assistant designed, planned or implemented any of it, no hosted API,
+nothing leaving the machine — so on the author's own corpus the tool measures the harness
+that built it. `docs/AI-NOTES.md` §0 states exactly where a hosted assistant *was* used, in
+a review pass and a documentation pass, and what each one changed. The committed fixtures
 are synthetic; `./run-live.sh` is where that loop closes. `docs/AI-NOTES.md` §0 names the
 stack, and §3 is the defect ledger from building it.
+
+![The dashboard, on the committed fixture corpus](docs/overview.png)
+
+Every screen is driven by one filter contract, so the tiles, the table and the cohort rates
+can never describe different populations. Opening a finding gives the second question its
+answer — the stamp that went stale, the command that moved it, and the refusal, in sequence
+order, with the command excerpt truncated and credential-masked before it was ever stored:
+
+![A stamp-guard finding with its causal chain and redacted evidence](docs/finding-detail.png)
+
+### Where to look first
+
+Thirty minutes, in this order:
+
+1. **`docs/DESIGN.md` §1 and §2** — the question the tool answers, and the list of things
+   deliberately not built. §2 is the shortest route to what was traded away.
+2. **`backend/src/main/java/inspector/detect/StampGuardDetector.java`** — the one piece of
+   real domain reasoning. Attribution is abductive and the summary says "consistent with",
+   because the log never records what modified a file.
+3. **`docs/AI-NOTES.md` §3** — the defect ledger: what broke during construction, how it was
+   caught, and what it would have cost. It is the honest account of how the code got here.
+
+If you would rather read a rule than a paragraph: `FilterContractTest`,
+`PrivacyBoundaryTest`, `PackageCycleTest` and `frontend/src/app/architecture.spec.ts` are
+the project's conventions written as build failures rather than as comments.
 
 ## What it refuses to do
 
@@ -84,7 +110,7 @@ corpus".
 ## Tests
 
 ```bash
-cd backend && mvn test                 # 241 tests, 1 skipped
+cd backend && mvn test                 # 243 tests, 1 skipped
 cd frontend && npm test -- --watch=false   # 72 tests; Vitest 4 + jsdom, run through the Angular builder
 ```
 
