@@ -11,6 +11,13 @@ import java.util.List;
  * "no filter", a present value must be in the index vocabulary or the
  * request fails with a 400 carrying the allowed set.
  *
+ * <p>Every place that binds it carries {@code @ParameterObject} next to
+ * {@code @ModelAttribute}. Without that, the generated OpenAPI document describes this type as
+ * one query parameter named {@code filter} whose schema is this record — an object in a place
+ * where HTTP has objects nowhere, and a document a client could follow into a request that
+ * matches nothing. Spring's own version of that annotation existed in Framework 6.1 and is gone
+ * from 7.0, so the one springdoc ships is what is available here.
+ *
  * @param from            event-time lower bound, epoch millis, inclusive
  * @param to              event-time upper bound, epoch millis, inclusive
  * @param schema          session convention, e.g. {@code v0}/{@code v3}

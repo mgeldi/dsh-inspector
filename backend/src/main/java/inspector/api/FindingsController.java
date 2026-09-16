@@ -4,6 +4,7 @@ import inspector.dto.FindingDetailDto;
 import inspector.dto.FindingsPageDto;
 import inspector.insight.FindingsService;
 import inspector.query.InsightFilter;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -24,7 +25,7 @@ public final class FindingsController {
     }
 
     @GetMapping
-    public FindingsPageDto page(@ModelAttribute final InsightFilter filter,
+    public FindingsPageDto page(@ParameterObject @ModelAttribute final InsightFilter filter,
             @RequestParam(required = false) final String plane,
             @RequestParam(required = false) final String detector,
             @RequestParam(required = false) final String session, @RequestParam(required = false) final String code,

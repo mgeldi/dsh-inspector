@@ -649,6 +649,20 @@ filter hangs on, and what was left out is the interaction — clicking a plane o
 narrow the table — which is a feature, and the hour it costs went into the causal chain instead.
 Read those four parameters as API capability, not as a screen control.
 
+Two surfaces sit outside `/api`, and both exist for the reviewer rather than for the dashboard.
+`/actuator/health`, with its `liveness` and `readiness` groups, answers on the same port; the
+exposure list is pinned to that one endpoint in `application.yml` because `/actuator/env` and
+`/actuator/configprops` print `inspector.corpus` and `inspector.db` — absolute paths that carry the
+username, which is §4.1 arriving on the management plane. Component details stay hidden for the
+same reason: a failing SQLite connection quotes the database file path. The `readiness` group is
+widened to include `db`, because "the process started" is not the question this tool can be asked
+— "and the index file answers a query" is. `GET /v3/api-docs` is a generated OpenAPI 3.1 document
+(`/swagger-ui/index.html` renders it); since `InsightFilter` binds as a model attribute it carries
+`@ParameterObject` at every binding site so the document lists the six filter values as query
+parameters instead of one object parameter no query string can express. `OpenApiDocumentTest` pins
+that, and it is the only thing that can: nothing at runtime reads the annotation, so a suite would
+stay green long after someone deleted it as unused.
+
 `/api/cohorts` carries the same shared filter parameters as the other two reads, and its rates
 are computed over the filtered population: four aggregates, four different time columns, one
 WHERE contract. Stated flatly, a cohort comparison is *these cohorts, in this window*: the rates
@@ -971,6 +985,12 @@ So the backend defaults to **8091**, configurable, and a collided port fails at 
 the port named in the message rather than an ambiguous connection error. Silently failing to
 bind, or binding something already owned, is precisely the failure you do not want in a tool
 whose whole job is reporting on another process.
+
+The management endpoints share that port rather than opening a second one: `management.server.port`
+is unset, so there is still exactly one socket on this machine and exactly one thing to firewall.
+What keeps it narrow is the exposure list, not a port number — which is why §4.1 is written against
+that list and asserted in `ActuatorExposureTest` and `ManagementExposureKeyTest` rather than
+against a localhost bind.
 
 Default data source is the committed synthetic corpus, so a reviewer sees a populated
 dashboard — with real-looking violations and both schema conventions represented — on first

@@ -6,12 +6,13 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 /**
  * The run's configuration, and the compact constructor is its validation.
  *
- * <p>Not Bean Validation. {@code @Validated} plus {@code @NotBlank} would need
- * {@code spring-boot-starter-validation}, which is not on this classpath — measured, not
- * assumed: {@code mvn dependency:build-classpath} lists no {@code jakarta.validation} entry. A
- * dependency whose entire job is one blank check is the trade DESIGN.md §4.2 refuses to make for
- * Flyway. The constructor check fails at the same moment — during binding, before anything
- * touches a directory — and Boot reports either kind as a binding failure naming the property.
+ * <p>Not Bean Validation, and the reason is not that the validator is missing — springdoc pulls
+ * {@code jakarta.validation} and Hibernate Validator onto the classpath, so {@code @Validated}
+ * with {@code @NotBlank} would now work. It is that the two validate different things.
+ * {@code @Validated} fires when the binder builds this record; the compact constructor fires on
+ * every construction, including the seven places across the tests that build one directly, and a
+ * bad corpus path is just as wrong there. One check, one place, no dependency between the rule
+ * and whoever happened to ask for the object.
  */
 @ConfigurationProperties(prefix = "inspector")
 public record InspectorProperties(

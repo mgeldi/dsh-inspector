@@ -22,3 +22,29 @@ inspector:
   harness-version: unknown
   evidence:
     store: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # health and nothing else — and this is the §4.1 privacy boundary showing up on the
+        # management plane, not a tidy-up. Boot already exposes only health by default, so this
+        # line is not what keeps the door shut today; it is what stops the door opening by
+        # accident later. /actuator/env and /actuator/configprops print inspector.corpus and
+        # inspector.db, both of which are absolute paths carrying the username in a real
+        # deployment — the same thing the index log line is forbidden to print. One wildcard here
+        # would hand that to anything that can reach port 8091.
+        include: health
+  endpoint:
+    health:
+      # Left at its default value (never) deliberately: a failing connection reports the JDBC
+      # error text, and sqlite-jdbc puts the database file path in some of those messages. The
+      # aggregate status is what a caller acts on; the reason belongs in the log.
+      show-details: never
+      group:
+        # /actuator/health/readiness. The default group says only "the application started",
+        # which for this tool is not the question anyone asks; adding db makes it answer "and the
+        # index file answers a query", which is as close to ready as this application gets without
+        # inventing a domain health indicator over the row counts.
+        readiness:
+          include: readinessState,db

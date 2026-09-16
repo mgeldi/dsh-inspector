@@ -3,6 +3,7 @@ package inspector.api;
 import inspector.dto.OverviewDto;
 import inspector.insight.OverviewService;
 import inspector.query.InsightFilter;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -24,7 +25,7 @@ public final class OverviewController {
     }
 
     @GetMapping
-    public OverviewDto overview(@ModelAttribute final InsightFilter filter) {
+    public OverviewDto overview(@ParameterObject @ModelAttribute final InsightFilter filter) {
         return overviewService.overview(filter);
     }
 }

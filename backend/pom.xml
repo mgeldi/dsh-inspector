@@ -28,6 +28,29 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
         </dependency>
+        <!--
+            Health and readiness, on the same port and the same boundary as everything else.
+            What it exposes is restricted in application.yml, and the restriction is a privacy
+            control (§4.1), not tidiness: /actuator/env and /actuator/configprops print
+            inspector.corpus, which carries the username.
+        -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!--
+            Generated OpenAPI document over the five endpoints. The version line matters: Boot 3
+            needs springdoc 2.x and cannot run springdoc 3, and vice versa. springdoc.org's own
+            page for the current release (v3.1.1) lists "Spring-boot v4" among what it supports,
+            and the Boot-4-only artifact names in its own dependencies (spring-boot-jackson,
+            spring-boot-validation) confirm which line this is. Checked at springdoc.org rather
+            than remembered from a Boot 3 project.
+        -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>3.1.1</version>
+        </dependency>
         <dependency>
             <groupId>org.xerial</groupId>
             <artifactId>sqlite-jdbc</artifactId>

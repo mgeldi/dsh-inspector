@@ -3,6 +3,7 @@ package inspector.api;
 import inspector.dto.CohortDto;
 import inspector.insight.CohortService;
 import inspector.query.InsightFilter;
+import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -26,7 +27,7 @@ public final class CohortsController {
 
     @GetMapping
     public CohortDto.Page cohorts(
-            @ModelAttribute final InsightFilter filter,
+            @ParameterObject @ModelAttribute final InsightFilter filter,
             @RequestParam final String groupBy,
             @RequestParam(required = false) final String baseline) {
         return cohortService.cohorts(filter, groupBy, baseline);

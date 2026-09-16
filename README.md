@@ -67,6 +67,13 @@ java -jar target/dsh-inspector-0.1.0.jar --inspector.corpus=/path/to/sessions
 
 then `cd frontend && npm start` and open http://127.0.0.1:4300.
 
+Two things on the backend itself, for a reviewer rather than for the dashboard:
+http://127.0.0.1:8091/swagger-ui/index.html renders the generated OpenAPI document
+(`http://127.0.0.1:8091/v3/api-docs` is the document), and
+`http://127.0.0.1:8091/actuator/health` answers `UP` with `liveness` and `readiness` groups.
+Health is the only actuator endpoint exposed, deliberately: `env` and `configprops` would print the
+configured corpus path, which carries the username.
+
 The index is derived data: the SQLite file is a cache of the corpus, and it is wiped and
 re-indexed rather than migrated when either the schema version or **the corpus it was built
 from** no longer matches the one configured. A database also records which corpus its rows
@@ -77,7 +84,7 @@ corpus".
 ## Tests
 
 ```bash
-cd backend && mvn test                 # 226 tests, 1 skipped
+cd backend && mvn test                 # 237 tests, 1 skipped
 cd frontend && npm test -- --watch=false   # Vitest 4 + jsdom, run through the Angular builder
 ```
 
