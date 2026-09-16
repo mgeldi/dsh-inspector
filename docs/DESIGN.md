@@ -7,8 +7,8 @@
 > draft whose data section was mis-measured in four places; rev 4 corrected a throughput figure
 > taken from a subset and presented as a corpus measurement, and fixed a privacy-boundary
 > description that assigned detection work to the wrong layer. §14 records both rounds, including
-> what the reviewers got wrong. The correction path is a better record than a clean
-> draft would have been.
+> what the reviewers got wrong. The correction path is a better record than a clean draft would
+> have been.
 
 ---
 
@@ -78,9 +78,9 @@ configuration, a sortable paginated findings table and a working chart wrapper a
 minutes. Step 5 carries fixture scenarios that must reproduce §11's cases in the v3 event
 vocabulary, which is not a one-liner.
 
-Stop after 5 and the reviewer has a running tool, the central metric, and the privacy seam.
+Stop after 5 and what exists is a running tool, the central metric, and the privacy seam.
 What is *never* cut: Detector 1's evidence chain, and the plane mapping in §5.1 — strip those
-and there is nothing to discuss.
+and there is nothing left worth running.
 
 ### 2.2 Trimmed as speculative, with the criterion for adding each back
 
@@ -1024,7 +1024,7 @@ is in this repository.
 
 **First run needs no button press: on startup, if the database has no sessions and the configured
 corpus directory exists, the application runs the index synchronously and logs the summary.** Without
-that rule, "clone and run" depends on the reviewer finding the Index action, and the promise that
+that rule, "clone and run" depends on whoever cloned it finding the Index action, and the promise that
 a fresh clone shows a populated dashboard quietly fails on one implementer's interpretation and
 succeeds on another's.
 

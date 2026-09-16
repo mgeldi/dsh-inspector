@@ -48,3 +48,6 @@ docs/superpowers/
 # reviewer artifact. Commit it deliberately if the loop itself becomes the thing worth
 # showing; until then it stays local.
 docs/tasks/
+
+# local working notes kept beside the code and never published
+*.local.md
