@@ -6,6 +6,13 @@ attributed causes. It answers two questions: "is this build worse than the last 
 answered as a rate against a baseline cohort, and "why did this one go wrong?", answered as
 the causal chain behind a single finding.
 
+It is self-referential by design: every line of it was written inside DSH by a locally
+hosted agent stack — no cloud coding assistant wrote any of the implementation, no hosted
+API, nothing leaving the machine — so on the author's own corpus the tool measures the
+harness that built it. The committed fixtures
+are synthetic; `./run-live.sh` is where that loop closes. `docs/AI-NOTES.md` §0 names the
+stack, and §3 is the defect ledger from building it.
+
 ## What it refuses to do
 
 - **No conversation text anywhere in the store.** The schema has no column that could hold

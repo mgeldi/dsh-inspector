@@ -5,6 +5,41 @@ begins. Short version: the machine wrote most of the code. It did not write a de
 Every cut in the spec, and every number the spec quotes, was made or measured by the
 author — see the last section for what that means in practice.*
 
+## 0. The setup, named
+
+Every line of this application was written by a locally hosted stack, on one machine, with
+no request leaving it. No cloud coding assistant wrote any of the implementation — no
+Claude Code, no Codex, no hosted API. (One exception, stated so the claim stays exact: the
+finished codebase was put through a review pass by a hosted assistant, which read it and
+reported defects. It wrote no application code. Where a fix of its follows, §3 marks the
+entry — the ledger says which loop found what.)
+
+- **DSH** — the DeepSeek Harness, the agent runtime: tool dispatch, session logging, the
+  permission model, the web UI on `:3080`. It is also the subject of this project. The
+  session logs this dashboard indexes are DSH's own, written by the sessions that wrote
+  the code.
+- **local-router** — the local inference layer in front of DSH, serving on `:8081`, with a
+  control socket that swaps the served model mid-session.
+- **Model:** served under the alias `local-router`; the checkpoint in service is
+  Qwen3.8-Flash-Next (NVFP4 quantisation), 262k context, reasoning effort `xhigh` by
+  default. Worth noting for this project specifically: the session logs record the *alias*,
+  not the checkpoint — `request/context.model` is `local-router` in all six of this
+  repository's own sessions. A harness whose point is swapping models mid-session cannot
+  currently tell you which one produced a given turn, which is a gap in the subject, not in
+  the dashboard.
+- **Hardware:** RTX 5090 (32 GB), Ryzen 7 9800X3D, 96 GB RAM. The model served the agent on
+  the same GPU the agent was running beside — which is the direct reason for the port and
+  process rules in the checkout's `AGENTS.md`, and for the incident in §4: an agent that can
+  kill its own inference server needs rules a cloud agent does not.
+
+That makes this project self-referential on purpose. The tool measures the harness that
+built it, and the failure rates on the dashboard are the failure rates of its own
+construction — not a synthetic dataset chosen to make a dashboard look busy.
+
+The evidence is retained. DSH keeps every session it ran, so the work behind this
+repository is inspectable by the tool this repository is — and the ledger in §3 lists the
+defects the loop in §2 caught, each reconstructible from the git history.
+
 ## 1. What the AI did, and what I decided
 
 Decided and written by the author:
