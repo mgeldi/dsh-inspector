@@ -61,30 +61,47 @@ class FindingsServiceTest {
     }
 
     /**
-     * The direction is folded, the key is not: {@code time:DESC} sorts descending, while
-     * {@code TIME:desc} is refused and answered with the keys that exist. Asymmetric, and
-     * deliberate enough to pin — a caller who types the key in caps is holding the wrong
-     * column name, and the 400 tells them so, whereas silently folding it would let two
-     * spellings of a sort mean the same thing in two different places.
+     * One token, one tolerance: both halves are matched case-insensitively. This used to be
+     * asymmetric — {@code time:DESC} worked and {@code TIME:desc} was refused, with a comment
+     * arguing that folding the key "would let two spellings of a sort mean the same thing in two
+     * different places". That argument cannot survive the same method folding the direction two
+     * lines later: the rule the API actually needs is the one in {@link #dataValuesAreCaseSensitive},
+     * data values are matched exactly because they are data, and a whitelist key is not data.
+     * The 400 still quotes the value as it was sent.
      */
     @Test
-    void theDirectionIsCaseInsensitiveAndTheKeyIsNot() {
+    void bothHalvesOfTheSortTokenAreFoldedAndTheOffenderIsQuotedAsSent() {
         assertThat(FindingsService.orderClause("time:DESC")).isEqualTo("f.occurred_at desc, f.id desc");
         assertThat(FindingsService.orderClause("plane:Asc")).isEqualTo("f.plane asc, f.id asc");
+        assertThat(FindingsService.orderClause("TIME:desc")).isEqualTo("f.occurred_at desc, f.id desc");
+        assertThat(FindingsService.orderClause("Confidence:DESC"))
+                .isEqualTo(FindingsService.orderClause("confidence:desc"));
 
-        assertThatThrownBy(() -> FindingsService.orderClause("TIME:desc"))
-                .isInstanceOfSatisfying(UnknownFilterValueException.class, ex -> {
-                    assertThat(ex.filter()).isEqualTo("sort");
-                    assertThat(ex.value()).isEqualTo("TIME");
-                    assertThat(ex.allowed()).contains("time");
-                });
-
-        assertThatThrownBy(() -> FindingsService.orderClause("time:drop"))
+        assertThatThrownBy(() -> FindingsService.orderClause("TIME:drop"))
                 .isInstanceOfSatisfying(UnknownFilterValueException.class, ex -> {
                     assertThat(ex.filter()).isEqualTo("sort");
                     assertThat(ex.value()).isEqualTo("drop");
                     assertThat(ex.allowed()).containsExactly("asc", "desc");
                 });
+
+        assertThatThrownBy(() -> FindingsService.orderClause("tyme:desc"))
+                .isInstanceOfSatisfying(UnknownFilterValueException.class, ex -> {
+                    assertThat(ex.filter()).isEqualTo("sort");
+                    assertThat(ex.value()).isEqualTo("tyme");
+                });
+    }
+
+    /**
+     * The half that is strict, and why. Vocabulary values are data: {@code V3} and {@code v3} are
+     * different answers about the real index, so folding them would silently widen a filter. A
+     * whitelist key is a constant, which is why {@link #bothHalvesOfTheSortTokenAreFoldedAndTheOffenderIsQuotedAsSent}
+     * can fold and this must not.
+     */
+    @Test
+    void dataValuesAreCaseSensitive() {
+        assertThat(FindingsService.orderClause("session:asc")).isEqualTo("f.session_id asc, f.id asc");
+        assertThatThrownBy(() -> FindingsService.orderClause("session:ASCEND"))
+                .isInstanceOf(UnknownFilterValueException.class);
     }
 
     /**
@@ -97,7 +114,10 @@ class FindingsServiceTest {
                 FindingsService.orderClause("occurred_at desc; drop table finding"))
                 .isInstanceOfSatisfying(UnknownFilterValueException.class, ex -> {
                     assertThat(ex.filter()).isEqualTo("sort");
-                    assertThat(ex.allowed()).containsExactlyInAnyOrder(
+                    // exactly, in order: this list is what a person reads to fix their request,
+                    // and it was assembled from a Map.of keySet, whose order the JDK leaves to a
+                    // hash. Written out, it stays in the order the table's columns read.
+                    assertThat(ex.allowed()).containsExactly(
                             "time", "plane", "detector", "code", "session", "confidence");
                 });
     }

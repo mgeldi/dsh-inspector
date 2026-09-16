@@ -25,10 +25,12 @@ import org.springframework.stereotype.Service;
  * reads as "nothing matched". Validation is a precondition of answering the question, so it
  * belongs here and not in the parameter binding.
  *
- * <p>Sorting is a fixed whitelist. The {@code order by} fragment is assembled only from
- * mapped constants and a lowercased direction, so a SQL-ish sort value is a 400 rather than a
- * second statement, and the stable {@code f.id} tiebreaker keeps pagination deterministic
- * across equal timestamps.
+ * <p>Sorting is a fixed whitelist. The {@code order by} fragment is assembled only from mapped
+ * constants and a direction checked against two values, so a SQL-ish sort value is a 400 rather
+ * than a second statement, and the stable {@code f.id} tiebreaker keeps pagination deterministic
+ * across equal timestamps. Both halves of {@code key:direction} are matched case-insensitively: a
+ * whitelist key is a constant, not data, so folding it cannot widen a filter the way folding a
+ * vocabulary value would.
  *
  * <p>The repository hands back rows of the index; turning a row into a finding as a client sees
  * it is this class's job, and it is the only place that knows both names.
@@ -45,7 +47,14 @@ public final class FindingsService {
             "session", "f.session_id",
             "confidence", "f.confidence");
 
-    private static final List<String> SORT_KEYS = List.copyOf(SORT_COLUMNS.keySet());
+    /**
+     * The keys a caller may use, in the order a person should read them — this is the list a 400
+     * prints. Not derived from {@link #SORT_COLUMNS}: a {@code Map.of} keySet has no defined
+     * iteration order, so the error message someone sees when they mistype would be chosen by a
+     * hash, and free to rearrange when an unrelated key is added.
+     */
+    private static final List<String> SORT_KEYS = List.of(
+            "time", "plane", "detector", "code", "session", "confidence");
 
     /**
      * The largest page a client may ask for. The table renders twenty rows and the UI has no
@@ -145,9 +154,15 @@ public final class FindingsService {
     }
 
     /**
-     * Parses {@code key[:dir]} against the whitelist. The column and the
-     * direction both come from fixed maps; the stable {@code f.id}
-     * tiebreaker keeps pagination deterministic.
+     * Parses {@code key[:dir]} against the whitelist. Both halves of the token are matched
+     * case-insensitively, because one syntax carrying two tolerances is a trap: {@code time:DESC}
+     * was accepted while {@code TIME:desc} was a 400, for a value this method then normalised two
+     * lines later. The 400 quotes the value as it was sent, not as it normalised to.
+     *
+     * <p>What stays strict is the part that keeps SQL out of a parameter: the column comes from a
+     * fixed map and the direction from a two-value check, so the only strings that can reach the
+     * {@code order by} are constants this class wrote. The stable {@code f.id} tiebreaker keeps
+     * pagination deterministic.
      *
      * @throws UnknownFilterValueException for an unknown key or direction, carrying the allowed set
      */
@@ -156,7 +171,7 @@ public final class FindingsService {
         final String key = separator < 0 ? sort : sort.substring(0, separator);
         final String direction = separator < 0 ? "desc" : sort.substring(separator + 1);
 
-        final String column = SORT_COLUMNS.get(key);
+        final String column = SORT_COLUMNS.get(key.toLowerCase(Locale.ROOT));
         if (column == null) {
             throw new UnknownFilterValueException("sort", key, SORT_KEYS);
         }
