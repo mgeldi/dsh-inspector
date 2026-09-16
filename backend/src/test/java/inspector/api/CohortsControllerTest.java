@@ -123,22 +123,11 @@ class CohortsControllerTest {
         assertThat(second.path("violationRatePerKDelta").asDouble()).isEqualTo(97.22);
     }
 
-    @Test
-    void explicitBaselineFlipsTheDeltasAndDropsTheChoiceNote() throws Exception {
-        final JsonNode root = asJson(get("/api/cohorts?groupBy=harnessVersion&baseline="
-                + IndexedCorpus.SECOND_VERSION));
-        assertThat(root.path("baseline").asText()).isEqualTo(IndexedCorpus.SECOND_VERSION);
-        assertThat(root.path("basisNote").asText()).doesNotContain("highest tool-call count");
-
-        final Map<String, JsonNode> byKey = cohortsByKey(root);
-        assertThat(byKey.get(IndexedCorpus.SECOND_VERSION).path("findingsPerKCallsDelta").asDouble()).isEqualTo(0.0);
-        // 281.25 - 333.33
-        assertThat(byKey.get(IndexedCorpus.MAIN_VERSION).path("findingsPerKCallsDelta").asDouble())
-                .isEqualTo(-52.08);
-        // 125.0 - 222.22
-        assertThat(byKey.get(IndexedCorpus.MAIN_VERSION).path("violationRatePerKDelta").asDouble())
-                .isEqualTo(-97.22);
-    }
+    // The explicit-baseline case (same numbers, negated, with the choice note dropped) is not
+    // here any more: it is inspector.insight.CohortServiceTest, which proves the flip against a
+    // stubbed repository, and CohortsWebTest, which proves the baseline parameter reaches the
+    // service. What stays above is the part only an index can prove — that SQL's counts and
+    // this arithmetic agree about real rows.
 
     @Test
     void unknownBaselineFailsWithTheAllowedKeys() throws Exception {

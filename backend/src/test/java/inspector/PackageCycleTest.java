@@ -58,6 +58,15 @@ final class PackageCycleTest {
     }
 
     @Test
+    void theServiceLayerDoesNotDependOnTheWebPackage() {
+        assertNoForbiddenReferences("inspector/insight", forbidden("api"),
+                "inspector.insight is the layer under the controllers, so it may not reach up"
+                        + " into inspector.api: whether a row exists is the service's answer,"
+                        + " and making that a 404 is the controller's decision"
+                        + " (FindingNotFoundException stays on the web side of that line)");
+    }
+
+    @Test
     void queryDependsOnNeitherTheWebPackageNorTheStore() {
         assertNoForbiddenReferences("inspector/query", forbidden("api", "store"),
                 "inspector.query is what api and store both point at, so it may not point back"
