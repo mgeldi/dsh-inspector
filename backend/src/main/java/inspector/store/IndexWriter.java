@@ -29,7 +29,7 @@ import org.springframework.transaction.support.TransactionTemplate;
  * then insert them fresh. Re-indexing the same (sessionId, sourceFile) is idempotent —
  * delete-then-insert replaces what was there, across all six tables, without upserts.
  *
- * <p>Every path goes through {@link Paths#hint} before anything reaches disk, so a raw
+ * <p>Every path goes through {@link PathHints#hint} before anything reaches disk, so a raw
  * absolute path can never end up in the database (DESIGN.md §4.1, §6). occurred_at is the
  * finding's own event time, persisted verbatim — nothing in this class interpolates a time.
  *
@@ -204,7 +204,7 @@ public final class IndexWriter {
                     call.name(), call.startedAt(), call.endedAt(), call.durationMs(),
                     call.errorCode(),
                     call.errorCode() == null ? null : ErrorPlanes.ofToolCode(call.errorCode()).name(),
-                    Paths.hint(call.absolutePath(), cwd), call.outcomeOnly() ? 1 : 0});
+                    PathHints.hint(call.absolutePath(), cwd), call.outcomeOnly() ? 1 : 0});
         }
         return jdbc.batchUpdate(
                 "insert into tool_call (session_id, source_file, turn, step, seq, name, started_at,"
@@ -221,7 +221,7 @@ public final class IndexWriter {
         for (final Finding finding : findings) {
             rows.add(new Object[]{sessionId, sourceFile, finding.detector(), finding.plane().name(),
                     finding.category() == null ? null : finding.category().name(), finding.code(),
-                    finding.confidence(), Paths.hint(finding.absolutePath(), cwd),
+                    finding.confidence(), PathHints.hint(finding.absolutePath(), cwd),
                     finding.seq(), finding.staleSeq(), finding.causeSeq(),
                     finding.occurredAt(), finding.summary()});
         }
@@ -246,7 +246,7 @@ public final class IndexWriter {
             for (final ShellEvidence evidence : finding.evidence()) {
                 rows.add(new Object[]{findingIds.get(i), evidence.seq(),
                         evidence.verbClass().name(),
-                        Paths.hint(evidencePath(finding, evidence), cwd),
+                        PathHints.hint(evidencePath(finding, evidence), cwd),
                         evidence.excerpt().value()});
             }
         }

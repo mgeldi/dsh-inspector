@@ -165,7 +165,8 @@ describe('Shell', () => {
     expect(spy).toHaveBeenCalledTimes(1);
 
     http.expectOne(r => r.url === '/api/index/run').flush({
-      streams: 12, sessions: 11, steps: 22, toolCalls: 32, findings: 9, pruned: 0, parseFailures: 0, durationMs: 120,
+      streams: 12, sessions: 11, steps: 22, toolCalls: 32, findings: 9, evidenceRows: 3,
+      pruned: 0, parseFailures: 0, durationMs: 120,
     });
     http.expectOne(r => r.url === '/api/overview').flush(overview);
     http.expectOne(r => r.url === '/api/findings').flush(emptyFindings);
@@ -179,7 +180,8 @@ describe('Shell', () => {
     // that only ever counts what went in would let a whole corpus vanish unnoticed.
     store.reindex();
     http.expectOne(r => r.url === '/api/index/run').flush({
-      streams: 11, sessions: 10, steps: 21, toolCalls: 30, findings: 8, pruned: 1, parseFailures: 0, durationMs: 120,
+      streams: 11, sessions: 10, steps: 21, toolCalls: 30, findings: 8, evidenceRows: 3,
+      pruned: 1, parseFailures: 0, durationMs: 120,
     });
     http.expectOne(r => r.url === '/api/overview').flush(overview);
     http.expectOne(r => r.url === '/api/findings').flush(emptyFindings);

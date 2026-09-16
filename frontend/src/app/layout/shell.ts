@@ -45,6 +45,11 @@ export class Shell {
    * The one-line re-index result, or null until the first successful run. The pruned count
    * rides along only when it is non-zero: a run that quietly discarded rows is the same class
    * of problem as one that quietly kept them, so when rows went, the line says so.
+   *
+   * `evidenceRows` is on the payload and deliberately not in this sentence. The line has one
+   * fold of room and `pruned` is in it because it reports a loss; an evidence count reports what
+   * is present, and the finding drawer is where a user finds out whether a finding has command
+   * behind it. A count with no question attached to it is decoration on a notice that disappears.
    */
   readonly indexResult = computed(() => {
     const li = this.store.lastIndex();

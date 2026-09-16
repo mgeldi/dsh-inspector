@@ -4,10 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.ObjectMapper;
 
 final class ShellAnalyzerTest {
 
-    private final ShellAnalyzer analyzer = new ShellAnalyzer();
+    /** The analyzer builds no mapper of its own any more, so the test supplies one. */
+    private final ShellAnalyzer analyzer = new ShellAnalyzer(new ObjectMapper());
 
     /**
      * Embeds the raw command as the value of a JSON string. Backslashes, quotes and newlines

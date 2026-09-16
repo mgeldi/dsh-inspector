@@ -77,7 +77,7 @@ corpus".
 ## Tests
 
 ```bash
-cd backend && mvn test                 # 145 tests, 1 skipped
+cd backend && mvn test                 # 226 tests, 1 skipped
 cd frontend && npm test -- --watch=false   # Vitest 4 + jsdom, run through the Angular builder
 ```
 

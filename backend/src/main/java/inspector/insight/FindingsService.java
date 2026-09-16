@@ -47,6 +47,18 @@ public final class FindingsService {
 
     private static final List<String> SORT_KEYS = List.copyOf(SORT_COLUMNS.keySet());
 
+    /**
+     * The largest page a client may ask for. The table renders twenty rows and the UI has no
+     * page-size control, so a bigger number is not a request someone can act on: before the cap,
+     * {@code ?size=1000000} was answered by materialising a million findings into JSON — the
+     * query, the rows and the serialisation all paid, and the browser could not have shown the
+     * result either way. 200 is generous next to a corpus measured in hundreds of findings, and
+     * above it the answer is the same 400 problem detail every other bad parameter gets, naming
+     * the limit. Silently returning 200 of a requested 1,000,000 would describe a page the
+     * caller did not ask for.
+     */
+    private static final int MAX_PAGE_SIZE = 200;
+
     private final FindingRepository findingRepository;
     private final VocabularyService vocabularyService;
 
@@ -77,6 +89,9 @@ public final class FindingsService {
         }
         if (size <= 0) {
             throw new IllegalArgumentException("size must be > 0, was " + size);
+        }
+        if (size > MAX_PAGE_SIZE) {
+            throw new IllegalArgumentException("size must be <= " + MAX_PAGE_SIZE + ", was " + size);
         }
 
         final FindingFilters.Sql where =

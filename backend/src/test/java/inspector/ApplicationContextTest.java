@@ -2,6 +2,7 @@ package inspector;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import inspector.ingest.ShellAnalyzer;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -15,6 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.TestPropertySource;
+import tools.jackson.databind.ObjectMapper;
 
 @SpringBootTest(args = {"--no-index"})
 @TestPropertySource(properties = {
@@ -28,9 +30,28 @@ final class ApplicationContextTest {
     @Autowired
     private DataSource dataSource;
 
+    @Autowired
+    private ShellAnalyzer shellAnalyzer;
+
+    @Autowired
+    private ObjectMapper objectMapper;
+
     @Test
     void contextLoadsWithTheSchemaApplied() {
         assertThat(jdbc.sql("select count(*) from finding").query(Integer.class).single()).isZero();
+    }
+
+    /**
+     * Two constructors leave Spring a choice, and with none annotated it takes the no-arg one —
+     * so while {@code ShellAnalyzer} had both, the running application parsed commands with an
+     * {@code ObjectMapper} the class built itself and the injected mapper existed only in tests.
+     * The no-arg constructor is gone; this is the assertion that says the bean now gets the
+     * configured one. AssertJ's field access is deliberate: the field is private on purpose, and
+     * what is being checked is wiring, not behaviour.
+     */
+    @Test
+    void theShellAnalyzerIsWiredWithTheContextsObjectMapper() {
+        assertThat(shellAnalyzer).extracting("mapper").isSameAs(objectMapper);
     }
 
     @Test

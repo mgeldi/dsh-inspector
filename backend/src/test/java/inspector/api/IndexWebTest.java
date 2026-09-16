@@ -40,15 +40,16 @@ class IndexWebTest {
 
     @Test
     void theRunSummaryIsCountsAndNothingElse() throws Exception {
-        when(indexService.run()).thenReturn(new IndexSummary(2, 2, 2, 4, 3, 1, 0, 17));
+        when(indexService.run()).thenReturn(new IndexSummary(2, 2, 2, 4, 3, 1, 1, 0, 17));
 
         // strict: an extra field here would be a leak, not noise — the summary is the index's
-        // only self-report and it is allowed to carry counts (DESIGN.md §4.1)
+        // only self-report and it is allowed to carry counts (DESIGN.md §4.1). evidenceRows is
+        // one of those counts: how many redacted rows survive, never what they say.
         mockMvc.perform(post("/api/index/run"))
                 .andExpect(status().isOk())
                 .andExpect(content().json("""
                         {"streams":2,"sessions":2,"steps":2,"toolCalls":4,"findings":3,
-                         "pruned":1,"parseFailures":0,"durationMs":17}
+                         "evidenceRows":1,"pruned":1,"parseFailures":0,"durationMs":17}
                         """, true));
     }
 

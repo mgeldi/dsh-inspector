@@ -1,8 +1,18 @@
 package inspector.store;
 
-public final class Paths {
+/**
+ * The one function that decides what a path looks like once it is stored, and it is a privacy
+ * boundary, not a formatting helper (DESIGN.md §4.1): a value that reaches a {@code path_hint}
+ * column has already been through here.
+ *
+ * <p>Named for what it produces. It used to be {@code Paths}, which shadowed
+ * {@code java.nio.file.Paths} inside {@link IndexWriter} — the file that also imports
+ * {@code java.nio.file.Path}, so every unqualified {@code Paths.x(...)} in it resolved to this
+ * class by luck of the import list rather than by intent.
+ */
+public final class PathHints {
 
-    private Paths() {
+    private PathHints() {
     }
 
     /** Absolute under the project root becomes project-relative; anything else keeps its last

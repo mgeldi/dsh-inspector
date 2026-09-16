@@ -78,8 +78,12 @@ final class CorpusSmokeTest {
         final ObjectMapper mapper = new ObjectMapper();
         final SessionIngestor ingestor = new SessionIngestor(mapper, new ShellAnalyzer(mapper));
         final StampGuardDetector stamp = new StampGuardDetector();
-        final List<Detector> detectors = List.of(stamp, new ErrorPlaneDetector(stamp),
-                new FatalTurnDetector(), new RetryStormDetector());
+        final FatalTurnDetector fatal = new FatalTurnDetector();
+        final RetryStormDetector retry = new RetryStormDetector();
+        // Spring hands the error detector every other detector in the context; a hand-built list
+        // has to say the same thing or it is testing a wiring the application never has.
+        final List<Detector> detectors = List.of(stamp,
+                new ErrorPlaneDetector(List.of(stamp, fatal, retry)), fatal, retry);
         final IndexWriter writer = new IndexWriter(jdbc, new DataSourceTransactionManager(dataSource));
         final IndexService service = new IndexService(new CorpusScanner(), ingestor, detectors, writer,
                 new InspectorProperties(CORPUS.toString(), "smoke",

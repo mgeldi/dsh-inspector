@@ -42,11 +42,6 @@ public final class ErrorPlanes {
         return TOOL_CODES.getOrDefault(code, Plane.INFRASTRUCTURE);
     }
 
-    /** Any retry is the operator's problem, whatever the code — §5.1's first row. */
-    public static Plane ofRetryCode(final String code) {
-        return Plane.INFRASTRUCTURE;
-    }
-
     public static Optional<Plane> lookup(final String code) {
         return Optional.ofNullable(TOOL_CODES.get(code));
     }

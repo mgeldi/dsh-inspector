@@ -113,6 +113,13 @@ class FindingsServiceTest {
         assertThatThrownBy(() -> service.page(NOTHING_SELECTED, null, null, null, null, "time:desc", 0, 0))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("size must be > 0, was 0");
+        // The upper bound is the one that mattered: before it, ?size=1000000 was a valid request
+        // and the answer was a million rows through the query, the mapper and the JSON writer.
+        assertThatThrownBy(() -> service.page(NOTHING_SELECTED, null, null, null, null, "time:desc", 0, 201))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("size must be <= 200, was 201");
+        assertThat(service.page(NOTHING_SELECTED, null, null, null, null, "time:desc", 0, 200).size())
+                .isEqualTo(200);
     }
 
     /**

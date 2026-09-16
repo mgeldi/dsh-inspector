@@ -3,6 +3,7 @@ package inspector.detect;
 import inspector.ingest.StreamFacts;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.springframework.stereotype.Component;
 
 /**
@@ -10,8 +11,13 @@ import org.springframework.stereotype.Component;
  * attribution to grade, and the UI distinguishes these by {@code detector}, not by rendering
  * every null as "unattributed".
  *
- * <p>One owner per source event: StampGuardDetector claims FS_STALE_VERSION, and this detector
- * skips exactly the codes another detector claims, so no source error produces two findings.
+ * <p>One owner per source event: this detector skips exactly the codes <em>other</em> detectors
+ * claim, so no source error produces two findings. It asks every detector, because
+ * {@link Detector#ownsToolCodes()} is a contract on the interface and not a quirk of one
+ * implementation. It used to ask {@code StampGuardDetector} by concrete type, which held for as
+ * long as that was the only owning detector and would have broken silently — with no failing test
+ * — the moment a second one appeared. That moment is exactly what {@code Detector}'s "one class
+ * plus a bean declaration" promise is about.
  */
 @Component
 public final class ErrorPlaneDetector implements Detector {
@@ -20,8 +26,19 @@ public final class ErrorPlaneDetector implements Detector {
 
     private final Set<String> ownedElsewhere;
 
-    public ErrorPlaneDetector(final StampGuardDetector stampGuard) {
-        this.ownedElsewhere = stampGuard.ownsToolCodes();
+    /**
+     * @param detectors every detector in the context. This is not a constructor cycle: the
+     *     container does not hand a bean a collection containing the bean under construction, and
+     *     {@code ApplicationContextTest} proves it the blunt way — the context boots with this
+     *     detector as one of the four registered in it. The identity filter below keeps the same
+     *     semantics for the lists the tests assemble by hand, where nothing is excluded for
+     *     anybody.
+     */
+    public ErrorPlaneDetector(final List<Detector> detectors) {
+        this.ownedElsewhere = detectors.stream()
+                .filter(other -> other != this)
+                .flatMap(other -> other.ownsToolCodes().stream())
+                .collect(Collectors.toUnmodifiableSet());
     }
 
     @Override

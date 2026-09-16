@@ -133,6 +133,7 @@ public final class IndexService {
         int steps = 0;
         int calls = 0;
         int findings = 0;
+        int evidenceRows = 0;
         long parseFailures = 0;
         final long indexedAt = System.currentTimeMillis();
         final List<StreamKey> written = new ArrayList<>();
@@ -148,6 +149,7 @@ public final class IndexService {
             steps += writtenRows.steps();
             calls += writtenRows.toolCalls();
             findings += writtenRows.findings();
+            evidenceRows += writtenRows.evidenceRows();
             parseFailures += facts.parseFailures();
             written.add(new StreamKey(facts.session().id(), facts.session().sourceFile()));
         }
@@ -160,10 +162,12 @@ public final class IndexService {
         writer.seedCorpus(corpus.toAbsolutePath().normalize().toString());
 
         final IndexSummary summary = new IndexSummary(sources.size(), writer.countSessions(),
-                steps, calls, findings, pruned, parseFailures, System.currentTimeMillis() - started);
-        LOG.info("indexed {} streams, {} findings in {} ms ({} parse failures, {} pruned)",
-                summary.streams(), summary.findings(), summary.durationMs(), summary.parseFailures(),
-                summary.pruned());
+                steps, calls, findings, evidenceRows, pruned, parseFailures,
+                System.currentTimeMillis() - started);
+        LOG.info("indexed {} streams, {} findings ({} evidence rows) in {} ms"
+                        + " ({} parse failures, {} pruned)",
+                summary.streams(), summary.findings(), summary.evidenceRows(),
+                summary.durationMs(), summary.parseFailures(), summary.pruned());
         return summary;
     }
 }

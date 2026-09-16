@@ -32,9 +32,9 @@ import org.junit.jupiter.api.Test;
  * <ul>
  *   <li>Writes are out of scope on purpose: the contract is about what a read <i>answers</i>,
  *       and {@code IndexWriter} only ever creates the index. No screen claims a filtered
- *       selection of a write, so a write cannot misreport a population. {@code Paths} is a
- *       string helper and the nested records are row shapes, not reads; all three stay
- *       outside the scope by name, the same way the privacy lint scopes by type.</li>
+ *       selection of a write, so a write cannot misreport a population. {@code PathHints} is a
+ *       string helper on the write side and the nested records are row shapes, not reads; all
+ *       three stay outside the scope by name, the same way the privacy lint scopes by type.</li>
  *   <li>{@code void} methods and {@code Optional} single-row lookups are out of scope: the
  *       contract governs a population a filter narrows, and a primary-key fetch returns at
  *       most one row, which no filter can narrow. The next list, count or aggregate is what

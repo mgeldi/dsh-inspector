@@ -43,10 +43,15 @@ public final class ShellAnalyzer {
 
     private final ObjectMapper mapper;
 
-    public ShellAnalyzer() {
-        this(new ObjectMapper());
-    }
-
+    /**
+     * The only constructor, and deliberately the only one. While a no-arg constructor sat next to
+     * this one, Spring used <em>that</em> for the bean: with no constructor annotated,
+     * {@code AutowiredAnnotationBeanPostProcessor} falls back to "a primary/default constructor
+     * (if present)". So the running application parsed shell commands with an {@code ObjectMapper}
+     * this class had built itself, and the injected path was exercised only by tests. One
+     * constructor leaves the container no choice; {@code ApplicationContextTest} asserts the bean
+     * holds the context's mapper, and it fails against the two-constructor version.
+     */
     public ShellAnalyzer(final ObjectMapper mapper) {
         this.mapper = mapper;
     }

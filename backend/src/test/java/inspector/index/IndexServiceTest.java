@@ -90,11 +90,15 @@ final class IndexServiceTest {
 
         final ObjectMapper mapper = new ObjectMapper();
         final SessionIngestor ingestor = new SessionIngestor(mapper, new ShellAnalyzer(mapper));
+        final StampGuardDetector stamp = new StampGuardDetector();
+        final FatalTurnDetector fatal = new FatalTurnDetector();
+        final RetryStormDetector retry = new RetryStormDetector();
+        // One instance of each, and the error detector is told what the others own. It used to
+        // be built with a second, throwaway StampGuardDetector while a third one sat in the
+        // pipeline — harmless while the owned set is a constant, and exactly the kind of wiring
+        // that stops matching the context the day an owned code becomes state.
         final List<Detector> detectors = List.of(
-                new ErrorPlaneDetector(new StampGuardDetector()),
-                new StampGuardDetector(),
-                new FatalTurnDetector(),
-                new RetryStormDetector());
+                new ErrorPlaneDetector(List.of(stamp, fatal, retry)), stamp, fatal, retry);
         service = new IndexService(new CorpusScanner(), ingestor, detectors, writer,
                 propertiesOf(corpus));
 
@@ -118,11 +122,15 @@ final class IndexServiceTest {
         assertThat(summary.steps()).isEqualTo(2);
         assertThat(summary.toolCalls()).isEqualTo(4);
         assertThat(summary.findings()).isEqualTo(3);
+        // The evidence count is the number of rows the run wrote, checked against the table
+        // rather than against another number the same code produced.
+        assertThat(summary.evidenceRows()).isEqualTo(count("shell_evidence"));
         assertThat(summary.parseFailures()).isZero();
         assertThat(summary.durationMs()).isGreaterThanOrEqualTo(0);
         // the summary line is counts only — it is the index's only self-report
         assertThat(logMessages(Level.INFO))
-                .anyMatch(msg -> msg.startsWith("indexed 2 streams, 3 findings in "));
+                .anyMatch(msg -> msg.matches("indexed 2 streams, 3 findings \\(\\d+ evidence rows\\)"
+                        + " in \\d+ ms \\(0 parse failures, 0 pruned\\)"));
     }
 
     @Test

@@ -181,8 +181,8 @@ public final class SessionIngestor {
             final String absolute = firstPath(arguments);
             final String callId = ev.text("/callId");
             if (callId != null) {
-                pendingCalls.put(callId, new OpenCall(ev.seq(), orNull(ev.integer("/turn")),
-                        orNull(ev.integer("/step")), name, ev.time(), absolute));
+                pendingCalls.put(callId, new OpenCall(ev.seq(), ev.integer("/turn"),
+                        ev.integer("/step"), name, ev.time(), absolute));
             }
             if (READ_TOOL.equals(name) && absolute != null) {
                 touches.add(new FileTouch(ev.seq(), absolute, FileTouch.READ));
@@ -204,8 +204,8 @@ public final class SessionIngestor {
             final String code = ev.text("/error/code");
             final String path = open != null && open.absolutePath != null
                     ? open.absolutePath : ev.text("/meta/path");
-            calls.add(new ToolCallRecord(open == null ? orNull(ev.integer("/turn")) : open.turn,
-                    open == null ? orNull(ev.integer("/step")) : open.step,
+            calls.add(new ToolCallRecord(open == null ? ev.integer("/turn") : open.turn,
+                    open == null ? ev.integer("/step") : open.step,
                     open == null ? ev.seq() : open.seq,
                     open == null ? ev.text("/message/name") : open.name,
                     open == null ? null : open.startedAt,
@@ -214,8 +214,8 @@ public final class SessionIngestor {
                     code, path, open == null));
             if (code != null) {
                 errors.add(new ErrorEvent(open == null ? ev.seq() : open.seq,
-                        open == null ? orNull(ev.integer("/turn")) : open.turn,
-                        open == null ? orNull(ev.integer("/step")) : open.step,
+                        open == null ? ev.integer("/turn") : open.turn,
+                        open == null ? ev.integer("/step") : open.step,
                         open == null ? null : open.name, code, path, ev.time()));
             }
         }
@@ -282,10 +282,6 @@ public final class SessionIngestor {
 
     private static int orZero(final Integer value) {
         return value == null ? 0 : value;
-    }
-
-    private static Integer orNull(final Integer value) {
-        return value;
     }
 
     private static final class OpenStep {

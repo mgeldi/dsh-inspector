@@ -20,7 +20,7 @@ final class ErrorPlaneDetectorTest {
     private static final long T0 = 1_760_000_000_000L;
 
     private final StampGuardDetector stampGuard = new StampGuardDetector();
-    private final ErrorPlaneDetector detector = new ErrorPlaneDetector(stampGuard);
+    private final ErrorPlaneDetector detector = new ErrorPlaneDetector(List.of(stampGuard));
 
     @Test
     void everyErrorBecomesOneFindingWithItsPlaneAndNullConfidence() {
@@ -71,6 +71,63 @@ final class ErrorPlaneDetectorTest {
         assertThat(all).extracting(Finding::code)
                 .containsExactlyInAnyOrder("FS_STALE_VERSION", "FS_NOT_FOUND");
         assertThat(all).extracting(Finding::seq).doesNotHaveDuplicates();
+    }
+
+    /**
+     * {@code ownsToolCodes} is a contract on {@link Detector}, not a quirk of
+     * {@code StampGuardDetector}, so the skip set is the union over every other detector. Before
+     * this was {@code List<Detector>}, a second owning detector would have been consulted by
+     * nobody: its errors would have produced a finding from itself and one from here, and the
+     * corpus-level duplicate check would have caught it only if the fixture corpus happened to
+     * contain that code.
+     */
+    @Test
+    void everyDetectorThatClaimsACodeIsHonoured() {
+        final ErrorPlaneDetector withTwoMoreOwners = new ErrorPlaneDetector(List.of(
+                stampGuard, new OwningStub("alpha", Set.of("ALPHA_CODE")),
+                new OwningStub("beta", Set.of("BETA_CODE"))));
+
+        final List<Finding> findings = withTwoMoreOwners.detect(facts(
+                error(201, "edit", "ALPHA_CODE", null),
+                error(202, "edit", "BETA_CODE", null),
+                error(203, "edit", "FS_STALE_VERSION", null),
+                error(204, "edit", "FS_NOT_FOUND", null)));
+
+        // three codes claimed elsewhere, one left: this detector keeps what nobody owns
+        assertThat(findings).extracting(Finding::code).containsExactly("FS_NOT_FOUND");
+    }
+
+    /** Two owners claiming the same code is a union, not a conflict. */
+    @Test
+    void twoDetectorsClaimingTheSameCodeIsStillOneSkip() {
+        final ErrorPlaneDetector detector = new ErrorPlaneDetector(List.of(
+                new OwningStub("alpha", Set.of("SHARED_CODE")),
+                new OwningStub("beta", Set.of("SHARED_CODE"))));
+
+        assertThat(detector.detect(facts(error(205, "bash", "SHARED_CODE", null)))).isEmpty();
+    }
+
+    /** A detector that claims nothing contributes nothing to the union. */
+    @Test
+    void aDetectorOwningNothingChangesNothing() {
+        final ErrorPlaneDetector detector = new ErrorPlaneDetector(List.of(
+                stampGuard, new OwningStub("silent", Set.of())));
+
+        assertThat(detector.detect(facts(error(206, "bash", "INVALID_ARGS", null))))
+                .extracting(Finding::code).containsExactly("INVALID_ARGS");
+    }
+
+    private record OwningStub(String id, Set<String> codes) implements Detector {
+
+        @Override
+        public Set<String> ownsToolCodes() {
+            return codes;
+        }
+
+        @Override
+        public List<Finding> detect(final StreamFacts facts) {
+            return List.of();
+        }
     }
 
     @Test
