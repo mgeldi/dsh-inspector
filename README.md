@@ -84,8 +84,8 @@ corpus".
 ## Tests
 
 ```bash
-cd backend && mvn test                 # 237 tests, 1 skipped
-cd frontend && npm test -- --watch=false   # Vitest 4 + jsdom, run through the Angular builder
+cd backend && mvn test                 # 238 tests, 1 skipped
+cd frontend && npm test -- --watch=false   # 72 tests; Vitest 4 + jsdom, run through the Angular builder
 ```
 
 ## Ports

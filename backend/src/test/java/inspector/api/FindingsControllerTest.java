@@ -186,6 +186,34 @@ class FindingsControllerTest {
                 .andExpect(jsonPath("$.allowed.length()").value(14));
     }
 
+    /**
+     * The allowed set travels once. It was written twice — joined into the message and again as the
+     * {@code allowed} property — which on a corpus holding 165 sessions made one wrong value a
+     * 13,726-byte answer, half of it the same list repeated inside {@code detail}. The property is
+     * the machine-readable copy; the message names the filter and the value and stops.
+     */
+    @Test
+    void theAllowedSetTravelsOnce() throws Exception {
+        final MvcResult result = mockMvc.perform(get("/api/findings").param("session", "not-in-the-index"))
+                .andExpect(status().isBadRequest())
+                .andReturn();
+
+        final String body = result.getResponse().getContentAsString();
+        final JsonNode problem = mapper.readTree(body);
+        final JsonNode allowed = problem.path("allowed");
+        assertThat(allowed.isArray()).isTrue();
+        assertThat(allowed.size()).isEqualTo(14);
+
+        final String detail = problem.path("detail").asText();
+        assertThat(detail).contains("session").contains("not-in-the-index");
+        allowed.forEach(id -> assertThat(detail).doesNotContain(id.asText()));
+
+        // fourteen session ids is ~450 bytes of property; the duplicated list put the same
+        // response over a kilobyte. Generous bound: this asserts the duplication is gone, not a
+        // byte count a rename would survive.
+        assertThat(body.length()).isLessThan(700);
+    }
+
     @Test
     void detailCarriesTheRedactedEvidence() throws Exception {
         final long id = jdbc.sql("select id from finding where detector = 'stamp-guard'"
