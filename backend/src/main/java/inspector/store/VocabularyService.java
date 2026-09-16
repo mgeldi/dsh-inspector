@@ -16,6 +16,19 @@ import org.springframework.stereotype.Component;
  *
  * <p>Everything is a {@code select distinct} over {@code session} and
  * {@code finding}; no value is ever spliced into the SQL.
+ *
+ * <p><b>It is not cached, on a measurement.</b> All seven queries together cost a 0.9 ms median
+ * against a fully indexed corpus of 168 streams, 165 sessions and 17,244 tool calls, where the
+ * whole overview request they precede costs 18.6 ms (measured 2026-09-16, twenty requests each,
+ * medians). Caching a fifth of a request's time buys a stale-value bug class the per-request
+ * read cannot have — a re-index that does not invalidate shows a rail that silently disagrees
+ * with the index it was rebuilt from. If this ever shows up in a profile, the number to quote
+ * first is 0.9 ms.
+ *
+ * <p>What <em>was</em> worth cutting is what one of these lists costs to serialise: the session
+ * ids are 76% of an otherwise unfiltered {@code /api/overview} response and the only list that
+ * grows with the corpus, so they stopped riding along. See
+ * {@link inspector.dto.VocabularyOptions}.
  */
 @Component
 public final class VocabularyService {

@@ -13,13 +13,19 @@ import java.util.List;
  * legal filter value and vice versa. {@code plane} is a UI constant — the three
  * {@link Plane} names — not a roundtrip against the database.
  *
+ * <p>This is what a filter is <i>checked against</i>, which is not the same thing as what a
+ * client is <i>sent</i>: the wire shape is {@link inspector.dto.VocabularyOptions}, and it
+ * carries fewer lists than this one. Nothing should read a field's absence here as a bug.
+ *
  * @param schemas        distinct {@code session.schema} values
  * @param models         distinct {@code session.model} values
  * @param presets        distinct {@code session.agent_preset} values
  * @param harnessVersions distinct {@code session.harness_version} values
  * @param codes          distinct {@code finding.code} values
  * @param detectors      distinct {@code finding.detector} ids
- * @param sessions       distinct {@code session.id} values
+ * @param sessions       distinct {@code session.id} values; validation only, never on the wire
+ *                       — the one list whose size is the size of the corpus, and no screen reads
+ *                       it ({@link inspector.dto.VocabularyOptions})
  */
 public record Vocabulary(
         List<String> schemas,

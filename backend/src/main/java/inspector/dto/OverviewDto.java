@@ -1,6 +1,5 @@
 package inspector.dto;
 
-import inspector.query.Vocabulary;
 import java.util.List;
 import java.util.Map;
 
@@ -8,6 +7,10 @@ import java.util.Map;
  * The dashboard tile board (DESIGN.md §7): tiles, plane mix, top detectors, the
  * two daily chart series, step throughput grouped by schema and timing source,
  * and the filter vocabulary the rail needs.
+ *
+ * <p>The vocabulary here is {@link VocabularyOptions}, not the domain record it is built from:
+ * the id list the server keeps for validating {@code ?session=} is precisely the field that must
+ * not ride along on every dashboard load. {@link VocabularyOptions} says why.
  *
  * <p>No evidence text anywhere — that is only ever on {@code /api/findings/{id}}.
  */
@@ -17,7 +20,7 @@ public record OverviewDto(
         List<DetectorCount> topDetectors,
         List<DayPoint> series,
         List<ThroughputRow> throughput,
-        Vocabulary vocabulary) {
+        VocabularyOptions vocabulary) {
 
     /** Headline counters over the filtered index. */
     public record Tiles(long sessions, long findings, long toolCalls, long steps) {

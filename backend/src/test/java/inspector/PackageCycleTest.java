@@ -75,6 +75,23 @@ final class PackageCycleTest {
     }
 
     /**
+     * A DTO that references the layer serving it stops being a wire shape and starts being a
+     * coupling. {@code OverviewDto} used to embed {@code inspector.query.Vocabulary}, and that
+     * is exactly how the list of every session id in the index — 76% of the response on a real
+     * corpus, read by no screen — ended up on every dashboard load: the payload inherited
+     * whatever the validation record happened to hold. A record that references nothing but
+     * {@code java.*} cannot make that mistake by accident.
+     */
+    @Test
+    void theWireShapesDependOnNothingElseOfOurs() {
+        assertNoForbiddenReferences("inspector/dto",
+                Pattern.compile("inspector/(?!dto/)[A-Za-z0-9_]+/[A-Za-z0-9_/$]+"),
+                "inspector.dto is the wire contract, so it may not reference any other inspector"
+                        + " package: map the domain type into the DTO where the two meet (a"
+                        + " service), never from inside the record");
+    }
+
+    /**
      * One violation per (class, referenced type) pair, so a class that touches five types in
      * the forbidden package reports five lines and not one, and the list reads as the import
      * block it replaces.

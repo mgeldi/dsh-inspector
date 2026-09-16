@@ -17,7 +17,7 @@ const goodOverview: OverviewDto = {
   vocabulary: {
     schemas: ['V0', 'V3'], models: ['demo-flash-8b'], presets: ['smoke'],
     harnessVersions: ['0.1.0'], codes: ['FS_STALE_VERSION'],
-    detectors: ['error-plane', 'retry-storm'], sessions: ['demo-session-1'],
+    detectors: ['error-plane', 'retry-storm'],
   },
 };
 

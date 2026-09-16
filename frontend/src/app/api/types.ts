@@ -2,9 +2,18 @@ export type Plane = 'GUARD' | 'MODEL_MISUSE' | 'INFRASTRUCTURE';
 export type Category = 'DIRECT_MUTATION' | 'VCS_RESTORE' | 'EXTERNAL';
 export type TimingSource = 'chunk-events' | 'embedded-stream' | 'none';
 
+/**
+ * The option lists a control may offer — the wire shape of `inspector.dto.VocabularyOptions`.
+ *
+ * Every list here is bounded by the thing it enumerates, and that is why the session ids are
+ * absent: they are the one list whose length is the size of the corpus (measured: 6,812 of an
+ * 8,997-byte unfiltered `/api/overview` response, and growing with every session ever indexed),
+ * and no control on any screen reads them. `?session=` is still a filter the server answers —
+ * it just does not need a copy of every id on every dashboard load to say so.
+ */
 export interface Vocabulary {
   schemas: string[]; models: string[]; presets: string[]; harnessVersions: string[];
-  codes: string[]; detectors: string[]; sessions: string[];
+  codes: string[]; detectors: string[];
 }
 
 export interface OverviewDto {

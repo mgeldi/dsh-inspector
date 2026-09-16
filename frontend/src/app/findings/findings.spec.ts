@@ -46,7 +46,7 @@ const minimalOverview: OverviewDto = {
   topDetectors: [{ detector: 'stamp-guard', count: 4 }],
   series: [{ day: '2026-09-08', findings: 3, toolCalls: 10 }],
   throughput: [{ schema: 'V0', timingSource: 'chunk-events', steps: 18, medianDecodeTps: 163.4, medianTtftMs: 563.5 }],
-  vocabulary: { schemas: [], models: [], presets: [], harnessVersions: [], codes: [], detectors: [], sessions: [] },
+  vocabulary: { schemas: [], models: [], presets: [], harnessVersions: [], codes: [], detectors: [] },
 };
 
 describe('Findings', () => {

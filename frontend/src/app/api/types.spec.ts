@@ -8,10 +8,16 @@ describe('wire format', () => {
       "topDetectors":[{"detector":"error-plane","count":233}],
       "series":[{"day":"2026-08-19","findings":46,"toolCalls":1043}],
       "throughput":[{"schema":"V0","timingSource":"none","steps":1,"medianDecodeTps":null,"medianTtftMs":null}],
-      "vocabulary":{"schemas":["V0"],"models":[],"presets":[],"harnessVersions":[],"codes":[],"detectors":[],"sessions":[]}}`;
+      "vocabulary":{"schemas":["V0"],"models":[],"presets":[],"harnessVersions":[],"codes":[],"detectors":[]}}`;
     const parsed = JSON.parse(raw) as OverviewDto;
     expect(parsed.tiles.sessions).toBe(165);
     expect(parsed.throughput[0].medianDecodeTps).toBeNull();
+    // The option lists a control can offer, and nothing else. This sample used to carry a list
+    // of every session id in the index — 76% of the payload, read by no screen (types.ts says
+    // why). A recorded response that grows one back is a wire change, not a typo.
+    expect(Object.keys(parsed.vocabulary)).toEqual([
+      'schemas', 'models', 'presets', 'harnessVersions', 'codes', 'detectors',
+    ]);
   });
 
   it('keeps a null confidence distinguishable from a missing one', () => {

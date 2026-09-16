@@ -91,11 +91,14 @@ class OverviewControllerTest {
     @Test
     void theSessionTileCountsSessionsNotStreams() throws Exception {
         // The fixture corpus contains one session written in both conventions, so the session
-        // table holds 15 rows for 14 sessions. The tile has to answer "how many sessions", and
-        // the filter rail underneath it already lists 14 — two answers to one question is how a
-        // dashboard loses the right to be believed about anything else.
+        // table holds 15 rows for 14 sessions. The tile has to answer "how many sessions": two
+        // answers to one question is how a dashboard loses the right to be believed about
+        // anything else. (The rail used to be the second opinion on this number by listing the
+        // ids; the list left the payload because no screen reads it, so the ground truth here is
+        // SQL. That the server still knows the ids is proved from the wire by
+        // FindingsControllerTest.unknownSessionFailsWithTheSessionIdsTheIndexHolds.)
         assertThat(count("select count(*) from session")).isEqualTo(15);
-        assertThat(strings(asJson(get("/api/overview")).path("vocabulary").path("sessions"))).hasSize(14);
+        assertThat(count("select count(distinct id) from session")).isEqualTo(14);
         assertThat(asJson(get("/api/overview")).path("tiles").path("sessions").asLong()).isEqualTo(14);
     }
 
@@ -144,7 +147,15 @@ class OverviewControllerTest {
                         "FS_NOT_FOUND", "FS_NOT_OBSERVED", "SEARCH_FAILED", "WEB_PROVIDER_CREDENTIAL_MISSING");
         assertThat(strings(root.path("vocabulary").path("detectors")))
                 .containsExactlyInAnyOrder("stamp-guard", "error-plane", "fatal-turn", "retry-storm");
-        assertThat(strings(root.path("vocabulary").path("sessions"))).hasSize(14);
+
+        // The vocabulary's wire shape, pinned by name. The session ids are the list missing from
+        // it: on the author's corpus 165 ids were 6,812 of an 8,997-byte response, and it is the
+        // only list that grows with the corpus, so it is read for validation and never sent.
+        // Pinned as a name set rather than an absent-path check so re-adding it fails here.
+        final List<String> vocabularyFields = new ArrayList<>();
+        root.path("vocabulary").propertyNames().forEach(vocabularyFields::add);
+        assertThat(vocabularyFields).containsExactlyInAnyOrder(
+                "schemas", "models", "presets", "harnessVersions", "codes", "detectors");
 
         // no evidence text on the overview
         assertThat(root.toString()).doesNotContain("excerpt");

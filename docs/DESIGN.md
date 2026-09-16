@@ -650,6 +650,22 @@ being offerable the moment that value's rows were filtered out of the view — t
 set of filters that shrinks as you use it. The other population reads — overview, findings, cohorts
 — all answer over the filtered selection.
 
+What it does **not** return is the seventh list the server reads: the session ids. Every list on the
+wire is bounded by the thing it enumerates — two conventions, a handful of models, presets and
+harness versions, twenty codes, four detectors — and the id list is the one whose length <em>is</em>
+the size of the corpus: measured on the author's corpus copy, its 165 ids were 6,812 bytes of an
+8,997-byte `/api/overview` response, and that grows with every session ever indexed while the
+response goes out on every dashboard load. No control reads it (the rail has four facets, and §7's
+own cut says the findings-axis params are a seam the UI never writes), so the payload carries six
+bounded lists — `inspector.dto.VocabularyOptions` — while `?session=` stays a real filter validated
+against the seventh, whose 400 still enumerates the ids that exist.
+
+And it is read on every request, not cached, on a measurement: all seven `select distinct` queries
+together cost a **0.9 ms** median against a fully indexed corpus (168 streams, 165 sessions, 17,244
+tool calls) where the whole overview request they precede costs **18.6 ms** (2026-09-16, twenty
+requests each). Caching a fifth of a request would buy a rail that can disagree with the index it
+was rebuilt from, which is the one failure the per-request read cannot have.
+
 `POST /api/index/run` is synchronous and returns its summary, which the UI shows in a snackbar.
 A full scan takes seconds (§12), so there is no job to poll: an async run, a progress bar and a
 run-history table would be machinery to hide a wait that does not exist.
@@ -945,6 +961,13 @@ finished indexer logs on a real run. Decompressing the same 173 MB alone measure
 half of the total, so the scan is not parse-dominated after all: zstd takes about half, and JSON
 parsing, detection and persistence share the rest. Either way §2's exclusion of file watching
 stands: the cheap correct thing is genuinely cheap here.
+
+What one request costs on that index, measured against the packaged jar (20 sequential requests,
+medians, the same 168-stream corpus): `/api/overview` **18.6 ms / 2,173 bytes**, `GET
+/api/findings?size=20` **1.2 ms / 7,043 bytes**. The filter vocabulary is **0.9 ms** of the
+overview's 18.6, which is the number that settled two questions: the seven queries stay
+uncached (§7), and the payload change worth making was the one that removed a list no screen
+reads — the same response was 8,997 bytes before it, 76% of it session ids.
 
 ### 12.1 Repository layout
 

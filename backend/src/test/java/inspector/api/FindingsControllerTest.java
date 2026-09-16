@@ -168,6 +168,24 @@ class FindingsControllerTest {
                 .andExpect(jsonPath("$.allowed[?(@ == 'MODEL_MISUSE')]").exists());
     }
 
+    /**
+     * The session ids left the overview payload, where 76% of a real response was this one list
+     * and nothing read it. They did not leave the filter contract: {@code ?session=} is still
+     * checked against the ids the index holds, and the 400 still enumerates them — 14 of them,
+     * distinct, not the 15 rows the session table has. This is now the only place the id list is
+     * observable from the wire, which is exactly the right place: the request that asked about a
+     * session is the one that gets told which sessions there are.
+     */
+    @Test
+    void unknownSessionFailsWithTheSessionIdsTheIndexHolds() throws Exception {
+        mockMvc.perform(get("/api/findings").param("session", "not-in-the-index"))
+                .andExpect(status().isBadRequest())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.filter").value("session"))
+                .andExpect(jsonPath("$.value").value("not-in-the-index"))
+                .andExpect(jsonPath("$.allowed.length()").value(14));
+    }
+
     @Test
     void detailCarriesTheRedactedEvidence() throws Exception {
         final long id = jdbc.sql("select id from finding where detector = 'stamp-guard'"

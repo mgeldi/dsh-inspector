@@ -16,7 +16,7 @@ const overview: OverviewDto = {
   throughput: [],
   vocabulary: {
     schemas: ['V0', 'V3'], models: ['demo-flash-8b'], presets: ['unknown', 'smoke'],
-    harnessVersions: ['0.1.0', '0.2.0'], codes: [], detectors: [], sessions: [],
+    harnessVersions: ['0.1.0', '0.2.0'], codes: [], detectors: [],
   },
 };
 const emptyFindings: FindingsPageDto = { total: 9, page: 0, size: 20, items: [] };

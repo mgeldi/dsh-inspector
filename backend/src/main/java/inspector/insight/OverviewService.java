@@ -1,6 +1,7 @@
 package inspector.insight;
 
 import inspector.dto.OverviewDto;
+import inspector.dto.VocabularyOptions;
 import inspector.query.FindingFilters;
 import inspector.query.InsightFilter;
 import inspector.query.Vocabulary;
@@ -69,7 +70,23 @@ public final class OverviewService {
                 mergeSeries(overviewRepository.findingSeries(findings),
                         overviewRepository.toolCallSeries(toolCalls)),
                 overviewRepository.throughput(steps),
-                vocabulary);
+                wireVocabulary(vocabulary));
+    }
+
+    /**
+     * The domain vocabulary as it crosses the wire. The session ids are dropped here rather than
+     * annotated away inside the record, because the record is what the filter contract validates
+     * against and the payload is what a dashboard pays for: the two lists are allowed to differ,
+     * and the place they differ should be a line of code, not a serializer's surprise.
+     */
+    private static VocabularyOptions wireVocabulary(final Vocabulary vocabulary) {
+        return new VocabularyOptions(
+                vocabulary.schemas(),
+                vocabulary.models(),
+                vocabulary.presets(),
+                vocabulary.harnessVersions(),
+                vocabulary.codes(),
+                vocabulary.detectors());
     }
 
     /**
