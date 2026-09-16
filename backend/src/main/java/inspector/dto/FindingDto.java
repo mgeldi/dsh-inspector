@@ -1,7 +1,5 @@
 package inspector.dto;
 
-import java.util.List;
-
 /**
  * One finding row as served by the list and detail endpoints.
  *
@@ -29,8 +27,5 @@ public record FindingDto(
      * Only on the detail endpoint.
      */
     public record Evidence(long seq, String verbClass, String pathHint, String excerptRedacted) {
-        static List<Evidence> none() {
-            return List.of();
-        }
     }
 }

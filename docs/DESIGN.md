@@ -620,11 +620,34 @@ different justification from speculative machinery — the cost is paid once at 
 repeatedly in complexity — but it is still a call against the rule in §2.2 and it is labelled as
 one.
 
-Indexes on `finding(plane, category, occurred_at)`, `tool_call(name, error_code)`,
-`step(session_id, source_file, turn, step)`. There is deliberately **no index on
+The indexes, each naming the query it serves: `tool_call(session_id, source_file, seq)` for the
+detail join, `finding(session_id, source_file)` for the join key every read carries and the
+per-stream deletes of a re-index, `finding(occurred_at)` for the default sort,
+`finding(plane, occurred_at)` for the plane-filtered page's sort, and
+`step(session_id, source_file, turn, step)` for the step rows of one stream. Two have been
+retired: `tool_call(name, error_code)` served no query at all, and
+`finding(plane, category, occurred_at)` could not serve the sort it looked like it served, because
+nothing filters findings by `category` and a sort column is only free once every column before it
+in the index is constrained.
+
+There is deliberately **no index on
 `path_hint`**: Detector 1 builds its touched-set while streaming during ingest, so no SQL
 query looks up by path. Indexing for a query that does not exist costs write throughput for a
 workload that is write-heavy during indexing.
+
+**How many times the hammer has fallen.** `IndexService.SCHEMA_VERSION` is `3`, and the whole
+point of the constant is that a mismatch discards the index:
+
+| Version | What forced it | Why a bump was the only way |
+|---|---|---|
+| 1 | the original schema | — |
+| 2 | the join-key indexes | an index a previous boot had created had to be *retired*, and a reset only empties tables, so the DDL needed its own `DROP INDEX` |
+| 3 | the foreign keys | SQLite has no `ALTER TABLE ADD CONSTRAINT`, so `resetIfStale` drops the tables and lets the DDL re-create them; emptying rows could not have added a table constraint |
+
+A DDL change that only adds or retires an index does **not** bump the version. The DDL is applied
+on every boot, and a bump throws away a good index run to change the shape of nothing — that is
+how the `(plane, occurred_at)` swap arrived. The version is for changes a re-index cannot deliver
+into a file that already exists.
 
 `path_hint` is project-relative, never absolute — absolute paths carry the username.
 

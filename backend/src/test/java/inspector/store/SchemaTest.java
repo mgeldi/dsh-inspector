@@ -109,6 +109,35 @@ final class SchemaTest {
                         Map.entry("session_id", "id"), Map.entry("source_file", "source_file"));
     }
 
+    /**
+     * The rule the writer's delete order depends on, read off the schema instead of inferred from
+     * a consequence. {@link #aSessionStillHoldingFindingsCannotBeDeleted()} already proves a
+     * parent with children cannot go first, and it would also fail if someone typed
+     * {@code on delete cascade} — but not if someone typed {@code on update cascade}, which no
+     * behaviour of this application exercises. So the declared action is the assertion here.
+     * SQLite documents the default it should show (foreignkeys.html): "If an action is not
+     * explicitly specified, it defaults to NO ACTION." That is what makes IndexWriter deleting
+     * child-to-parent a necessity rather than a preference.
+     */
+    @Test
+    void everyForeignKeyDefersBothActionsSoNothingCascades() {
+        for (final String child : List.of("step", "tool_call", "finding", "shell_evidence")) {
+            final List<Map<String, Object>> keys =
+                    jdbc.queryForList("pragma foreign_key_list(" + child + ")");
+            assertThat(keys).as(child + " declares no foreign key").isNotEmpty();
+            for (final Map<String, Object> key : keys) {
+                // One row per column pair, so the composite (session_id, source_file) key
+                // appears twice — which is why this walks rows rather than distinct keys.
+                assertThat(key.get("on_delete"))
+                        .as(child + " -> " + key.get("table") + " on_delete")
+                        .isEqualTo("NO ACTION");
+                assertThat(key.get("on_update"))
+                        .as(child + " -> " + key.get("table") + " on_update")
+                        .isEqualTo("NO ACTION");
+            }
+        }
+    }
+
     @Test
     void aFindingWhoseStreamIsNotInTheIndexIsRejected() {
         assertThatThrownBy(() -> insertFinding("session-that-was-never-indexed", "nowhere.jsonl"))

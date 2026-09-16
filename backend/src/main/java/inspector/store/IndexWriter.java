@@ -309,6 +309,14 @@ public final class IndexWriter {
      * of unknown provenance cannot be trusted to describe the configured corpus, and
      * re-indexing costs seconds (DESIGN.md §12).
      *
+     * <p>Its pair is {@link #resetIfStale(String)}, and the two fall differently on purpose:
+     * this one empties the tables and leaves the schema standing — the shape is still right, only
+     * the rows describe the wrong corpus — while a stale schema version drops the tables and
+     * re-applies the DDL. The runner calls the stale one first, because re-seeding a schema that
+     * is about to be re-created would be wasted work. The asymmetry is also why this method does
+     * not re-record the corpus: the run that refills the index calls {@link #seedCorpus(String)},
+     * so the value present after a reset is the value the rows belong to.
+     *
      * @return how many streams were discarded; zero when the index already matches
      */
     public int resetIfCorpusChanged(final Path corpus) {
