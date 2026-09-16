@@ -1,4 +1,4 @@
-package inspector.api.dto;
+package inspector.dto;
 
 import java.util.List;
 

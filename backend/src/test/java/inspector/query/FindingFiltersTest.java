@@ -1,4 +1,4 @@
-package inspector.api;
+package inspector.query;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

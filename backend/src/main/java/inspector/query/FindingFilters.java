@@ -1,4 +1,4 @@
-package inspector.api;
+package inspector.query;
 
 import java.util.ArrayList;
 import java.util.List;

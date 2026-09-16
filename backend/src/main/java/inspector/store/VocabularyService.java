@@ -1,11 +1,10 @@
 package inspector.store;
 
-import inspector.api.dto.Vocabulary;
-
+import inspector.query.IndexWideRead;
+import inspector.query.Vocabulary;
+import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
-
-import java.util.List;
 
 /**
  * The filter vocabulary, read from the index on every request (DESIGN.md §7).

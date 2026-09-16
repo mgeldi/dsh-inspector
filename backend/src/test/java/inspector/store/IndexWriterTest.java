@@ -3,9 +3,9 @@ package inspector.store;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.zaxxer.hikari.HikariDataSource;
-import inspector.api.FindingFilters;
-import inspector.api.InsightFilter;
-import inspector.api.dto.FindingDetailDto;
+import inspector.query.FindingFilters;
+import inspector.query.InsightFilter;
+import inspector.dto.FindingDetailDto;
 import inspector.detect.Category;
 import inspector.detect.Finding;
 import inspector.detect.Plane;

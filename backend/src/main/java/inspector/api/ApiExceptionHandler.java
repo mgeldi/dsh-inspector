@@ -1,11 +1,11 @@
 package inspector.api;
 
+import inspector.query.UnknownFilterValueException;
+import java.net.URI;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-
-import java.net.URI;
 
 /**
  * RFC 9457 problem details for the read API (DESIGN.md §7): an unknown

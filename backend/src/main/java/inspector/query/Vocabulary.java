@@ -1,4 +1,4 @@
-package inspector.api.dto;
+package inspector.query;
 
 import inspector.detect.Plane;
 

@@ -1,20 +1,21 @@
 package inspector.api;
 
-import inspector.api.dto.CohortDto;
-import inspector.api.dto.Vocabulary;
+import inspector.dto.CohortDto;
+import inspector.query.FindingFilters;
+import inspector.query.InsightFilter;
+import inspector.query.UnknownFilterValueException;
+import inspector.query.Vocabulary;
 import inspector.store.CohortRepository;
 import inspector.store.VocabularyService;
-
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Map;
 
 /**
  * The cohorts comparison (DESIGN.md §7): one axis at a time, rates per

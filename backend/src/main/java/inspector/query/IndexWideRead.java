@@ -1,6 +1,5 @@
-package inspector.store;
+package inspector.query;
 
-import inspector.api.FindingFilters;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

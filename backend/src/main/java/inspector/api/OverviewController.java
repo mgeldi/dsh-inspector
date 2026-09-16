@@ -1,20 +1,20 @@
 package inspector.api;
 
-import inspector.api.dto.OverviewDto;
-import inspector.api.dto.Vocabulary;
+import inspector.dto.OverviewDto;
+import inspector.query.FindingFilters;
+import inspector.query.InsightFilter;
+import inspector.query.Vocabulary;
 import inspector.store.OverviewRepository;
 import inspector.store.VocabularyService;
-
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 /**
  * The dashboard tile board (DESIGN.md §7): one GET, the shared

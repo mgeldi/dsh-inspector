@@ -1,22 +1,23 @@
 package inspector.api;
 
-import inspector.api.dto.FindingDetailDto;
-import inspector.api.dto.FindingDto;
-import inspector.api.dto.FindingsPageDto;
-import inspector.api.dto.Vocabulary;
+import inspector.dto.FindingDetailDto;
+import inspector.dto.FindingDto;
+import inspector.dto.FindingsPageDto;
+import inspector.query.FindingFilters;
+import inspector.query.InsightFilter;
+import inspector.query.UnknownFilterValueException;
+import inspector.query.Vocabulary;
 import inspector.store.FindingRepository;
 import inspector.store.VocabularyService;
-
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
 
 /**
  * The findings table and the one detail endpoint that returns evidence

@@ -6,7 +6,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import inspector.api.dto.Vocabulary;
+import inspector.query.Vocabulary;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;

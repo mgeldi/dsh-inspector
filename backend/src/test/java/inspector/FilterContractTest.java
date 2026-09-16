@@ -2,8 +2,8 @@ package inspector;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import inspector.api.FindingFilters;
-import inspector.store.IndexWideRead;
+import inspector.query.FindingFilters;
+import inspector.query.IndexWideRead;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;

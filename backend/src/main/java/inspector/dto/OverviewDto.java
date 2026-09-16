@@ -1,5 +1,6 @@
-package inspector.api.dto;
+package inspector.dto;
 
+import inspector.query.Vocabulary;
 import java.util.List;
 import java.util.Map;
 

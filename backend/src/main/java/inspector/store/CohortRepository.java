@@ -1,6 +1,6 @@
 package inspector.store;
 
-import inspector.api.FindingFilters;
+import inspector.query.FindingFilters;
 
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
