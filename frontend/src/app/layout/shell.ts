@@ -41,11 +41,17 @@ export class Shell {
    */
   readonly currentUrl = signal('/');
 
-  /** The one-line re-index result, or null until the first successful run. */
+  /**
+   * The one-line re-index result, or null until the first successful run. The pruned count
+   * rides along only when it is non-zero: a run that quietly discarded rows is the same class
+   * of problem as one that quietly kept them, so when rows went, the line says so.
+   */
   readonly indexResult = computed(() => {
     const li = this.store.lastIndex();
     if (!li) { return null; }
-    return `indexed ${li.streams} streams, ${li.findings} findings in ${(li.durationMs / 1000).toFixed(1)} s`;
+    const run = `indexed ${li.streams} streams, ${li.findings} findings in ${(li.durationMs / 1000).toFixed(1)} s`;
+    if (!li.pruned) { return run; }
+    return `${run}, pruned ${li.pruned} ${li.pruned === 1 ? 'stream' : 'streams'}`;
   });
 
   constructor() {

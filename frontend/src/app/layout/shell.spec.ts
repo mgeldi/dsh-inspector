@@ -133,12 +133,40 @@ describe('Shell', () => {
     expect(spy).toHaveBeenCalledTimes(1);
 
     http.expectOne(r => r.url === '/api/index/run').flush({
-      streams: 12, sessions: 11, steps: 22, toolCalls: 32, findings: 9, parseFailures: 0, durationMs: 120,
+      streams: 12, sessions: 11, steps: 22, toolCalls: 32, findings: 9, pruned: 0, parseFailures: 0, durationMs: 120,
     });
     http.expectOne(r => r.url === '/api/overview').flush(overview);
     http.expectOne(r => r.url === '/api/findings').flush(emptyFindings);
     fixture.detectChanges();
 
     expect(el.querySelector('.index-result')?.textContent).toBe('indexed 12 streams, 9 findings in 0.1 s');
+  });
+
+  it('names the streams a run discarded, in the singular when it discarded one', () => {
+    // A run now makes the index equal to the corpus, so it can throw rows away — and a line
+    // that only ever counts what went in would let a whole corpus vanish unnoticed.
+    store.reindex();
+    http.expectOne(r => r.url === '/api/index/run').flush({
+      streams: 11, sessions: 10, steps: 21, toolCalls: 30, findings: 8, pruned: 1, parseFailures: 0, durationMs: 120,
+    });
+    http.expectOne(r => r.url === '/api/overview').flush(overview);
+    http.expectOne(r => r.url === '/api/findings').flush(emptyFindings);
+    fixture.detectChanges();
+
+    expect(el.querySelector('.index-result')?.textContent)
+      .toBe('indexed 11 streams, 8 findings in 0.1 s, pruned 1 stream');
+  });
+
+  it('counts discarded streams in the plural', () => {
+    store.reindex();
+    http.expectOne(r => r.url === '/api/index/run').flush({
+      streams: 9, sessions: 8, steps: 18, toolCalls: 27, findings: 6, pruned: 3, parseFailures: 0, durationMs: 120,
+    });
+    http.expectOne(r => r.url === '/api/overview').flush(overview);
+    http.expectOne(r => r.url === '/api/findings').flush(emptyFindings);
+    fixture.detectChanges();
+
+    expect(el.querySelector('.index-result')?.textContent)
+      .toBe('indexed 9 streams, 6 findings in 0.1 s, pruned 3 streams');
   });
 });

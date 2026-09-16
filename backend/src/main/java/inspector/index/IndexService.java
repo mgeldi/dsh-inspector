@@ -8,6 +8,7 @@ import inspector.ingest.SessionIngestor;
 import inspector.ingest.SessionSource;
 import inspector.ingest.StreamFacts;
 import inspector.store.IndexWriter;
+import inspector.store.IndexWriter.StreamKey;
 import inspector.store.IndexWriter.Written;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -20,6 +21,11 @@ import org.springframework.stereotype.Service;
  * Scan → ingest → detect → write, one corpus at a time. The corpus and the harness version
  * are parameters, not configuration reads, so two runs over two corpora — two version
  * strings, two cohorts — need no test-only seam in production code.
+ *
+ * <p>A run makes the index <em>equal</em> to the corpus rather than merging into it: after the
+ * last stream is written, {@link IndexWriter#pruneToWritten} discards the streams the scan did
+ * not reach. The database is a derived cache of the corpus, so a session that is no longer in
+ * the corpus must not stay on screen describing itself.
  */
 @Service
 public final class IndexService {
@@ -64,6 +70,7 @@ public final class IndexService {
         int findings = 0;
         long parseFailures = 0;
         final long indexedAt = System.currentTimeMillis();
+        final List<StreamKey> written = new ArrayList<>();
 
         for (final SessionSource source : sources) {
             final StreamFacts facts = ingestor.ingest(source);
@@ -71,21 +78,27 @@ public final class IndexService {
             for (final Detector detector : detectors) {
                 produced.addAll(detector.detect(facts));
             }
-            final Written written = writer.writeStream(source, facts, produced, harnessVersion,
+            final Written writtenRows = writer.writeStream(source, facts, produced, harnessVersion,
                     properties.evidence().store(), indexedAt);
-            steps += written.steps();
-            calls += written.toolCalls();
-            findings += written.findings();
+            steps += writtenRows.steps();
+            calls += writtenRows.toolCalls();
+            findings += writtenRows.findings();
             parseFailures += facts.parseFailures();
+            written.add(new StreamKey(facts.session().id(), facts.session().sourceFile()));
         }
+        // Then, once for the whole run: whatever the scan did not reach is no longer in the
+        // corpus and has to leave the index with it. Per stream this cannot be seen at all —
+        // writeStream only ever deletes the stream it is about to write.
+        final int pruned = writer.pruneToWritten(corpus, written);
         writer.seedMeta(SCHEMA_VERSION);
         // What this index came from, so a later boot pointing at a different corpus can tell.
         writer.seedCorpus(corpus.toAbsolutePath().normalize().toString());
 
         final IndexSummary summary = new IndexSummary(sources.size(), writer.countSessions(),
-                steps, calls, findings, parseFailures, System.currentTimeMillis() - started);
-        LOG.info("indexed {} streams, {} findings in {} ms ({} parse failures)",
-                summary.streams(), summary.findings(), summary.durationMs(), summary.parseFailures());
+                steps, calls, findings, pruned, parseFailures, System.currentTimeMillis() - started);
+        LOG.info("indexed {} streams, {} findings in {} ms ({} parse failures, {} pruned)",
+                summary.streams(), summary.findings(), summary.durationMs(), summary.parseFailures(),
+                summary.pruned());
         return summary;
     }
 }

@@ -164,7 +164,7 @@ describe('InsightsStore', () => {
     const post = http.expectOne(r => r.url === '/api/index/run');
     expect(post.request.method).toBe('POST');
     post.flush({
-      streams: 168, sessions: 165, steps: 13733, toolCalls: 16450, findings: 389, parseFailures: 0, durationMs: 4300,
+      streams: 168, sessions: 165, steps: 13733, toolCalls: 16450, findings: 389, pruned: 0, parseFailures: 0, durationMs: 4300,
     });
 
     http.expectOne(r => r.url === '/api/overview').flush(goodOverview);

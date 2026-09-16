@@ -128,6 +128,56 @@ final class IndexServiceTest {
         assertThat(second.streams()).isEqualTo(2);
         assertThat(second.sessions()).isEqualTo(2);
         assertThat(second.findings()).isEqualTo(3);
+        assertThat(second.pruned()).isZero();
+    }
+
+    @Test
+    void aStreamThatVanishedFromTheCorpusIsGoneFromTheIndexOnTheNextRun() throws IOException {
+        // The defect as a user met it: the run's summary line said 8 findings, the tiles next
+        // to it said 9, and the extra one belonged to a session that was no longer in the
+        // corpus. writeStream deletes the stream it is about to write and nothing else, so
+        // nothing ever removed the rows of a stream that stopped being scanned.
+        service.run();
+        logAppender.list.clear();
+        Files.delete(corpus.resolve("proj-b/s-2/" + Convention.FILE_V0));
+
+        final IndexSummary second = service.run(corpus, "test-version");
+
+        assertThat(second.streams()).isEqualTo(1);
+        assertThat(second.sessions()).isEqualTo(1);
+        assertThat(second.pruned()).isEqualTo(1);
+        // gone from every table that carried it, evidence rows included
+        assertThat(counts()).isEqualTo(Map.of(
+                "session", 1, "step", 1, "tool_call", 4, "finding", 2, "shell_evidence", 1));
+        // the assertion that matters: what the run reports and what the index can serve are
+        // the same numbers, because a dashboard showing either is showing one screen
+        assertThat(count("session")).isEqualTo(second.streams());
+        assertThat(count("step")).isEqualTo(second.steps());
+        assertThat(count("finding")).isEqualTo(second.findings());
+        // and pruning a stream leaves no orphan behind — child rows go before their parent
+        assertThat(jdbc.queryForObject("select count(*) from shell_evidence where finding_id"
+                + " not in (select id from finding)", Integer.class)).isZero();
+        // counts only: a source_file is a path inside the corpus
+        assertThat(logMessages(Level.INFO)).anyMatch(msg -> msg.contains("pruned them"));
+        assertThat(logMessages(Level.INFO)).noneMatch(msg -> msg.contains(corpus.toString()));
+    }
+
+    @Test
+    void aRunOverADifferentCorpusPrunesNothingItNeverRead() throws IOException {
+        // The guard that keeps the prune from becoming a wipe: rows the run did not scan are
+        // only prunable when the index says it came from the corpus being indexed. Here it
+        // came from another one, so switching corpora stays resetIfCorpusChanged's business.
+        service.run();
+        final Path other = temp.resolve("other-corpus");
+        writeS1(other);
+
+        final IndexSummary second = service.run(other, "other-version");
+
+        assertThat(second.streams()).isEqualTo(1);
+        assertThat(second.pruned()).isZero();
+        // s-2 belongs to the other corpus: still there, still to be cleared by the reset
+        assertThat(count("session")).isEqualTo(2);
+        assertThat(count("finding")).isEqualTo(3);
     }
 
     @Test

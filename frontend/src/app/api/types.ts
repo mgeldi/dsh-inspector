@@ -45,9 +45,13 @@ export interface CohortRow {
  */
 export interface CohortPageDto { groupBy: string; baseline: string | null; basisNote: string | null; cohorts: CohortRow[]; }
 
+/**
+ * `pruned` is how many streams the run discarded because the corpus no longer holds them.
+ * It is a count and nothing else — the run reports what it removed, never which file.
+ */
 export interface IndexSummaryDto {
   streams: number; sessions: number; steps: number; toolCalls: number;
-  findings: number; parseFailures: number; durationMs: number;
+  findings: number; pruned: number; parseFailures: number; durationMs: number;
 }
 
 export type SortField = 'code' | 'detector' | 'session' | 'plane' | 'time' | 'confidence';

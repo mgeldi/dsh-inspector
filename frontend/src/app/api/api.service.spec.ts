@@ -35,7 +35,7 @@ describe('ApiService', () => {
   it('posts the re-index and reports the counts', () => {
     api.runIndex().subscribe();
     http.expectOne('/api/index/run').flush({
-      streams: 12, sessions: 11, steps: 22, toolCalls: 32, findings: 9, parseFailures: 0, durationMs: 40
+      streams: 12, sessions: 11, steps: 22, toolCalls: 32, findings: 9, pruned: 0, parseFailures: 0, durationMs: 40
     });
   });
 });

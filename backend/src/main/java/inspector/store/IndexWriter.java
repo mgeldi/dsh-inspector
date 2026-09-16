@@ -9,7 +9,9 @@ import inspector.ingest.StreamFacts;
 import inspector.ingest.ToolCallRecord;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -39,6 +41,13 @@ public final class IndexWriter {
 
     /** What one write produced. The orchestrator sums these into its summary line. */
     public record Written(int steps, int toolCalls, int findings, int evidenceRows) {
+    }
+
+    /**
+     * What one stream is: the same {@code (sessionId, sourceFile)} pair {@link #writeStream}
+     * deletes by, and the pair the whole schema is keyed on.
+     */
+    public record StreamKey(String sessionId, String sourceFile) {
     }
 
     private final JdbcTemplate jdbc;
@@ -98,6 +107,53 @@ public final class IndexWriter {
                 sessionId, sourceFile);
         jdbc.update("delete from session where id = ? and source_file = ?",
                 sessionId, sourceFile);
+    }
+
+    /**
+     * Discards every stream of <em>this</em> corpus that the run did not write, so an index run
+     * makes the database equal to the corpus instead of merging into it. The database is a
+     * derived cache (DESIGN.md §4.2), which means the corpus is the only thing it is ever
+     * allowed to describe: a session removed from the corpus has to disappear from the
+     * dashboard too, or the screen shows findings no log contains and contradicts the summary
+     * line of the run that just finished.
+     *
+     * <p>Nothing is deleted when the index was seeded from a different corpus. Those rows are
+     * not this run's corpus, and a run that never read them cannot judge that they vanished —
+     * switching corpora is {@link #resetIfCorpusChanged}'s job, pruning is this one's. Silently
+     * deleting them here would also turn a stray {@code --inspector.corpus} typo into the loss
+     * of an index the operator never meant to touch.
+     *
+     * <p>Child-to-parent per stream, the same order {@link #wipe()} uses, in one transaction.
+     * Walking the {@code session} table is enough to find every vanished stream: one stream is
+     * one transaction in {@link #writeStream}, so its rows exist together or not at all and a
+     * stream with no session row has nothing else either.
+     *
+     * @param corpus   the corpus this run indexed, compared against the recorded one
+     * @param written  the streams this run wrote
+     * @return how many streams were discarded; zero when the index already matches the corpus
+     */
+    public int pruneToWritten(final Path corpus, final Collection<StreamKey> written) {
+        return tx.execute(status -> {
+            final String stored = storedCorpus();
+            final String expected = corpus.toAbsolutePath().normalize().toString();
+            if (stored == null || !expected.equals(stored)) {
+                return 0;
+            }
+            final Set<StreamKey> keep = Set.copyOf(written);
+            final List<StreamKey> vanished = jdbc.query(
+                    "select id, source_file from session order by id, source_file",
+                    (rs, rowNum) -> new StreamKey(rs.getString(1), rs.getString(2)))
+                    .stream().filter(key -> !keep.contains(key)).toList();
+            for (final StreamKey key : vanished) {
+                deleteStream(key.sessionId(), key.sourceFile());
+            }
+            // counts only: a source_file is a path inside the corpus
+            if (!vanished.isEmpty()) {
+                LOG.info("the corpus no longer holds {} streams this index still described;"
+                        + " pruned them", vanished.size());
+            }
+            return vanished.size();
+        });
     }
 
     private int insertSteps(final String sessionId, final String sourceFile, final StreamFacts facts) {
@@ -236,8 +292,7 @@ public final class IndexWriter {
      */
     public int resetIfCorpusChanged(final Path corpus) {
         return tx.execute(status -> {
-            final String stored = jdbc.query("select value from meta where key = 'corpus'",
-                    rs -> rs.next() ? rs.getString(1) : null);
+            final String stored = storedCorpus();
             final String expected = corpus.toAbsolutePath().normalize().toString();
             if (expected.equals(stored)) {
                 return 0;
@@ -295,6 +350,12 @@ public final class IndexWriter {
     /** The stored schema version; null on a database no index run has versioned yet. */
     private String storedSchemaVersion() {
         return jdbc.query("select value from meta where key = 'schema_version'",
+                rs -> rs.next() ? rs.getString(1) : null);
+    }
+
+    /** The corpus the last run recorded; null on a database no index run has attributed yet. */
+    private String storedCorpus() {
+        return jdbc.query("select value from meta where key = 'corpus'",
                 rs -> rs.next() ? rs.getString(1) : null);
     }
 
