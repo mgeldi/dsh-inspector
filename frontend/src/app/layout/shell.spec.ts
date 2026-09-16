@@ -109,6 +109,38 @@ describe('Shell', () => {
     expect(el.querySelector('.error-bar'), 'error bar after dismiss').toBeNull();
   });
 
+  /**
+   * The distinction the whole endpoint exists to make readable: a refused duplicate of a run
+   * that is already going gets a bar of its own, announced with role=status, worded by the
+   * store rather than quoted from the server's log sentence.
+   */
+  it('renders a refused second index run as a notice bar, not as an error bar', () => {
+    store.reindex();
+    http.expectOne(r => r.url === '/api/index/run').flush(
+      {
+        status: 409,
+        type: 'urn:dsh-inspector:index-already-running',
+        title: 'Index already running',
+        detail: 'an index run is already in progress; this one was refused rather than'
+          + ' interleaved with the run that is going on',
+      },
+      { status: 409, statusText: 'Conflict' },
+    );
+    fixture.detectChanges();
+
+    const bar = el.querySelector('.notice-bar');
+    expect(bar, 'notice bar').toBeTruthy();
+    expect(bar!.getAttribute('role'), 'an announcement, not an interruption').toBe('status');
+    expect(el.querySelector('.error-bar'), 'the error bar stays away').toBeNull();
+    expect(bar!.textContent).toContain('An index run is already in progress');
+    expect(bar!.textContent, 'the server sentence is for the log, not the toolbar')
+      .not.toContain('interleaved');
+
+    (el.querySelector('.notice-dismiss') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(el.querySelector('.notice-bar'), 'notice bar after dismiss').toBeNull();
+  });
+
   it('renders the progress bar only while the store is busy, and from its counter', () => {
     // Presence, not a [hidden] attribute: Material's own stylesheet sets display:block on the
     // bar, which overrides the UA rule behind [hidden], so a hidden-marked bar animated over an

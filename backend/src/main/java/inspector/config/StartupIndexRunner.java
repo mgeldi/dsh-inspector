@@ -1,5 +1,6 @@
 package inspector.config;
 
+import inspector.index.IndexAlreadyRunningException;
 import inspector.index.IndexService;
 import inspector.store.IndexWriter;
 import java.nio.file.Files;
@@ -35,6 +36,24 @@ public final class StartupIndexRunner implements ApplicationRunner {
 
     @Override
     public void run(final ApplicationArguments args) {
+        try {
+            // The whole decide-and-rebuild sequence holds the run guard: the resets are as
+            // destructive as a run, and the embedded server is already accepting requests while
+            // runners execute. Without this, a request that beats the runner to the lock would
+            // have its rows reset out from under it a moment later.
+            indexService.underRunLock(() -> indexIfWanted(args));
+        } catch (final IndexAlreadyRunningException ex) {
+            // The other direction: something reached POST /api/index/run before this runner did.
+            // Aborting here would destroy the boot that request was aiming at, and the run that
+            // won is indexing the same configured corpus this boot would have — so say what
+            // happened and come up.
+            LOG.warn("an index run was already in progress while startup was deciding whether to"
+                    + " index; startup started no second run and the index it is building is left"
+                    + " alone");
+        }
+    }
+
+    private void indexIfWanted(final ApplicationArguments args) {
         // A schema bump is an invalidation, not a migration: the reset runs whether or not
         // this boot goes on to index, because a stale index is broken either way.
         writer.resetIfStale(IndexService.SCHEMA_VERSION);

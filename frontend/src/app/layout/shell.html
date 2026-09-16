@@ -46,6 +46,15 @@
         <button type="button" class="error-dismiss" aria-label="Dismiss error" (click)="dismissError()">×</button>
       </div>
     }
+
+    @if (store.notice()) {
+      <!-- role=status, not alert: a refused duplicate of a request that is already running is
+           an announcement about the world, not a failure that needs interrupting. -->
+      <div class="notice-bar" role="status">
+        <span class="notice-text">{{ store.notice() }}</span>
+        <button type="button" class="notice-dismiss" aria-label="Dismiss notice" (click)="dismissNotice()">×</button>
+      </div>
+    }
   </header>
 
   <div class="frame-body">

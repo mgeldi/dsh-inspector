@@ -654,6 +654,15 @@ set of filters that shrinks as you use it. The other population reads — overvi
 A full scan takes seconds (§12), so there is no job to poll: an async run, a progress bar and a
 run-history table would be machinery to hide a wait that does not exist.
 
+It is **single-flight**. One run holds a lock for its whole duration and a second request is
+refused with `409`, not queued and not interleaved: the transaction boundary is per stream, so two
+runs over the same corpus delete and insert the same tables underneath each other, and the second
+run's prune can discard rows the first is still writing. The startup index takes
+the same lock, and because the embedded server is already listening while startup runners run, a
+manual request that arrives mid-startup is a `409` as well. The frontend shows that status as a
+plain statement — an index is already running — in a bar that is not the error bar. The async
+shape that would replace all of this stays deferred; it is item 8 below.
+
 Every GET shares one `InsightFilter` binding, so filtering is one contract rather than seven
 ad-hoc query params. Errors are RFC 9457 problem details. An unknown filter value is a 400
 carrying the allowed set — a wrong filter must fail loudly, because a silently-empty dashboard
@@ -834,6 +843,16 @@ specific to this app:
 7. **Adopt a migration engine at the second migration.** §4.2 defers Flyway deliberately; the
    `meta.schema_version` row exists so that adopting it is a mechanical step rather than a
    schema archaeology task once `V2` is real.
+8. **An asynchronous index job, with a job id and a status endpoint.** `POST /api/index/run` is
+   synchronous and single-flight (§7): a second request during a run is refused with `409`. The
+   enterprise shape is `202 Accepted` + a job id + a status endpoint to poll — which is a job
+   store, a job lifecycle, and a screen that shows progress and the history of runs. It is not
+   built because one user watching one dashboard cannot spend it: the wait it would hide is a few
+   seconds (§12), and the refusal it would replace is the *correct* answer — a second run would
+   rebuild the same corpus again and report the same numbers. Add it back when a run is slow
+   enough that "press again afterwards" stops being a tolerable answer, or the moment a second
+   process shares the database file, because then the lock in `IndexService` stops being the
+   whole guard and a queue becomes the only place both writers can meet.
 
 *Retired:* an earlier draft listed "add `isError` upstream" as the top open item. §3.1 shows a
 typed code already exists. Deleting that item is the clearest evidence of what the review

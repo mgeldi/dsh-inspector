@@ -13,6 +13,7 @@ import inspector.store.IndexWriter.Written;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,12 @@ public final class IndexService {
     private final List<Detector> detectors;
     private final IndexWriter writer;
     private final InspectorProperties properties;
+    /**
+     * Held for the whole of one run, not one stream. One lock instance in one service instance
+     * is the whole guard because the application is one process over one SQLite file — which is
+     * what DESIGN.md §9 commits to; two processes would need the lock to live in the database.
+     */
+    private final ReentrantLock runLock = new ReentrantLock();
 
     public IndexService(final CorpusScanner scanner, final SessionIngestor ingestor,
                         final List<Detector> detectors, final IndexWriter writer,
@@ -58,7 +65,56 @@ public final class IndexService {
         return run(Path.of(properties.corpus()), properties.harnessVersion());
     }
 
+    /**
+     * One run at a time. The lock is taken with {@code tryLock} and never waited on: a caller
+     * that arrives while a run is going on is refused, because a queued second run would rebuild
+     * the same corpus again for no reason — and between the refusal and the queue it would have
+     * sat behind, the first run's prune has already made the index equal to the corpus.
+     *
+     * <p>{@link inspector.config.StartupIndexRunner} indexes through this method, so a manual
+     * request that arrives while startup is still indexing is refused the same way rather than
+     * allowed to interleave with a run the operator never asked for. (The embedded server is
+     * already listening while {@code ApplicationRunner}s run — that is what makes the window
+     * real rather than theoretical.)
+     *
+     * @throws IndexAlreadyRunningException if another run holds the lock
+     */
     public IndexSummary run(final Path corpus, final String harnessVersion) {
+        if (!runLock.tryLock()) {
+            throw new IndexAlreadyRunningException();
+        }
+        try {
+            return index(corpus, harnessVersion);
+        } finally {
+            runLock.unlock();
+        }
+    }
+
+    /**
+     * Hold the same single-flight guard across a sequence of steps, so they cannot interleave
+     * with a run either. Only startup needs it: a reset is as destructive as a rebuild, and a
+     * guard that covers the rebuild but not the reset leaves a window in which a boot wipes the
+     * tables a run is filling.
+     *
+     * <p>Re-entrance is the point of the {@link ReentrantLock}: startup calls
+     * {@link #run(Path, String)} from inside {@code body}, and the same thread's second
+     * {@code tryLock} counts a nested hold rather than refusing it. A different thread is still
+     * refused, which is the whole contract.
+     *
+     * @throws IndexAlreadyRunningException if a run holds the guard on another thread
+     */
+    public void underRunLock(final Runnable body) {
+        if (!runLock.tryLock()) {
+            throw new IndexAlreadyRunningException();
+        }
+        try {
+            body.run();
+        } finally {
+            runLock.unlock();
+        }
+    }
+
+    private IndexSummary index(final Path corpus, final String harnessVersion) {
         final long started = System.currentTimeMillis();
         final List<SessionSource> sources = scanner.scan(corpus);
         if (sources.isEmpty()) {

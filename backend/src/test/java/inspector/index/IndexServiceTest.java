@@ -1,6 +1,7 @@
 package inspector.index;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
@@ -12,12 +13,14 @@ import inspector.config.StartupIndexRunner;
 import inspector.detect.Detector;
 import inspector.detect.ErrorPlaneDetector;
 import inspector.detect.FatalTurnDetector;
+import inspector.detect.Finding;
 import inspector.detect.RetryStormDetector;
 import inspector.detect.StampGuardDetector;
 import inspector.ingest.Convention;
 import inspector.ingest.CorpusScanner;
 import inspector.ingest.ShellAnalyzer;
 import inspector.ingest.SessionIngestor;
+import inspector.ingest.StreamFacts;
 import inspector.store.IndexWriter;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
@@ -26,6 +29,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Nested;
@@ -234,6 +242,236 @@ final class IndexServiceTest {
         assertThat(count("session")).isZero();
         assertThat(logMessages(Level.WARN))
                 .anyMatch(msg -> msg.contains("no session streams"));
+    }
+
+    /**
+     * A run is single-flight (DESIGN.md §9). Every pause here is a detector waiting on a latch
+     * that the test itself holds, never a sleep: "while a run is in flight" is a state these
+     * tests establish and can point at, not a timing window they hope to fall into.
+     *
+     * <p>Both callers use the <em>same</em> service instance on purpose — the lock is a field, and
+     * in the application there is exactly one instance, the one {@code IndexController} and
+     * {@code StartupIndexRunner} were both handed. Two instances would have tested a lock nobody
+     * contends with.
+     */
+    @Nested
+    final class SingleFlight {
+
+        /** Stands in the pipeline and holds the run open until the test lets it finish. */
+        private final class Gate implements Detector {
+
+            private final CountDownLatch entered;
+            private final CountDownLatch release;
+            private final AtomicInteger calls = new AtomicInteger();
+            private volatile boolean throwsOnce;
+
+            private Gate(final CountDownLatch entered, final CountDownLatch release) {
+                this.entered = entered;
+                this.release = release;
+            }
+
+            @Override
+            public String id() {
+                return "gate";
+            }
+
+            @Override
+            public List<Finding> detect(final StreamFacts facts) {
+                if (throwsOnce && calls.incrementAndGet() == 1) {
+                    throw new IllegalStateException("the detector failed mid-run");
+                }
+                entered.countDown();
+                try {
+                    if (!release.await(10, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("the test never released the gate");
+                    }
+                } catch (final InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(ex);
+                }
+                return List.of();
+            }
+        }
+
+        /** The real pipeline over the real temp database, with only the detectors swapped. */
+        private IndexService gated(final Gate gate) {
+            final ObjectMapper mapper = new ObjectMapper();
+            return new IndexService(new CorpusScanner(),
+                    new SessionIngestor(mapper, new ShellAnalyzer(mapper)),
+                    List.of(gate), writer, propertiesOf(corpus));
+        }
+
+        @Test
+        void aSecondRunWhileOneIsInFlightIsRefusedRatherThanInterleaved() throws Exception {
+            final CountDownLatch entered = new CountDownLatch(1);
+            final CountDownLatch release = new CountDownLatch(1);
+            final IndexService single = gated(new Gate(entered, release));
+            final AtomicReference<IndexSummary> finished = new AtomicReference<>();
+            final AtomicReference<Throwable> failed = new AtomicReference<>();
+            final Thread running = new Thread(() -> {
+                try {
+                    finished.set(single.run(corpus, "test-version"));
+                } catch (final RuntimeException ex) {
+                    failed.set(ex);
+                }
+            }, "index-in-flight");
+
+            running.start();
+            assertThat(entered.await(10, TimeUnit.SECONDS))
+                    .as("the run is inside the pipeline, so it holds the lock")
+                    .isTrue();
+
+            assertThatThrownBy(() -> single.run(corpus, "test-version"))
+                    .isInstanceOf(IndexAlreadyRunningException.class);
+
+            release.countDown();
+            running.join(TimeUnit.SECONDS.toMillis(10));
+            assertThat(running.isAlive()).as("the gate let the run finish").isFalse();
+            assertThat(failed.get()).isNull();
+            assertThat(finished.get().streams()).isEqualTo(2);
+
+            // The lock came back with the run. A guard that leaks after one success bricks the
+            // only mutating endpoint this application has.
+            assertThat(single.run(corpus, "test-version").streams()).isEqualTo(2);
+        }
+
+        @Test
+        void twoRunsAskedForInTheSameMomentProduceOneRunAndOneRefusal() throws Exception {
+            final CountDownLatch entered = new CountDownLatch(1);
+            final CountDownLatch release = new CountDownLatch(1);
+            final CountDownLatch refusedOnce = new CountDownLatch(1);
+            final IndexService single = gated(new Gate(entered, release));
+            final CyclicBarrier bothAsk = new CyclicBarrier(2);
+            final AtomicInteger completed = new AtomicInteger();
+            final AtomicInteger refused = new AtomicInteger();
+            final CountDownLatch bothSettled = new CountDownLatch(2);
+            final Runnable ask = () -> {
+                awaitQuietly(bothAsk);
+                try {
+                    single.run(corpus, "test-version");
+                    completed.incrementAndGet();
+                } catch (final IndexAlreadyRunningException ex) {
+                    refused.incrementAndGet();
+                    refusedOnce.countDown();
+                } finally {
+                    bothSettled.countDown();
+                }
+            };
+            final Thread a = new Thread(ask, "ask-a");
+            final Thread b = new Thread(ask, "ask-b");
+            a.start();
+            b.start();
+
+            // The order that matters is established, not assumed: one run is inside the pipeline
+            // and the other has already been turned away, while the first is still holding on.
+            assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(refusedOnce.await(10, TimeUnit.SECONDS))
+                    .as("the loser was refused while the winner still holds the lock")
+                    .isTrue();
+
+            release.countDown();
+            assertThat(bothSettled.await(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(completed.get()).as("exactly one run happened").isEqualTo(1);
+            assertThat(refused.get()).as("exactly one was refused").isEqualTo(1);
+        }
+
+        /**
+         * The window the frontend cannot protect: the embedded server is already accepting
+         * requests while {@code ApplicationRunner} is still indexing, so a manual run can arrive
+         * mid-startup. The database is still empty at that moment — the gate is holding the run
+         * on the first stream, before its rows are written — so the startup path really does
+         * reach {@code run} rather than short-circuiting on a populated index.
+         */
+        @Test
+        void aManualRunAskedForWhileStartupIsStillIndexingIsRefused() throws Exception {
+            final CountDownLatch entered = new CountDownLatch(1);
+            final CountDownLatch release = new CountDownLatch(1);
+            final IndexService single = gated(new Gate(entered, release));
+            final AtomicReference<Throwable> startupFailed = new AtomicReference<>();
+            final Thread startup = new Thread(() -> {
+                try {
+                    new StartupIndexRunner(single, propertiesOf(corpus), writer)
+                            .run(new DefaultApplicationArguments());
+                } catch (final RuntimeException ex) {
+                    startupFailed.set(ex);
+                }
+            }, "startup-index-in-flight");
+
+            startup.start();
+            assertThat(entered.await(10, TimeUnit.SECONDS))
+                    .as("startup indexing is inside the pipeline")
+                    .isTrue();
+
+            assertThatThrownBy(() -> single.run(corpus, "test-version"))
+                    .isInstanceOf(IndexAlreadyRunningException.class);
+            assertThat(writer.countSessions())
+                    .as("the refused request wrote nothing on its way out")
+                    .isZero();
+
+            release.countDown();
+            startup.join(TimeUnit.SECONDS.toMillis(10));
+            assertThat(startupFailed.get()).isNull();
+            assertThat(writer.countSessions()).isEqualTo(2);
+        }
+
+        /**
+         * The other direction, which is the one that could have made this guard worse than the
+         * bug it fixes: the embedded server is listening before {@code ApplicationRunner} runs,
+         * so a request can reach the lock first. The runner must then step aside — throwing there
+         * would abort the very boot the request was waiting for, and the run that won is indexing
+         * the same configured corpus.
+         */
+        @Test
+        void startupStepsAsideRatherThanFailingWhenARunGotThereFirst() throws Exception {
+            final CountDownLatch entered = new CountDownLatch(1);
+            final CountDownLatch release = new CountDownLatch(1);
+            final IndexService single = gated(new Gate(entered, release));
+            final Thread manual = new Thread(() -> single.run(corpus, "test-version"), "manual-run-first");
+            manual.start();
+            assertThat(entered.await(10, TimeUnit.SECONDS)).isTrue();
+
+            // No exception, and no second run: the runner warns and returns.
+            new StartupIndexRunner(single, propertiesOf(corpus), writer)
+                    .run(new DefaultApplicationArguments());
+            assertThat(logMessages(Level.WARN))
+                    .anyMatch(msg -> msg.contains("already in progress while startup"));
+            assertThat(writer.countSessions())
+                    .as("startup started no competing rebuild")
+                    .isZero();
+
+            release.countDown();
+            manual.join(TimeUnit.SECONDS.toMillis(10));
+            assertThat(writer.countSessions()).isEqualTo(2);
+        }
+
+        /** A run that dies partway must not leave the lock held by a thread that no longer exists. */
+        @Test
+        void aRunThatThrowsHandsTheLockBack() {
+            final CountDownLatch entered = new CountDownLatch(1);
+            // An open gate: this case is about the second run getting in at all, not about
+            // holding it open. Getting to the gate is already proof the lock was free.
+            final CountDownLatch release = new CountDownLatch(0);
+            final Gate gate = new Gate(entered, release);
+            gate.throwsOnce = true;
+            final IndexService single = gated(gate);
+
+            assertThatThrownBy(() -> single.run(corpus, "test-version"))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("the detector failed mid-run");
+
+            gate.throwsOnce = false;
+            assertThat(single.run(corpus, "test-version").streams())
+                    .as("the next run is answered, not refused")
+                    .isEqualTo(2);
+        }
+
+        private static void awaitQuietly(final CyclicBarrier barrier) {
+            try {
+                barrier.await(10, TimeUnit.SECONDS);
+            } catch (final Exception ex) {
+                throw new IllegalStateException(ex);
+            }
+        }
     }
 
     @Nested

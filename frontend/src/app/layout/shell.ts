@@ -73,4 +73,5 @@ export class Shell {
 
   reindex(): void { this.store.reindex(); }
   dismissError(): void { this.store.dismissError(); }
+  dismissNotice(): void { this.store.dismissNotice(); }
 }

@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { DestroyRef, computed, Injectable, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import type { Observable } from 'rxjs';
-import { describeProblem, isProblem, type ProblemDetail } from '../api/problem';
+import { describeProblem, isIndexAlreadyRunning, isProblem, type ProblemDetail } from '../api/problem';
 import { ApiService } from '../api/api.service';
 import type {
   CohortPageDto, FindingDetailDto, FindingsPageDto, IndexSummaryDto, OverviewDto,
@@ -58,6 +58,14 @@ export class InsightsStore {
   /** The human sentence from the last rejected request; a later success clears it. */
   readonly error = signal<string | null>(null);
 
+  /**
+   * A request the server refused for a reason that is not a fault: an index run is already
+   * going. It gets a bar of its own, in a colour that is not the error colour, because the one
+   * thing this screen cannot afford is a red alert that means "nothing happened" — people start
+   * dismissing the ones that do.
+   */
+  readonly notice = signal<string | null>(null);
+
   // Findings-only request state. The from/to/schema/model/preset/harnessVersion filters
   // above are shared with overview; these are not. The backend also accepts per-row
   // plane/detector/session/code filters (FindingsRequest); no screen drives them, so the
@@ -95,6 +103,9 @@ export class InsightsStore {
    * back, so dismissing can never hide a new failure permanently.
    */
   dismissError(): void { this.error.set(null); }
+
+  /** Same rule as {@link dismissError}: the store is the only writer, so nothing stays hidden. */
+  dismissNotice(): void { this.notice.set(null); }
 
   setSort(sort: { field: SortField; dir: SortDir } | null): void { this.sort.set(sort); }
   setPage(page: number): void { this.page.set(page); }
@@ -187,19 +198,36 @@ export class InsightsStore {
         this.busy.update(b => b - 1);
         onSettled?.();
         this.error.set(null);
+        this.notice.set(null);
         onValue(value);
       },
       error: err => {
         this.busy.update(b => b - 1);
         onSettled?.();
+        // At most one bar, and it always describes the most recent answer. Two bars at once
+        // ("a run is in progress" above "something failed") is a screen that argues with itself.
+        //
+        // A refused second index run is not a fault to report: the work the click asked for is
+        // happening right now. In its own bar, in this file's own words — the server's `detail`
+        // is written to be legible in a log, and it says "interleaved".
+        if (isIndexAlreadyRunning((err as HttpErrorResponse | null)?.error)) {
+          this.error.set(null);
+          this.notice.set(ALREADY_INDEXING);
+          return;
+        }
         // A rejected request: surface the human sentence and leave the previous data in
         // place. An empty dashboard that means "you typed something wrong" reads as
         // "no problems found" — the most dangerous wrong answer this tool can give.
+        this.notice.set(null);
         this.error.set(describeError(err));
       },
     });
   }
 }
+
+/** The toolbar's own sentence for a refused second run. No promise the other run will refresh. */
+const ALREADY_INDEXING =
+  'An index run is already in progress, so this request was refused. Reload after it finishes to see the rebuilt index.';
 
 /** The error a human can act on: the problem+json sentence, or the transport message. */
 function describeError(err: unknown): string {

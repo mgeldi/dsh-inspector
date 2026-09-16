@@ -118,6 +118,46 @@ describe('InsightsStore', () => {
     expect(store.error()).toContain('V3');
   });
 
+  /**
+   * A 409 from the index endpoint means the server is already doing the thing that was just
+   * asked for. Red bar would be a lie — nothing went wrong — and a red bar people learn to
+   * ignore is worse than no bar.
+   */
+  it('reports a refused second index run as a notice, not as an error', () => {
+    store.reindex();
+    http.expectOne(r => r.url === '/api/index/run').flush(
+      {
+        status: 409,
+        type: 'urn:dsh-inspector:index-already-running',
+        title: 'Index already running',
+        detail: 'an index run is already in progress; this one was refused rather than'
+          + ' interleaved with the run that is going on',
+      },
+      { status: 409, statusText: 'Conflict' });
+
+    expect(store.notice(), 'notice').toContain('already in progress');
+    expect(store.error(), 'error stays empty').toBeNull();
+    expect(store.lastIndex(), 'a refused run produced no summary').toBeNull();
+    // The button describes its own work: this request is over, whatever the other one is doing.
+    expect(store.indexing()).toBe(false);
+  });
+
+  it('still calls a genuine index failure an error, and clears the notice on a later success', () => {
+    store.reindex();
+    http.expectOne(r => r.url === '/api/index/run').flush(
+      { status: 409, type: 'urn:dsh-inspector:index-already-running', title: 'Index already running' },
+      { status: 409, statusText: 'Conflict' });
+    expect(store.notice()).toBeTruthy();
+
+    store.reindex();
+    http.expectOne(r => r.url === '/api/index/run').flush(
+      { status: 500, type: 'urn:dsh-inspector:bad-request', title: 'Internal error', detail: 'disk went away' },
+      { status: 500, statusText: 'Server Error' });
+
+    expect(store.error()).toContain('disk went away');
+    expect(store.notice(), 'the notice does not survive a later request').toBeNull();
+  });
+
   it('treats busy as a counter, so the earlier completion does not clear the later spinner', () => {
     store.loadOverview();
     store.loadFindings();
