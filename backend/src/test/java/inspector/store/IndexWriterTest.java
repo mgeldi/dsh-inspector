@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.zaxxer.hikari.HikariDataSource;
 import inspector.query.FindingFilters;
 import inspector.query.InsightFilter;
-import inspector.dto.FindingDetailDto;
 import inspector.detect.Category;
 import inspector.detect.Finding;
 import inspector.detect.Plane;
@@ -303,8 +302,10 @@ final class IndexWriterTest {
                     assertThat(cohort.guardFindings()).isZero();
                 });
 
-        // the finding on the matched row is unaffected: the seq join still resolves its tool
-        final FindingDetailDto detail =
+        // the finding on the matched row is unaffected: the seq join still resolves its tool.
+        // Asserted on the store's own row, because that is what the store reads — the wire
+        // record is FindingsService's business and this test has no business knowing it.
+        final FindingRepository.FindingDetailRow detail =
                 new FindingRepository(client).detail(1L).orElseThrow();
         assertThat(detail.tool()).isEqualTo("edit");
     }

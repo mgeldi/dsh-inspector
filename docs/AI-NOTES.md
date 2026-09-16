@@ -131,6 +131,8 @@ signals force-ignored for background jobs. Each was preceded by a green run.
 
 | Every `/api/overview` response carried the id of every session in the index — 6,812 of its 8,997 bytes on the author's corpus, and a list no control reads, since the rail has four facets | Found by the external review pass (§0), then **split by measuring it**: the seven `select distinct` queries blamed for the cost turn out to be 0.9 ms of an 18.6 ms request, so the cache the task proposed was dropped and only the unbounded list was cut from the wire (`dto.VocabularyOptions`: six bounded lists, validated against the seventh) | A dashboard that grew heavier in proportion to how much it had been used, quietly — 4.1× the bytes per load, all of it ids, rising with every session ever indexed, on a screen whose tiles never changed |
 
+| `FindingRepository` mapped a `ResultSet` straight into `FindingDto` and `OverviewRepository` returned a nested DTO record, so the JSON contract and the SQL row mappers were the same types | Found by the external review pass (§0), then made unfalsifiable: `PackageCycleTest`'s new rule reads compiled constant pools, so even an inline fully-qualified import across the boundary fails the build. The blast radius was measured on both sides of the change — adding one wire field broke `FindingsService:104` afterwards and `FindingRepository:95`, a SQL mapper, before it | Every API change reaching into SQL: answering "the UI needs one more field" meant editing a query, so the two shapes could drift apart by the amount of whoever happened to notice the compile error — and the fix's own grep was passing on a javadoc exception until it was cleaned |
+
 ### Frontend
 
 | Defect | What caught it | What it would have cost |

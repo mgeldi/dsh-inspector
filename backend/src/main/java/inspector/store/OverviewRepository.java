@@ -1,7 +1,6 @@
 package inspector.store;
 
 import inspector.query.FindingFilters;
-import inspector.dto.OverviewDto;
 
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.core.simple.JdbcClient;
@@ -22,6 +21,11 @@ import java.util.Objects;
  * <p>Step throughput is grouped by schema and timing source, and the
  * medians are picked from the ordered rows here, never averaged from
  * aggregates: an empty bucket reads null, it does not divide by zero.
+ *
+ * <p>What crosses this boundary is a row of the index — {@link PlaneMixRow},
+ * {@link DetectorCountRow}, {@link SeriesPointRow}, {@link ThroughputBucket} — never a wire
+ * record. The medians stay here because they are a rule about reading the table; what the
+ * numbers are <i>called</i> on the way out is the service's business.
  */
 @Component
 public final class OverviewRepository {
@@ -43,6 +47,18 @@ public final class OverviewRepository {
 
     /** One daily bucket: the UTC day and a row count. */
     public record SeriesPointRow(String day, long count) {
+    }
+
+    /**
+     * One (schema, timing source) bucket of step throughput.
+     *
+     * <p>Named for what the query produces — a bucket of steps with two medians picked out of
+     * it — rather than for the JSON row it eventually becomes. Either median is null when the
+     * bucket holds no measured value; that null is the answer "not observed", and it must not
+     * become 0 on the way to the wire.
+     */
+    public record ThroughputBucket(
+            String schema, String timingSource, long steps, Double medianDecodeTps, Double medianTtftMs) {
     }
 
     public long sessionCount(final FindingFilters.Sql where) {
@@ -125,7 +141,7 @@ public final class OverviewRepository {
      * values; the mean of the two middles for even counts); a bucket with
      * no measured value reads null.
      */
-    public List<OverviewDto.ThroughputRow> throughput(final FindingFilters.Sql where) {
+    public List<ThroughputBucket> throughput(final FindingFilters.Sql where) {
         final String sql = "select s.\"schema\" as schema, st.timing_source as source, st.decode_tps as tps, "
                 + "st.ttft_ms as ttft " + STEP_JOIN + " " + where.asWhere();
         final Map<String, List<StepSample>> groups = new LinkedHashMap<>();
@@ -139,15 +155,15 @@ public final class OverviewRepository {
                 .forEach(sample -> groups.computeIfAbsent(sample.schema() + '\u0000' + sample.source(),
                         key -> new ArrayList<>()).add(sample));
 
-        final List<OverviewDto.ThroughputRow> rows = new ArrayList<>();
-        groups.values().forEach(samples -> rows.add(new OverviewDto.ThroughputRow(
+        final List<ThroughputBucket> rows = new ArrayList<>();
+        groups.values().forEach(samples -> rows.add(new ThroughputBucket(
                 samples.get(0).schema(),
                 samples.get(0).source(),
                 samples.size(),
                 median(samples.stream().map(StepSample::tps).filter(Objects::nonNull).toList()),
                 median(samples.stream().map(StepSample::ttft).filter(Objects::nonNull).toList()))));
-        rows.sort(Comparator.comparing(OverviewDto.ThroughputRow::schema)
-                .thenComparing(OverviewDto.ThroughputRow::timingSource));
+        rows.sort(Comparator.comparing(ThroughputBucket::schema)
+                .thenComparing(ThroughputBucket::timingSource));
         return rows;
     }
 

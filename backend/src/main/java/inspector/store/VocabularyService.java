@@ -27,8 +27,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>What <em>was</em> worth cutting is what one of these lists costs to serialise: the session
  * ids are 76% of an otherwise unfiltered {@code /api/overview} response and the only list that
- * grows with the corpus, so they stopped riding along. See
- * {@link inspector.dto.VocabularyOptions}.
+ * grows with the corpus, so they stopped riding along. The shape the endpoint actually sends is
+ * {@code VocabularyOptions}, which carries six of the seven lists this one reads.
  */
 @Component
 public final class VocabularyService {

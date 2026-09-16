@@ -63,13 +63,26 @@ public final class OverviewService {
             topDetectors.add(new OverviewDto.DetectorCount(row.detector(), row.count()));
         }
 
+        final List<OverviewDto.ThroughputRow> throughput = new ArrayList<>();
+        for (final OverviewRepository.ThroughputBucket bucket : overviewRepository.throughput(steps)) {
+            // A null median means "this bucket measured nothing", and it crosses the boundary as
+            // null: 0 would be a speed the index never measured, and the frontend renders the two
+            // differently ("n/a" next to a number a reviewer could disprove).
+            throughput.add(new OverviewDto.ThroughputRow(
+                    bucket.schema(),
+                    bucket.timingSource(),
+                    bucket.steps(),
+                    bucket.medianDecodeTps(),
+                    bucket.medianTtftMs()));
+        }
+
         return new OverviewDto(
                 tiles,
                 planeMix,
                 topDetectors,
                 mergeSeries(overviewRepository.findingSeries(findings),
                         overviewRepository.toolCallSeries(toolCalls)),
-                overviewRepository.throughput(steps),
+                throughput,
                 wireVocabulary(vocabulary));
     }
 

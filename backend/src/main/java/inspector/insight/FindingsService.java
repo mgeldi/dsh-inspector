@@ -29,6 +29,9 @@ import org.springframework.stereotype.Service;
  * mapped constants and a lowercased direction, so a SQL-ish sort value is a 400 rather than a
  * second statement, and the stable {@code f.id} tiebreaker keeps pagination deterministic
  * across equal timestamps.
+ *
+ * <p>The repository hands back rows of the index; turning a row into a finding as a client sees
+ * it is this class's job, and it is the only place that knows both names.
  */
 @Service
 public final class FindingsService {
@@ -79,13 +82,51 @@ public final class FindingsService {
         final FindingFilters.Sql where =
                 new FindingFilters(filter).forFindings(plane, detector, code, session);
         final long total = findingRepository.count(where);
-        final List<FindingDto> items = findingRepository.page(where, orderClause(sort), page, size);
+        final List<FindingDto> items =
+                findingRepository.page(where, orderClause(sort), page, size).stream()
+                        .map(FindingsService::toDto)
+                        .toList();
         return new FindingsPageDto(total, page, size, items);
     }
 
     /** Absence is the caller's call: on the wire it is a 404, and only the web layer knows that. */
     public Optional<FindingDetailDto> detail(final long id) {
-        return findingRepository.detail(id);
+        return findingRepository.detail(id).map(FindingsService::toDto);
+    }
+
+    /**
+     * The row-to-wire mapping, which is the entire reason the two types exist separately: this is
+     * where a column of the index becomes a field of the API, and the only place that has to know
+     * both names. There is no reflection in it on purpose — a renamed JSON field is one line here
+     * and one line in {@code inspector.dto}, and no SQL, no mapper and no test double in between.
+     */
+    private static FindingDto toDto(final FindingRepository.FindingRow row) {
+        return new FindingDto(
+                row.id(),
+                row.sessionId(),
+                row.detector(),
+                row.plane(),
+                row.category(),
+                row.code(),
+                row.confidence(),
+                row.pathHint(),
+                row.seq(),
+                row.staleSeq(),
+                row.causeSeq(),
+                row.occurredAt(),
+                row.summary());
+    }
+
+    private static FindingDto.Evidence toDto(final FindingRepository.EvidenceRow row) {
+        return new FindingDto.Evidence(
+                row.seq(), row.verbClass(), row.pathHint(), row.excerptRedacted());
+    }
+
+    private static FindingDetailDto toDto(final FindingRepository.FindingDetailRow row) {
+        return new FindingDetailDto(
+                toDto(row.finding()),
+                row.tool(),
+                row.evidence().stream().map(FindingsService::toDto).toList());
     }
 
     /**

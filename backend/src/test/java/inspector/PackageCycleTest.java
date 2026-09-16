@@ -57,6 +57,21 @@ final class PackageCycleTest {
                         + " upward into the controller layer");
     }
 
+    /**
+     * The store reads an index; it does not know what a client is waiting to see. This rule is
+     * the one that would have caught the original welding: {@code FindingRepository} mapped a
+     * {@code ResultSet} straight into {@code FindingDto}, so the JSON contract and the SQL were
+     * one type, and renaming a field in the API meant editing a query.
+     */
+    @Test
+    void theStoreDoesNotServeWireShapes() {
+        assertNoForbiddenReferences("inspector/store", forbidden("dto"),
+                "inspector.store returns rows of the index (FindingRow, ThroughputBucket, the"
+                        + " PlaneMixRow family) — a record from inspector.dto is the answer to a"
+                        + " different question, and the service in between is where a row becomes"
+                        + " a field of the API");
+    }
+
     @Test
     void theServiceLayerDoesNotDependOnTheWebPackage() {
         assertNoForbiddenReferences("inspector/insight", forbidden("api"),
