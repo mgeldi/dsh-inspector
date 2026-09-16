@@ -106,6 +106,13 @@ CREATE TABLE IF NOT EXISTS meta (
 -- without this line an index deleted here would live on in every existing database file.
 DROP INDEX IF EXISTS idx_tool_call_name_error;
 
+-- Retired for the same reason, one commit later: idx_finding_occurred was (plane, category,
+-- occurred_at) and no read filters findings by category — it is a selected column and a rendered
+-- chip, never a WHERE term. With a column that nothing constrains sitting between plane and
+-- occurred_at, the plane-filtered findings page could use the prefix and then had to sort, which
+-- is the "USE TEMP B-TREE FOR ORDER BY" line in its query plan. See idx_finding_plane_time below.
+DROP INDEX IF EXISTS idx_finding_occurred;
+
 -- The finding-detail join: left join tool_call t on (session_id, source_file, seq).
 -- The two equality columns come first and seq last because that is the shape the join
 -- constrains on all three at once.
@@ -121,10 +128,13 @@ CREATE INDEX IF NOT EXISTS idx_finding_stream      ON finding (session_id, sourc
 -- index would be decoration: the plan is identical with and without it.
 CREATE INDEX IF NOT EXISTS idx_finding_time        ON finding (occurred_at);
 
--- The plane mix and the plane-filtered findings page, both grouped or filtered on plane
--- first. Note this cannot serve the default sort: occurred_at is third, and a sort column is
--- only free after the equality columns that precede it in the index are themselves constrained.
-CREATE INDEX IF NOT EXISTS idx_finding_occurred    ON finding (plane, category, occurred_at);
+-- The plane-filtered findings page: where f.plane = ? order by f.occurred_at desc, f.id desc.
+-- Plane first because it is the equality the query carries, occurred_at second because it is what
+-- the query then wants in order, and the tiebreaker rides along for the reason stated on
+-- idx_finding_time above — a non-unique index key is internally (plane, occurred_at, rowid).
+-- The plan agrees: SEARCH f USING INDEX idx_finding_plane_time (plane=?), and no
+-- "USE TEMP B-TREE FOR ORDER BY" line, which is what its predecessor left behind.
+CREATE INDEX IF NOT EXISTS idx_finding_plane_time  ON finding (plane, occurred_at);
 
 -- The step rows of one stream, and the throughput table's join to session.
 CREATE INDEX IF NOT EXISTS idx_step_stream         ON step (session_id, source_file, turn, step);

@@ -79,6 +79,23 @@ final class QueryPlanTest {
         assertThat(plan).anyMatch(line -> line.contains("idx_finding_time"));
     }
 
+    /**
+     * The same sort with a plane on it. It used to answer with {@code USE TEMP B-TREE FOR ORDER
+     * BY}: the index behind it was {@code (plane, category, occurred_at)} and nothing filters
+     * findings by category, so only the first ORDER BY term could come out of the index prefix —
+     * and "Partial ORDER BY via Index" in SQLite's optimizer overview is explicit about what
+     * follows when a prefix is satisfied and a later term is not: block sorting.
+     */
+    @Test
+    void thePlaneFilteredFindingsSortComesOutOfTheIndexInOrder() {
+        final List<String> plan = plan("select f.id from finding f"
+                + " join session s on s.id = f.session_id and s.source_file = f.source_file"
+                + " where f.plane = 'GUARD' order by f.occurred_at desc, f.id desc limit 20 offset 0");
+
+        assertThat(plan).noneMatch(line -> line.contains("TEMP B-TREE"));
+        assertThat(plan).anyMatch(line -> line.contains("idx_finding_plane_time"));
+    }
+
     @Test
     void theStreamKeyOfEveryChildTableIsIndexable() {
         // A re-index deletes by (session_id, source_file) — per stream for the stream it is
@@ -99,6 +116,10 @@ final class QueryPlanTest {
         // why the DDL carries an explicit DROP, and this is the test that it stays there.
         jdbc.execute("create index if not exists idx_tool_call_name_error"
                 + " on tool_call (name, error_code)");
+        // The column order this schema has retired twice now. It is created here in its old shape,
+        // because the point is a database an older build left behind, not a fresh one.
+        jdbc.execute("create index if not exists idx_finding_occurred"
+                + " on finding (plane, category, occurred_at)");
 
         try (InputStream in = new ClassPathResource("schema.sql").getInputStream()) {
             for (final String statement
@@ -112,6 +133,12 @@ final class QueryPlanTest {
         }
 
         assertThat(jdbc.queryForList("select name from sqlite_master where type = 'index'"
-                + " and name = 'idx_tool_call_name_error'", String.class)).isEmpty();
+                + " and name in ('idx_tool_call_name_error', 'idx_finding_occurred')", String.class))
+                .isEmpty();
+        // And the replacement arrived in the same pass, on a database whose schema version
+        // already matched — which is why no SCHEMA_VERSION bump was needed for the swap.
+        assertThat(jdbc.queryForList("select name from sqlite_master where type = 'index'"
+                + " and name = 'idx_finding_plane_time'", String.class))
+                .containsExactly("idx_finding_plane_time");
     }
 }
