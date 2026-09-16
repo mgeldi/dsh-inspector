@@ -1,3 +1,15 @@
+-- The foreign keys below are declarations of what the writers already promise, and they are
+-- enforced: the datasource URL carries foreign_keys=on. SQLite applies that pragma per
+-- connection and ships it off (sqlite.org/foreignkeys.html §2, "must be enabled separately for
+-- each database connection"), so the claim is only as good as every connection's setup —
+-- SchemaTest asserts the pragma is on before it asserts a constraint fires, and
+-- ApplicationContextTest asserts it of the pool the application actually borrows from.
+--
+-- A constraint declared here reaches a database file that already exists only through the
+-- stale-version reset, which drops the tables so this file recreates them: CREATE TABLE IF NOT
+-- EXISTS skips a table that is there, and SQLite has no ALTER TABLE ADD CONSTRAINT. That is why
+-- a schema version bump means drop-and-recreate, not empty-and-reuse (DESIGN.md §4.2).
+
 CREATE TABLE IF NOT EXISTS session (
     id                TEXT    NOT NULL,
     source_file       TEXT    NOT NULL,
@@ -28,7 +40,10 @@ CREATE TABLE IF NOT EXISTS step (
     decode_tps     REAL,
     ttft_ms        INTEGER,
     timing_source  TEXT    NOT NULL,
-    PRIMARY KEY (session_id, source_file, turn, step)
+    PRIMARY KEY (session_id, source_file, turn, step),
+    -- The stream a step came from. (id, source_file) is the session primary key because one
+    -- session id can appear in both log conventions, so the child key carries both columns.
+    FOREIGN KEY (session_id, source_file) REFERENCES session (id, source_file)
 );
 
 CREATE TABLE IF NOT EXISTS tool_call (
@@ -45,7 +60,8 @@ CREATE TABLE IF NOT EXISTS tool_call (
     error_code   TEXT,
     plane        TEXT,
     path_hint    TEXT,
-    outcome_only INTEGER NOT NULL DEFAULT 0
+    outcome_only INTEGER NOT NULL DEFAULT 0,
+    FOREIGN KEY (session_id, source_file) REFERENCES session (id, source_file)
 );
 
 CREATE TABLE IF NOT EXISTS finding (
@@ -62,7 +78,8 @@ CREATE TABLE IF NOT EXISTS finding (
     stale_seq    INTEGER,
     cause_seq    INTEGER,
     occurred_at  INTEGER NOT NULL,
-    summary      TEXT    NOT NULL
+    summary      TEXT    NOT NULL,
+    FOREIGN KEY (session_id, source_file) REFERENCES session (id, source_file)
 );
 
 CREATE TABLE IF NOT EXISTS shell_evidence (
@@ -71,7 +88,10 @@ CREATE TABLE IF NOT EXISTS shell_evidence (
     verb_class       TEXT    NOT NULL,
     path_hint        TEXT,
     excerpt_redacted TEXT,
-    PRIMARY KEY (finding_id, seq)
+    PRIMARY KEY (finding_id, seq),
+    -- The finding these excerpts were attached to. Its own (finding_id, seq) primary key is
+    -- already the index SQLite wants to check this key on deletes, so no extra index here.
+    FOREIGN KEY (finding_id) REFERENCES finding (id)
 );
 
 CREATE TABLE IF NOT EXISTS meta (

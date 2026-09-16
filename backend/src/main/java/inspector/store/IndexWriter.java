@@ -7,6 +7,7 @@ import inspector.ingest.SessionSource;
 import inspector.ingest.ShellEvidence;
 import inspector.ingest.StreamFacts;
 import inspector.ingest.ToolCallRecord;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -14,7 +15,11 @@ import java.util.List;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.core.io.ClassPathResource;
+import org.springframework.core.io.support.EncodedResource;
+import org.springframework.jdbc.core.ConnectionCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.init.ScriptUtils;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -30,9 +35,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  *
  * <p>The database is a derived cache of the corpus, not a system of record: everything in
  * it is reproducible by re-reading the logs, so a schema change is an invalidation event,
- * not a migration. That is why {@link #resetIfStale(String)} empties the whole index when
- * the stored {@code meta.schema_version} no longer matches, and the whole reason
- * DESIGN.md §4.2 could ship without a migration engine.
+ * not a migration. That is why {@link #resetIfStale(String)} drops and re-creates the whole
+ * schema when the stored {@code meta.schema_version} no longer matches — dropping, not just
+ * emptying, because a table that already exists is never redefined by the DDL — and it is the
+ * whole reason DESIGN.md §4.2 could ship without a migration engine.
  */
 @Component
 public final class IndexWriter {
@@ -49,6 +55,21 @@ public final class IndexWriter {
      */
     public record StreamKey(String sessionId, String sourceFile) {
     }
+
+    /**
+     * The tables {@code schema.sql} owns, child-to-parent — the same order {@link #wipe()}
+     * deletes in, for the same reason: with {@code foreign_keys=on} a parent cannot go first.
+     */
+    private static final List<String> TABLES_CHILD_FIRST =
+            List.of("shell_evidence", "finding", "tool_call", "step", "session", "meta");
+
+    /**
+     * Where the DDL lives, as one string. Spring applies it at boot from
+     * {@code spring.sql.init.schema-locations}; this class re-applies it after a stale-version
+     * drop. The pairing is asserted by name in SchemaTest — two sources for one schema is
+     * exactly the drift that makes a comment like "the tables match schema.sql" false.
+     */
+    private static final String SCHEMA_DDL_CLASSPATH = "schema.sql";
 
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;
@@ -313,11 +334,11 @@ public final class IndexWriter {
     /**
      * The invalidation behind the no-migration-engine decision (DESIGN.md §4.2). When the
      * stored schema version does not match the one the running build expects — including
-     * "no value stored" — every table is emptied, child-to-parent so the order holds with
-     * {@code foreign_keys=on}, and the version is re-seeded, all in one transaction so a
-     * crash mid-reset cannot leave a half-emptied database that looks like a valid empty
-     * index. Only a count is logged: how many streams were discarded, never a corpus path
-     * or content.
+     * "no value stored" — the tables are dropped and re-created from the DDL, child-to-parent
+     * so the order holds under {@code foreign_keys=on}, and the version is re-seeded, all in
+     * one transaction so a crash mid-reset cannot leave a half-emptied database that looks like
+     * a valid empty index. Only a count is logged: how many streams were discarded, never a
+     * corpus path or content.
      *
      * @return how many streams were discarded; zero when the stored version already matches
      */
@@ -328,11 +349,41 @@ public final class IndexWriter {
                 return 0;
             }
             final int discarded = jdbc.queryForObject("select count(*) from session", Integer.class);
-            wipe();
+            dropAndRecreate();
             seedMeta(expectedSchemaVersion);
-            LOG.info("index schema version is stale (stored: {}, expected: {}); reset the index,"
-                    + " discarding {} streams", stored, expectedSchemaVersion, discarded);
+            LOG.info("index schema version is stale (stored: {}, expected: {}); dropped and"
+                    + " re-created the schema, discarding {} streams",
+                    stored, expectedSchemaVersion, discarded);
             return discarded;
+        });
+    }
+
+    /**
+     * Drop every table, then re-apply the DDL — the only way a schema change reaches a database
+     * file that already exists.
+     *
+     * <p>Emptying the tables is not enough and cannot be made enough. {@code schema.sql} is
+     * {@code CREATE TABLE IF NOT EXISTS}, so a table that is already there is skipped, and
+     * SQLite has no {@code ALTER TABLE ADD CONSTRAINT}: anything a version bump is supposed to
+     * deliver — the foreign keys in {@code schema.sql} are the case that proved it — would land
+     * only on fresh installs, and the file would keep claiming a constraint it does not have.
+     * Re-applying the same classpath script Spring ran at boot keeps one DDL definition instead
+     * of a Java copy that can drift from it.
+     *
+     * <p>Two details are load-bearing rather than tidy. The drops go child-to-parent because
+     * {@code DROP TABLE} runs an implicit {@code DELETE FROM} that respects foreign keys when
+     * they are enabled (sqlite.org/foreignkeys.html §5), so dropping {@code session} first would
+     * be refused by the rows still pointing at it. And the script runs on this transaction's own
+     * connection — borrowing a second one from the pool would block on the write lock this
+     * transaction holds, and a connection outside the transaction would not even be in the same
+     * schema state when the next statement lands.
+     */
+    private void dropAndRecreate() {
+        TABLES_CHILD_FIRST.forEach(table -> jdbc.execute("drop table if exists " + table));
+        jdbc.execute((ConnectionCallback<Void>) connection -> {
+            ScriptUtils.executeSqlScript(connection,
+                    new EncodedResource(new ClassPathResource(SCHEMA_DDL_CLASSPATH), StandardCharsets.UTF_8));
+            return null;
         });
     }
 

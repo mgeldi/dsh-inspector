@@ -1,6 +1,7 @@
 package inspector.store;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.zaxxer.hikari.HikariDataSource;
 import inspector.query.FindingFilters;
@@ -62,7 +63,10 @@ final class IndexWriterTest {
     @BeforeEach
     void createDatabase() throws IOException {
         dataSource = new DriverManagerDataSource();
-        dataSource.setUrl("jdbc:sqlite:" + temp.resolve("index.sqlite"));
+        // foreign_keys=on, like the application URL. Without it every delete order in the
+        // writer is tested against a database that would not notice the wrong order, and the
+        // comments in IndexWriter that justify that ordering would be claims no test reads.
+        dataSource.setUrl("jdbc:sqlite:" + temp.resolve("index.sqlite") + "?foreign_keys=on");
         jdbc = new JdbcTemplate(dataSource);
         writer = new IndexWriter(jdbc, new DataSourceTransactionManager(dataSource));
         executeSchema(jdbc);
@@ -454,6 +458,52 @@ final class IndexWriterTest {
                     .isEqualTo(1);
         } finally {
             pooled.close();
+        }
+    }
+
+    /**
+     * The reason the stale-version reset drops tables instead of emptying them. Declaring the
+     * foreign keys in {@code schema.sql} and bumping the version is not enough by itself:
+     * {@code CREATE TABLE IF NOT EXISTS} skips a table that is already there, and SQLite has no
+     * {@code ALTER TABLE ADD CONSTRAINT} — so a file written by the previous build would keep
+     * tables with no constraints in them indefinitely while the DDL file described constraints
+     * it does not have. That is the same "a claim that is only sometimes true" the constraints
+     * were declared to remove, one layer down.
+     *
+     * <p>The old shape is written out by hand rather than derived from the current DDL: it is a
+     * historical fixture, and one that must not quietly start agreeing with today's schema.
+     */
+    @Test
+    void aDatabaseWrittenBeforeTheConstraintsGainsThemFromTheReset() {
+        final HikariDataSource legacyPool = new HikariDataSource();
+        legacyPool.setJdbcUrl("jdbc:sqlite:" + temp.resolve("legacy.sqlite") + "?foreign_keys=on");
+        legacyPool.setMaximumPoolSize(1);
+        try {
+            final JdbcTemplate legacy = new JdbcTemplate(legacyPool);
+            legacy.execute("create table session (id text, source_file text, primary key (id, source_file))");
+            legacy.execute("create table finding (id integer primary key, session_id text, source_file text)");
+            legacy.execute("create table meta (key text primary key, value text not null)");
+            final IndexWriter legacyWriter = new IndexWriter(legacy, new DataSourceTransactionManager(legacyPool));
+            legacyWriter.seedMeta("2");
+            assertThat(legacy.queryForList("pragma foreign_key_list(finding)"))
+                    .as("the table this starts from really has no constraint")
+                    .isEmpty();
+
+            assertThat(legacyWriter.resetIfStale(IndexService.SCHEMA_VERSION)).isZero();
+
+            assertThat(legacy.queryForList("pragma foreign_key_list(finding)"))
+                    .as("the reset re-created the table from schema.sql, constraints included")
+                    .isNotEmpty();
+            assertThatThrownBy(() -> legacy.update("insert into finding (session_id, source_file,"
+                            + " detector, plane, occurred_at, summary)"
+                            + " values ('gone', 'gone.jsonl', 'error-prior', 'tool', 1, 'orphan')"))
+                    .hasMessageContaining("FOREIGN KEY");
+            // Not only the constraint: the recreated table is the current one. path_hint is a
+            // column the hand-written legacy shape above does not have.
+            assertThat(legacy.queryForObject("select count(*) from finding where path_hint is null",
+                    Integer.class)).isZero();
+        } finally {
+            legacyPool.close();
         }
     }
 

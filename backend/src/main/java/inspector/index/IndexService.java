@@ -34,10 +34,15 @@ public final class IndexService {
     private static final Logger LOG = LoggerFactory.getLogger(IndexService.class);
     /**
      * The index schema the running build writes; the startup reset compares it against the
-     * stored row. Bumped to 2 by the join-key indexes: the DDL gained a DROP, and a reset only
-     * empties tables, so an index retired since the last boot needs a wipe to actually go.
+     * stored row. Bumped to 2 by the join-key indexes, which needed the DDL's explicit
+     * {@code DROP INDEX} to retire an index a previous boot had left behind. Bumped to 3 by the
+     * foreign keys in {@code schema.sql}: a version bump is only worth making if the reset it
+     * triggers can actually deliver the change, and a table constraint cannot arrive by emptying
+     * rows — SQLite has no {@code ALTER TABLE ADD CONSTRAINT} — so {@code resetIfStale} now
+     * drops the tables and lets the DDL recreate them. A database written at version 2 has the
+     * old table definitions and no constraints; without this bump it would keep both.
      */
-    public static final String SCHEMA_VERSION = "2";
+    public static final String SCHEMA_VERSION = "3";
 
     private final CorpusScanner scanner;
     private final SessionIngestor ingestor;

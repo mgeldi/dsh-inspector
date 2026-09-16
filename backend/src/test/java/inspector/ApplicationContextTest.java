@@ -3,8 +3,13 @@ package inspector;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.sql.ResultSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.sql.DataSource;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,6 +25,9 @@ final class ApplicationContextTest {
     @Autowired
     private JdbcClient jdbc;
 
+    @Autowired
+    private DataSource dataSource;
+
     @Test
     void contextLoadsWithTheSchemaApplied() {
         assertThat(jdbc.sql("select count(*) from finding").query(Integer.class).single()).isZero();
@@ -29,6 +37,31 @@ final class ApplicationContextTest {
     void journalModeIsWal() {
         assertThat(jdbc.sql("pragma journal_mode").query(String.class).single())
                 .isEqualToIgnoringCase("wal");
+    }
+
+    /**
+     * Foreign keys are declared in {@code schema.sql} and enforced per connection, a setting
+     * SQLite leaves off and that never applies to a whole database file
+     * (sqlite.org/foreignkeys.html §2: "must be enabled separately for each database
+     * connection"). So the URL parameter is load-bearing, and it has to hold of every
+     * connection the pool opens — a single lucky connection would leave the ones opened later
+     * accepting orphan findings. Borrowing two at once forces two physical connections;
+     * borrowing one after returning it would just hand back the same socket.
+     */
+    @Test
+    void everyConnectionThePoolHandsOutEnforcesForeignKeys() throws SQLException {
+        try (Connection first = dataSource.getConnection();
+             Connection second = dataSource.getConnection()) {
+            assertThat(foreignKeyPragma(first)).as("first pooled connection").isEqualTo(1);
+            assertThat(foreignKeyPragma(second)).as("second pooled connection").isEqualTo(1);
+        }
+    }
+
+    private static int foreignKeyPragma(final Connection connection) throws SQLException {
+        try (Statement statement = connection.createStatement();
+             ResultSet rows = statement.executeQuery("pragma foreign_keys")) {
+            return rows.next() ? rows.getInt(1) : -1;
+        }
     }
 
     /**
