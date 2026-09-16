@@ -42,3 +42,9 @@ AGENTS.md
 
 # agent-facing implementation plans: working documents, not reviewer artifacts
 docs/superpowers/
+
+# review board: agent-facing task files and their working logs, same category as
+# docs/superpowers/ above — a queue of known defects is a working document, not a
+# reviewer artifact. Commit it deliberately if the loop itself becomes the thing worth
+# showing; until then it stays local.
+docs/tasks/
