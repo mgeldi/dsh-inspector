@@ -61,12 +61,19 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
             </plugin>
+            <!-- Regenerates the committed fixture corpus. The generator is development tooling and
+                 lives under src/test so it stays out of the deployable jar, which means the java
+                 goal has to be told to look at the test classpath — without classpathScope the
+                 class simply is not there and exec:java fails with a ClassNotFoundException that
+                 reads like a broken mainClass. Run it from backend/ with: mvn -q test-compile
+                 exec:java (the generator's own javadoc says what it writes and where). -->
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>3.5.0</version>
                 <configuration>
                     <mainClass>inspector.fixturegen.FixtureGenerator</mainClass>
+                    <classpathScope>test</classpathScope>
                 </configuration>
             </plugin>
         </plugins>

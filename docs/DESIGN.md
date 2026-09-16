@@ -368,6 +368,19 @@ transaction rather than migrating it; an index that cannot say where it came fro
 the same way, since re-indexing costs seconds (§12) and a wrong dashboard costs the tool its
 one claim.
 
+The two rows are not treated identically, and the difference is the whole reason the sentence
+above is not a euphemism. A **corpus** mismatch empties the tables. A **version** mismatch drops
+them and lets `schema.sql` recreate them. Emptying is not enough for a version bump and cannot be
+made enough: the DDL is `CREATE TABLE IF NOT EXISTS`, so a table that is already there is never
+redefined, and SQLite has no `ALTER TABLE ADD CONSTRAINT`. Declaring foreign keys and bumping the
+version would otherwise deliver them to fresh installs only, leaving every existing file holding
+tables without the constraint its own schema file describes — which is the false comment this
+mechanism exists to prevent, relocated one layer down. Dropping is what makes "a schema change is
+an invalidation event, not a migration" literally true: `IndexWriter.dropAndRecreate` runs the
+drops child-to-parent (a `DROP TABLE` with foreign keys on performs an implicit `DELETE FROM` that
+respects them) and re-applies the same classpath script Spring ran at boot, so there is one DDL
+definition and not a Java copy of it.
+
 There is also an unpriced risk that settles it: Flyway 13.x is newer than whatever Boot 4.1's
 BOM manages, SQLite support lives in a separate `flyway-database-sqlite` module since v10, and
 Boot runs migrations eagerly at startup. If that combination has rough edges, the time goes on
@@ -548,6 +561,17 @@ shell_evidence (finding_id, seq, verb_class, path_hint, excerpt_redacted)   -- c
 meta       (key, value)   -- schema_version and corpus, and nothing else
 ```
 
+`(session_id, source_file)` on `step`, `tool_call` and `finding`, and `finding_id` on
+`shell_evidence`, are declared foreign keys rather than a convention the writers keep. Enforcement
+is per connection and off by default, which is what the `foreign_keys=on` in the JDBC URL is for;
+`SchemaTest` shows the same orphan row being rejected with the pragma on and accepted with it off,
+and `ApplicationContextTest` asserts the pragma on connections borrowed from the pool the
+application actually uses. `session`'s two-column primary key is what makes the composite parent
+key legal — an FK cannot point at a bare rowid. No index was added for the checks: SQLite looks up
+the child side of a parent's deletion, and every child key here is already the leading column of an
+index that exists to serve a query (`idx_step_stream`, `idx_tool_call_stream`,
+`idx_finding_stream`, and `shell_evidence`'s own primary key).
+
 Six tables, counting `meta`, which holds exactly one row. `last_run`, `corpus_root` and `evidence_store` were
 removed on the same test as the `index_run` table in §2.2 — nothing reads them: the scan summary
 is returned by `POST /api/index/run`, the corpus root is a startup configuration value, and the
@@ -556,7 +580,12 @@ database table because a database table is available is the same mistake one lev
 
 `meta.schema_version` is the migration hook that makes §4.2's "no engine yet" an honest
 deferral rather than an omission: the DDL is idempotent for a fresh file, and the version row
-is what a real install would branch on when a `V2` exists.
+is what a real install would branch on when a `V2` exists. The branch it drives today already
+rebuilds rather than patches — a mismatch drops the tables and re-applies the DDL — so a schema
+change in this project means "the next boot recreates everything", which is the only shape of
+change SQLite's `CREATE TABLE IF NOT EXISTS` plus no-`ALTER … ADD CONSTRAINT` can actually
+deliver. Version 2 was the join-key indexes; version 3 was the foreign keys, and it is the case
+that proved the reset had to drop rather than empty.
 
 `(session_id, source_file)` is the stream key everywhere (§3.2); no seq-based comparison is
 ever performed across streams.
@@ -986,7 +1015,8 @@ dsh-inspector/
 │   └── AI-NOTES.md           ← prompts, the review loop, what it caught and what it got wrong
 ├── backend/                  ← Spring Boot: ingest → detect → store → serve
 │   ├── pom.xml
-│   └── src/main/resources/fixtures/     committed synthetic corpus (§12)
+│   ├── fixtures/             ← committed synthetic corpus (§12), output of the generator
+│   └── src/main/resources/   ← application.yml and schema.sql
 └── frontend/                 ← Angular 22 + Material
     ├── package.json
     └── src/app/
@@ -1007,6 +1037,15 @@ agree with Java about the event schema. That also forces the important property:
 the real `--inspector.corpus` corpus go through **the same ingest code path**, so the demo corpus
 cannot drift into a shape the indexer happens to like. A separate root `tools/` would have been
 the natural place and would have quietly invited a second, simpler parser.
+
+It lives under `backend/src/test/java`, not `src/main`, and is run with `mvn -q test-compile
+exec:java` from `backend/`. The reason is the artifact, not the source tree: a 634-line
+`main` that nothing at runtime calls has no business in a deployable jar, where it is the largest
+class in the build and a reviewer's first question is why. `exec-maven-plugin` is configured with
+`classpathScope=test` so the move costs nothing to run, and regenerating the corpus is
+byte-identical (`sha256sum` over all 15 committed files before and after a run reports no
+difference), which is what makes the committed output trustworthy as generated rather than
+hand-edited.
 
 Nothing in the tree exists to satisfy a convention that earns nothing (§2.2, §4.2), and no
 empty directories are committed — they appear with the first commit of code.

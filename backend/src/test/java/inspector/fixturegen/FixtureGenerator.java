@@ -30,17 +30,19 @@ import tools.jackson.databind.ObjectMapper;
  * compresses a fixed byte sequence with fixed settings, and every map is a
  * {@link LinkedHashMap}, so nothing in the output depends on iteration order or host state.
  *
- * <p><b>Regenerate</b> from the {@code backend/} directory (the {@code exec-maven-plugin}
- * is configured with this class as mainClass):
+ * <p><b>Regenerate</b> from the {@code backend/} directory. The class lives under
+ * {@code src/test} so it stays out of the deployable artifact — it is development tooling, and
+ * 634 lines of it is the largest class in the project — and the {@code exec-maven-plugin} block
+ * in {@code pom.xml} runs it on the test classpath:
  *
  * <pre>{@code
- * mvn -q compile exec:java
+ * mvn -q test-compile exec:java
  * }</pre>
  *
- * or, without Maven, against the compiled classes plus the two runtime dependencies:
+ * or, without Maven, against the compiled test classes plus the two runtime dependencies:
  *
  * <pre>{@code
- * java -cp target/classes:$(mvn -q dependency:build-classpath -Dmdep.outputFile=/dev/stdout) \
+ * java -cp target/test-classes:$(mvn -q dependency:build-classpath -Dmdep.outputFile=/dev/stdout) \
  *     inspector.fixturegen.FixtureGenerator
  * }</pre>
  *
