@@ -43,10 +43,25 @@
   }
 }
 
+// The column is sized for the longest label, so the ellipsis below should never fire at a
+// normal width. It exists because `table-layout: fixed` clips silently: the old cell had no
+// overflow rule, so "Model misuse" and "Infrastructure" simply lost their last characters
+// with nothing to indicate it — at 1920px as much as at 1280px, since the width was fixed.
+.pl {
+  overflow: hidden;
+}
+
 .plane {
   display: inline-flex;
   align-items: center;
   gap: 7px;
+  max-width: 100%;
+}
+
+.plane-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .dot {

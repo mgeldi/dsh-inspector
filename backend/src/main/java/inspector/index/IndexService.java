@@ -2,8 +2,11 @@ package inspector.index;
 
 import inspector.config.InspectorProperties;
 import inspector.detect.Detector;
+import inspector.detect.ErrorPlanes;
 import inspector.detect.Finding;
+import inspector.detect.Plane;
 import inspector.ingest.CorpusScanner;
+import inspector.ingest.ErrorEvent;
 import inspector.ingest.SessionIngestor;
 import inspector.ingest.SessionSource;
 import inspector.ingest.StreamFacts;
@@ -12,7 +15,10 @@ import inspector.store.IndexWriter.StreamKey;
 import inspector.store.IndexWriter.Written;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import java.util.concurrent.locks.ReentrantLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -138,6 +144,7 @@ public final class IndexService {
         final long indexedAt = System.currentTimeMillis();
         final List<StreamKey> written = new ArrayList<>();
 
+        final Set<String> unmappedCodes = new HashSet<>();
         for (final SessionSource source : sources) {
             final StreamFacts facts = ingestor.ingest(source);
             final List<Finding> produced = new ArrayList<>();
@@ -152,6 +159,26 @@ public final class IndexService {
             evidenceRows += writtenRows.evidenceRows();
             parseFailures += facts.parseFailures();
             written.add(new StreamKey(facts.session().id(), facts.session().sourceFile()));
+            // The only check that has real data in front of it. ErrorPlanes maps a code to a
+            // plane and falls back to INFRASTRUCTURE for anything it does not know, which is the
+            // right default — a code nobody classified is the operator's to look at — but it is
+            // silent, and a silent default put a model-misuse code on the operator's plane in
+            // the headline chart for a whole corpus. ErrorPlanesTest cannot catch that: it
+            // compares the map to a list written beside it. This can, because it sees what the
+            // harness actually emitted.
+            for (final ErrorEvent error : facts.errors()) {
+                if (error.code() != null && ErrorPlanes.lookup(error.code()).isEmpty()) {
+                    unmappedCodes.add(error.code());
+                }
+            }
+        }
+        if (!unmappedCodes.isEmpty()) {
+            // Codes only — they are harness constants, not content, and naming them is the
+            // whole point: a count alone would say something is wrong without saying what.
+            LOG.warn("{} error code(s) are not in the plane map and defaulted to {}: {}."
+                            + " Classify them in ErrorPlanes or the plane mix understates"
+                            + " whichever plane they belong to",
+                    unmappedCodes.size(), Plane.INFRASTRUCTURE, new TreeSet<>(unmappedCodes));
         }
         // Then, once for the whole run: whatever the scan did not reach is no longer in the
         // corpus and has to leave the index with it. Per stream this cannot be seen at all —

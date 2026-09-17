@@ -51,3 +51,6 @@ docs/tasks/
 
 # local working notes kept beside the code and never published
 *.local.md
+
+# browser-automation scratch output (snapshots, screenshots, console logs)
+.playwright-mcp/

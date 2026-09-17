@@ -24,6 +24,11 @@ public final class ErrorPlanes {
             entry("ASK_ABORTED", Plane.GUARD),
             entry("ABORTED", Plane.GUARD),
             entry("FS_EDIT_NOT_FOUND", Plane.MODEL_MISUSE),
+            // The model gave an edit that matched in more than one place, so the tool refused
+            // rather than pick one. Same family as FS_EDIT_NOT_FOUND: the harness worked, the
+            // instruction was bad. Added after a live corpus emitted it and the default sent it
+            // to INFRASTRUCTURE — a finding on the operator's plane that was the model's.
+            entry("FS_AMBIGUOUS_EDIT", Plane.MODEL_MISUSE),
             entry("FS_NOT_FOUND", Plane.MODEL_MISUSE),
             entry("INVALID_ARGS", Plane.MODEL_MISUSE),
             entry("SEARCH_INVALID_PATTERN", Plane.MODEL_MISUSE),

@@ -42,7 +42,13 @@ export const DAILY_BAR_EMPHASIS = '#5bd6a5';                // $accent, hovered
 export const CHART_BASE: EChartsCoreOption = {
   backgroundColor: 'transparent',
   textStyle: { color: TEXT_LO },
-  grid: { left: 8, right: 16, top: 24, bottom: 8, containLabel: true },
+  grid: {
+    left: 8, right: 16, top: 24, bottom: 8,
+    // ECharts 6 deprecates containLabel; its own docs give the exact equivalent as
+    // {outerBoundsMode: 'same', outerBoundsContain: 'axisLabel'}. Left as containLabel it
+    // logged a deprecation notice on every chart render.
+    outerBoundsMode: 'same', outerBoundsContain: 'axisLabel',
+  },
   legend: { textStyle: { color: TEXT_LO } },
   // ECharts' default tooltip is a white box with black text: on a dark dashboard it is the
   // one element that announces itself as somebody else's component. Text HI is the mirrored

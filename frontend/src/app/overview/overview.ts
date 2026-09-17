@@ -95,7 +95,13 @@ export class Overview {
       ...CHART_BASE,
       backgroundColor: 'transparent',
       textStyle: { color: CHART_AXIS.textLo },
-      grid: { left: 8, right: 16, top: 24, bottom: 8, containLabel: true },
+      grid: {
+        left: 8, right: 16, top: 24, bottom: 8,
+        // ECharts 6 deprecates containLabel; its own docs give the exact equivalent as
+        // {outerBoundsMode: 'same', outerBoundsContain: 'axisLabel'}. Left as containLabel it
+        // logged a deprecation notice on every chart render.
+        outerBoundsMode: 'same', outerBoundsContain: 'axisLabel',
+      },
       xAxis: {
         type: 'category',
         data: days.map(d => d.slice(5)), // 'MM-dd' labels: the year is constant inside one range

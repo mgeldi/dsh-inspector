@@ -22,7 +22,10 @@
              column left unassigned, and it absorbs whatever the viewport offers. -->
         <colgroup>
           <col style="width: 104px" />
-          <col style="width: 108px" />
+          <!-- 108px fitted "Guard" and clipped the other two plane names at every window
+               width, dot and all. 134px is the widest label ("Infrastructure") plus the dot,
+               the gap and the cell padding. -->
+          <col style="width: 134px" />
           <col style="width: 100px" />
           <col />
           <col style="width: 168px" />
@@ -169,10 +172,10 @@
                  because it answers "which row am I on", not "what is this row". -->
             <tr class="frow" (click)="open(f)">
               <td class="num time">{{ fmtTimeShort(f.occurredAt) }}</td>
-              <td>
+              <td class="pl">
                 <span class="plane">
                   <span class="dot" [style.background]="PLANE_COLOURS[f.plane]"></span>
-                  {{ planeName(f.plane) }}
+                  <span class="plane-name" [attr.title]="planeName(f.plane)">{{ planeName(f.plane) }}</span>
                 </span>
               </td>
               <!-- The row's primary control: a real focusable element, so a keyboard user
