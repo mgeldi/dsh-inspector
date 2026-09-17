@@ -136,6 +136,23 @@ export class Overview {
    * this kind of error happen" at all, though every row behind it was already browsable.
    */
   readonly codes = computed(() => this.store.overview()?.topCodes ?? []);
+
+  /**
+   * What the panel is not showing. It lists the top few codes, so on any real index the
+   * column does not add up to the findings tile beside it — 358 of 389 on the measured
+   * corpus, in 8 of 20 codes. A breakdown that silently omits its tail invites the reader to
+   * sum it and get a number that contradicts the tile, which is the same class of error as a
+   * wrong denominator. Only the findings count is stated: the number of remaining codes would
+   * have to come from the vocabulary, and that list is deliberately index-wide while these
+   * counts follow the filter, so under an active rail it would be a different question's
+   * answer.
+   */
+  readonly codeTail = computed<number>(() => {
+    const o = this.store.overview();
+    if (o === null) { return 0; }
+    const shown = o.topCodes.reduce((sum, c) => sum + c.count, 0);
+    return Math.max(0, o.tiles.findings - shown);
+  });
   readonly throughput = computed(() => this.store.overview()?.throughput ?? []);
 
   /**

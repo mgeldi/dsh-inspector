@@ -104,7 +104,7 @@ app-finding-detail,
   // should fit the laptop it is demoed on, and scroll only past that.
   // 892 px of fixed columns plus a readable minimum for PATH. Raised from 900 when CODE
   // stopped being the flexible column: the budget has to cover the code in full now.
-  min-width: 940px;
+  min-width: 960px;
   border-collapse: collapse;
   font-size: 13px;
 }

@@ -89,9 +89,12 @@
               </li>
             }
           </ol>
+          @if (codeTail() > 0) {
+            <p class="code-tail muted">+{{ codeTail() | number }} findings in other codes</p>
+          }
         </div>
 
-        <div class="card">
+        <div class="card card-wide">
           <h3 class="card-title">Throughput by convention</h3>
           <table class="tput">
             <thead>

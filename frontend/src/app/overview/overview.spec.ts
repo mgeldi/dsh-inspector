@@ -207,6 +207,20 @@ describe('Overview', () => {
     expect(stub.setPresetCalls).toEqual([]);
   });
 
+  /**
+   * The panel is a top slice, so on any real index its column does not add up to the findings
+   * tile beside it. Saying nothing invites the reader to sum it and conclude the tile is wrong.
+   */
+  it('states the findings its top slice leaves out, and says nothing when there are none', () => {
+    // 389 findings, 305 of them in the two codes shown
+    render();
+    expect(el.querySelector('.code-tail')?.textContent).toContain('84');
+
+    // a breakdown that is complete makes no claim about a tail
+    render({ topCodes: [{ code: 'FS_NOT_OBSERVED', count: 389 }] });
+    expect(el.querySelector('.code-tail')).toBeNull();
+  });
+
   it('names the likely cause and offers the fix when the range has no findings', () => {
     render({
       tiles: { sessions: 0, findings: 0, toolCalls: 0, steps: 0 },

@@ -259,3 +259,14 @@
   white-space: nowrap;
   color: $text-lo;
 }
+
+// The panel lists a top slice; the line below says so, because a column that does not add
+// up to the tile beside it is worse than a column with a tail stated.
+.code-tail {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
+// The board grew a fifth card, which left the last one alone on its row beside a hole.
+// The throughput table is the widest content here anyway, so it takes the whole row.
+.card-wide { grid-column: 1 / -1; }
