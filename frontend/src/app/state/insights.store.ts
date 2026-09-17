@@ -126,6 +126,7 @@ export class InsightsStore {
 
   setSort(sort: { field: SortField; dir: SortDir } | null): void { this.sort.set(sort); }
   setPage(page: number): void { this.page.set(page); }
+  setSize(size: number): void { this.size.set(size); }
 
   // ---- loads: all of them through the one filter state ----
 

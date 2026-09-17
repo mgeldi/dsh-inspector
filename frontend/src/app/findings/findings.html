@@ -237,8 +237,33 @@
       </table>
     </div>
 
-    <div class="pager">
+    <!-- Prev and Next alone made the last of 23 pages twenty-two clicks away. The numbers
+         are the jump; the slice text stays because "page 6 of 23" and "101–120 of 455" are
+         different facts and a table this dense wants both. -->
+    <nav class="pager" aria-label="Findings pages">
       <button type="button" class="btn btn-ghost" aria-label="Previous page" [disabled]="!canPrev()" (click)="goPage(-1)">Prev</button>
+
+      <ol class="pages">
+        @for (p of pageWindow(); track $index) {
+          <li>
+            @if (p === 'gap') {
+              <span class="page-gap" aria-hidden="true">…</span>
+            } @else {
+              <button
+                type="button"
+                class="page-num num"
+                [class.current]="p === currentPage()"
+                [attr.aria-label]="'Page ' + p"
+                [attr.aria-current]="p === currentPage() ? 'page' : null"
+                (click)="toPage(p)"
+              >{{ p }}</button>
+            }
+          </li>
+        }
+      </ol>
+
+      <button type="button" class="btn btn-ghost" aria-label="Next page" [disabled]="!canNext()" (click)="goPage(1)">Next</button>
+
       <span class="pager-text num">
         @let s = slice();
         @if (s) {
@@ -247,8 +272,17 @@
           0 of 0
         }
       </span>
-      <button type="button" class="btn btn-ghost" aria-label="Next page" [disabled]="!canNext()" (click)="goPage(1)">Next</button>
-    </div>
+
+      <label class="pager-size">
+        <span class="muted">Rows</span>
+        <select class="size-select" aria-label="Rows per page"
+                (change)="setSize(+$any($event.target).value)">
+          @for (n of sizes; track n) {
+            <option [value]="n" [selected]="n === store.size()">{{ n }}</option>
+          }
+        </select>
+      </label>
+    </nav>
     </div>
 
     @if (openDetail() !== null) {

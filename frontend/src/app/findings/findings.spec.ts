@@ -83,6 +83,9 @@ describe('Findings', () => {
   // In-flight store requests are cancelled at TestBed teardown.
   afterEach(() => http.verify({ ignoreCancelled: true }));
 
+  const prevButton = () => el.querySelector('button[aria-label="Previous page"]') as HTMLButtonElement;
+  const nextButton = () => el.querySelector('button[aria-label="Next page"]') as HTMLButtonElement;
+
   /** The component never fetches itself: the store owns every request, so the test drives it. */
   function loadPage(page: FindingsPageDto): void {
     store.loadFindings();
@@ -172,15 +175,16 @@ describe('Findings', () => {
     expect(pager.textContent).toContain('41–60');
     expect(pager.textContent).toContain('389');
 
-    // both directions are still possible on page 2 of 20
-    const buttons = Array.from(el.querySelectorAll('.pager button')) as HTMLButtonElement[];
-    expect(buttons[0].disabled).toBe(false);
-    expect(buttons[1].disabled).toBe(false);
+    // both directions are still possible on page 2 of 20. Addressed by label rather than by
+    // position: the pager grew numbered pages between Prev and Next, and an index-based
+    // selector was only ever right by accident.
+    expect(prevButton().disabled).toBe(false);
+    expect(nextButton().disabled).toBe(false);
 
     // and next is disabled where there is nothing after the last partial slice
     loadPage({ total: 389, page: 19, size: 20, items: items.slice(0, 9) });
     expect((el.querySelector('.pager-text')!.textContent)).toContain('381–389');
-    expect((Array.from(el.querySelectorAll('.pager button')) as HTMLButtonElement[])[1].disabled).toBe(true);
+    expect(nextButton().disabled).toBe(true);
   });
 
   it('lets Next reach the last page when it is a partial slice', () => {
@@ -190,9 +194,8 @@ describe('Findings', () => {
     const firstSlice = Array.from({ length: 20 }, (_, i) => ({ ...finding7, id: i }));
     loadPage({ total: 25, page: 0, size: 20, items: firstSlice });
 
-    const next = Array.from(el.querySelectorAll('.pager button'))[1] as HTMLButtonElement;
-    expect(next.disabled).toBe(false);
-    next.click();
+    expect(nextButton().disabled).toBe(false);
+    nextButton().click();
     fixture.detectChanges();
 
     const req = http.expectOne(r =>
@@ -202,7 +205,65 @@ describe('Findings', () => {
     fixture.detectChanges();
 
     expect(el.querySelector('.pager-text')!.textContent).toContain('21–25');
-    expect(next.disabled, 'next is disabled at the partial last page').toBe(true);
+    expect(nextButton().disabled, 'next is disabled at the partial last page').toBe(true);
+  });
+
+  /**
+   * 455 findings at twenty a page is 23 pages, and Prev/Next alone put the last one
+   * twenty-two clicks away. The window is a fixed width with a gap marker, so the buttons
+   * do not shift under the pointer as the current page moves through it.
+   */
+  it('offers a numbered window with the ends always reachable', () => {
+    const items = Array.from({ length: 20 }, (_, i) => ({ ...finding7, id: i }));
+    loadPage({ total: 455, page: 9, size: 20, items });
+
+    const labels = Array.from(el.querySelectorAll('.pages li'))
+      .map(li => li.textContent!.trim());
+    // first, gap, the current page and its neighbours, gap, last
+    expect(labels).toEqual(['1', '…', '9', '10', '11', '…', '23']);
+
+    const current = el.querySelector('.page-num.current')!;
+    expect(current.textContent!.trim()).toBe('10');
+    expect(current.getAttribute('aria-current')).toBe('page');
+
+    // the last page is one click away rather than thirteen
+    const last = Array.from(el.querySelectorAll('.page-num'))
+      .find(b => b.textContent!.trim() === '23') as HTMLButtonElement;
+    last.click();
+    fixture.detectChanges();
+    http.expectOne(r => r.url === '/api/findings' && r.params.get('page') === '22')
+      .flush({ total: 455, page: 22, size: 20, items: items.slice(0, 15) });
+    fixture.detectChanges();
+    expect(el.querySelector('.pager-text')!.textContent).toContain('441–455');
+  });
+
+  it('numbers every page when they all fit, with no gap marker', () => {
+    loadPage({ total: 60, page: 0, size: 20, items: [finding7] });
+
+    expect(Array.from(el.querySelectorAll('.pages li')).map(li => li.textContent!.trim()))
+      .toEqual(['1', '2', '3']);
+    expect(el.querySelector('.page-gap')).toBeNull();
+  });
+
+  /**
+   * Page 7 of 23 at twenty rows is not page 7 of 5 at a hundred. Rescaling would land the
+   * reader somewhere in the middle of a different slicing of the same data; the start of it
+   * is the only position that means the same thing before and after.
+   */
+  it('returns to the first page when the page size changes', () => {
+    const items = Array.from({ length: 20 }, (_, i) => ({ ...finding7, id: i }));
+    loadPage({ total: 455, page: 6, size: 20, items });
+
+    const select = el.querySelector('select[aria-label="Rows per page"]') as HTMLSelectElement;
+    select.value = '100';
+    select.dispatchEvent(new Event('change'));
+    fixture.detectChanges();
+
+    const req = http.expectOne(r => r.url === '/api/findings'
+      && r.params.get('size') === '100' && r.params.get('page') === '0');
+    req.flush({ total: 455, page: 0, size: 100, items });
+    fixture.detectChanges();
+    expect(el.querySelector('.pager-text')!.textContent).toContain('1–100');
   });
 
   it('opens the detail panel with the causal chain as the loudest thing', () => {

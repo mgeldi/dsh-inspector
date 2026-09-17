@@ -134,7 +134,84 @@
 .pager {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.pages {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.page-num {
+  min-width: 28px;
+  padding: 4px 7px;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  color: $text-lo;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background-color 0.12s ease, color 0.12s ease;
+
+  &:hover { background: color-mix(in srgb, $text-hi 6%, transparent); color: $text-hi; }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: 1px;
+  }
+
+  // The page you are on is a statement, not a target: it keeps the accent and stops
+  // reacting to the pointer, so the one button that does nothing does not invite a click.
+  &.current {
+    color: $accent;
+    border-color: color-mix(in srgb, $accent 38%, transparent);
+    background: color-mix(in srgb, $accent 10%, transparent);
+    cursor: default;
+
+    &:hover { background: color-mix(in srgb, $accent 10%, transparent); color: $accent; }
+  }
+}
+
+.page-gap {
+  padding: 0 2px;
+  color: $text-lo;
+}
+
+.pager-size {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-left: auto;
+  font-size: 12.5px;
+}
+
+// Its own rule, not the cohorts screen's `.cselect`: that class is scoped to that
+// component, so borrowing the name here would have rendered a browser-default control on a
+// dark board — the same mistake the detail panel's loading placeholder was making.
+.size-select {
+  min-height: 28px;
+  padding: 3px 8px;
+  background: $surface-raised;
+  border: 1px solid $hairline;
+  border-radius: 6px;
+  color: $text-hi;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+
+  &:hover { border-color: color-mix(in srgb, $text-lo 55%, $hairline); }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: 1px;
+  }
 }
 
 .pager-text {

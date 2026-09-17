@@ -116,18 +116,66 @@ export class Findings {
 
   // ---- pagination ----
 
-  goPage(delta: number): void {
+  /** How many pages the current total divides into; at least one, so "1 of 1" is never "1 of 0". */
+  readonly pageCount = computed(() => {
     const p = this.store.findings();
-    if (!p) { return; }
-    const next = p.page + delta;
-    // A page exists while its first item is within the total — `next * size < total`.
-    // (The old `(next + 1) * size > total` form was stricter and made the last page
-    // unreachable whenever it was a partial slice, while canNext — the button's own
-    // disabled state — said the jump was fine. Now both agree on the same rule.)
-    if (next < 0 || next * p.size >= p.total) { return; }
-    this.store.setPage(next);
+    if (!p || p.total === 0) { return 1; }
+    return Math.ceil(p.total / p.size);
+  });
+
+  readonly currentPage = computed(() => (this.store.findings()?.page ?? 0) + 1);
+
+  /**
+   * The numbered window: first, last, the current page and its neighbours, with a gap
+   * marker where numbers were skipped. 455 findings at 20 a page is 23 pages, and Prev/Next
+   * alone made page 23 twenty-two clicks away — a pager that can only walk is not a pager on
+   * a table this long. The window never changes width, so the buttons do not move under the
+   * pointer as you page through.
+   */
+  readonly pageWindow = computed<(number | 'gap')[]>(() => {
+    const count = this.pageCount();
+    const current = this.currentPage();
+    if (count <= 7) {
+      return Array.from({ length: count }, (_, i) => i + 1);
+    }
+    const out: (number | 'gap')[] = [1];
+    let from = Math.max(2, current - 1);
+    let to = Math.min(count - 1, current + 1);
+    // Keep the width constant at the ends, where the window would otherwise be lopsided.
+    if (current <= 3) { from = 2; to = 4; }
+    if (current >= count - 2) { from = count - 3; to = count - 1; }
+    if (from > 2) { out.push('gap'); }
+    for (let i = from; i <= to; i++) { out.push(i); }
+    if (to < count - 1) { out.push('gap'); }
+    out.push(count);
+    return out;
+  });
+
+  goPage(delta: number): void {
+    this.toPage(this.currentPage() + delta);
+  }
+
+  /** One-based, because that is what the control shows. Out-of-range jumps are ignored. */
+  toPage(oneBased: number): void {
+    const target = oneBased - 1;
+    if (target < 0 || target >= this.pageCount() || target === this.store.page()) { return; }
+    this.store.setPage(target);
     this.store.loadFindings();
   }
+
+  /**
+   * Rows per page. The page index is reset rather than rescaled: page 7 of 23 at twenty rows
+   * is not page 7 of 5 at a hundred, and landing somewhere in the middle of a different
+   * slicing of the same data is worse than landing at the start of it.
+   */
+  setSize(size: number): void {
+    if (size === this.store.size()) { return; }
+    this.store.setSize(size);
+    this.store.setPage(0);
+    this.store.loadFindings();
+  }
+
+  readonly sizes = [20, 50, 100] as const;
 
   /** The empty-state fix: the range is the usual suspect, so widen it and reload both screens. */
   useAllTime(): void {
