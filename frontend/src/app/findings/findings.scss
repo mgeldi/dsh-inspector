@@ -12,9 +12,6 @@
   flex-direction: column;
   gap: 12px;
   padding: 18px 20px 28px;
-  // A table wants every pixel it can get; the overview's 1120 was carried over by copy and
-  // pasted a scrollbar onto a screen that had room for the columns.
-  max-width: 1400px;
 }
 
 .floading { margin: 8px 0; }
@@ -33,10 +30,16 @@
 
 // min-width: 0 is what lets the table actually give up space. Without it the flex item
 // refuses to shrink below its content and the panel is pushed off the right edge instead.
+// The 1400px reading cap belongs to the table, not to the row the table sits in. On the page
+// it capped both columns together, so opening the detail panel took its 392px out of the
+// table's budget and truncated PATH and SESSION — while several hundred pixels sat unused to
+// the right of the panel. The table keeps its cap; the panel is extra, and only competes for
+// width on a window too narrow to hold both.
 .fcol {
   display: flex;
   flex: 1;
   min-width: 0;
+  max-width: 1400px;
   flex-direction: column;
   gap: 12px;
 }
@@ -104,7 +107,7 @@ app-finding-detail,
   // should fit the laptop it is demoed on, and scroll only past that.
   // 892 px of fixed columns plus a readable minimum for PATH. Raised from 900 when CODE
   // stopped being the flexible column: the budget has to cover the code in full now.
-  min-width: 960px;
+  min-width: 1010px;
   border-collapse: collapse;
   font-size: 13px;
 }

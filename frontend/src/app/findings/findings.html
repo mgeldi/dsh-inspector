@@ -52,7 +52,11 @@
           <col style="width: 168px" />
           <col style="width: 112px" />
           <col />
-          <col style="width: 100px" />
+          <!-- 150, not 100: the freed width went entirely to PATH, which had more than it
+               needed, while SESSION stayed at eleven characters of a uuid — enough to see
+               there is an id, not enough to tell two rows apart, which is what the column is
+               scanned for. -->
+          <col style="width: 150px" />
         </colgroup>
         <thead>
           <tr>
