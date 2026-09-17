@@ -156,6 +156,55 @@
   min-height: 0;
 }
 
+// ---- the rail toggle ----
+
+.rail-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  margin-right: 10px;
+  padding: 0;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: $text-lo;
+  cursor: pointer;
+  transition: background-color 0.13s ease, color 0.13s ease;
+
+  &:hover { background: color-mix(in srgb, $text-hi 8%, transparent); color: $text-hi; }
+
+  &[aria-expanded='false'] { color: $text-hi; }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: 1px;
+  }
+}
+
+.burger {
+  width: 16px;
+  height: 16px;
+}
+
+// The one thing a shut panel must not be able to swallow.
+.rail-badge {
+  position: absolute;
+  top: -2px;
+  right: -3px;
+  min-width: 15px;
+  padding: 0 3px;
+  background: $accent;
+  border-radius: 999px;
+  color: $surface;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 15px;
+  text-align: center;
+}
+
 .rail-pane {
   // 280 was roomy but it came out of the table's budget: at a 1280 window every pixel here
   // is a pixel the findings grid cannot use for a code or a path.

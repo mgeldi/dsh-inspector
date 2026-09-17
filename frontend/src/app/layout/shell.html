@@ -1,6 +1,26 @@
 <div class="shell">
   <header class="header">
     <mat-toolbar class="toolbar">
+      <!-- The filters live in the URL, so the panel holding them is furniture and can be put
+           away. The count stays on the button: a rail that folds away with three facets set
+           would leave a short table with nothing on screen explaining why. -->
+      <button
+        type="button"
+        class="rail-toggle"
+        (click)="toggleRail()"
+        [attr.aria-expanded]="railOpen()"
+        aria-controls="filter-rail"
+        [attr.aria-label]="railToggleLabel()"
+        [title]="railToggleLabel()"
+      >
+        <svg class="burger" viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+          <path d="M2 4h12M2 8h12M2 12h12" fill="none" stroke="currentColor"
+                stroke-width="1.6" stroke-linecap="round" />
+        </svg>
+        @if (activeFilterCount() > 0) {
+          <span class="rail-badge num" aria-hidden="true">{{ activeFilterCount() }}</span>
+        }
+      </button>
       <span class="app-name">DSH Inspector</span>
       <nav class="tabs" aria-label="Sections">
         @for (t of tabs; track t.key) {
@@ -58,10 +78,14 @@
   </header>
 
   <div class="frame-body">
-    <!-- The rail is outside the outlet: a route change swaps the outlet, never the filters. -->
-    <aside class="rail-pane" aria-label="Filters">
-      <app-filter-rail />
-    </aside>
+    <!-- The rail is outside the outlet: a route change swaps the outlet, never the filters.
+         Removed from the DOM when it is shut rather than hidden with CSS, so its selects do
+         not stay in the tab order behind a closed panel. -->
+    @if (railOpen()) {
+      <aside class="rail-pane" id="filter-rail" aria-label="Filters">
+        <app-filter-rail />
+      </aside>
+    }
     <main class="outlet-pane">
       <router-outlet />
     </main>

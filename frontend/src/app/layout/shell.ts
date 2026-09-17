@@ -32,6 +32,34 @@ export class Shell {
   /** The last state the URL described, so a change can be told apart from a repetition. */
   private applied: UrlState | null = null;
 
+  /**
+   * Whether the filter rail is showing. Since the filters live in the URL, the rail no longer
+   * has to stay open to hold them — the view survives without it, so the 244px it costs the
+   * table can be handed back on a screen where the filters are already set.
+   *
+   * <p>Kept in localStorage rather than in the URL: which panels a reader has open is a fact
+   * about the reader, not about the view, and a shared link should not impose the sender's
+   * furniture. Every access is guarded — the accessor throws outright in a private window with
+   * site data blocked, and a dashboard must not fail to start over a panel preference.
+   */
+  readonly railOpen = signal(readRailOpen());
+
+  /**
+   * How much is currently narrowing the view. A collapsed rail must not be able to hide that
+   * filtering is happening: an unexplained short table reads as "there is not much here",
+   * which is the same wrong answer as an empty dashboard that means "you typed something
+   * wrong". The count rides on the toggle so the fact survives the panel being shut.
+   */
+  readonly activeFilterCount = computed(() => {
+    const f = this.store.filters();
+    let count = f.presetId === 'all' ? 0 : 1;
+    for (const facet of ['schema', 'model', 'preset', 'harnessVersion'] as const) {
+      if (f[facet]) { count += 1; }
+    }
+    if (this.store.code()) { count += 1; }
+    return count;
+  });
+
   readonly tabs = [
     { key: 'overview', label: 'Overview', link: '' },
     { key: 'findings', label: 'Findings', link: 'findings' },
@@ -108,7 +136,39 @@ export class Shell {
     return key === 'overview' ? segment === '' : segment === key;
   }
 
+  toggleRail(): void {
+    const open = !this.railOpen();
+    this.railOpen.set(open);
+    writeRailOpen(open);
+  }
+
+  /** What the toggle announces: the action, and the fact the panel would otherwise hide. */
+  railToggleLabel(): string {
+    const count = this.activeFilterCount();
+    const action = this.railOpen() ? 'Hide filters' : 'Show filters';
+    return count === 0 ? action : `${action} (${count} active)`;
+  }
+
   reindex(): void { this.store.reindex(); }
   dismissError(): void { this.store.dismissError(); }
   dismissNotice(): void { this.store.dismissNotice(); }
+}
+
+const RAIL_KEY = 'dsh-inspector.rail';
+
+/** Open unless this browser was told otherwise, and open whenever the answer cannot be read. */
+function readRailOpen(): boolean {
+  try {
+    return localStorage.getItem(RAIL_KEY) !== 'closed';
+  } catch {
+    return true;
+  }
+}
+
+function writeRailOpen(open: boolean): void {
+  try {
+    localStorage.setItem(RAIL_KEY, open ? 'open' : 'closed');
+  } catch {
+    // A preference that cannot be remembered is not a failure worth surfacing.
+  }
 }

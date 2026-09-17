@@ -6,6 +6,7 @@ import { Router, provideRouter } from '@angular/router';
 import type { FindingsPageDto, OverviewDto } from '../api/types';
 import { InsightsStore } from '../state/insights.store';
 import { Shell } from './shell';
+import { applyPreset } from '../state/filters';
 
 // Invented test data: the model name and vocabulary are not from any real corpus.
 const overview: OverviewDto = {
@@ -29,6 +30,17 @@ const emptyFindings: FindingsPageDto = { total: 9, page: 0, size: 20, items: [] 
 })
 class FakeFindingsRoute {}
 
+/** jsdom runs this suite on an opaque origin, where the real accessor is absent. */
+const store2 = new Map<string, string>();
+const fakeStorage = {
+  getItem: (k: string) => store2.get(k) ?? null,
+  setItem: (k: string, v: string) => { store2.set(k, v); },
+  removeItem: (k: string) => { store2.delete(k); },
+  clear: () => store2.clear(),
+  key: () => null,
+  length: 0,
+};
+
 describe('Shell', () => {
   let store: InsightsStore;
   let http: HttpTestingController;
@@ -36,6 +48,10 @@ describe('Shell', () => {
   let el: HTMLElement;
 
   beforeEach(async () => {
+    store2.clear();
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true, writable: true, value: fakeStorage,
+    });
     await TestBed.configureTestingModule({
       imports: [Shell],
       providers: [
@@ -203,5 +219,75 @@ describe('Shell', () => {
 
     expect(el.querySelector('.index-result')?.textContent)
       .toBe('indexed 9 streams, 6 findings in 0.1 s, pruned 3 streams');
+  });
+
+  /**
+   * The rail holds the filters; the URL holds the state. Once that was true the panel became
+   * furniture, and 244px of it was coming out of the findings table on every screen where the
+   * filters were already set.
+   */
+  it('folds the rail away and keeps it away for the next visit', () => {
+    expect(el.querySelector('#filter-rail'), 'open by default').toBeTruthy();
+
+    const toggle = el.querySelector('.rail-toggle') as HTMLButtonElement;
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(toggle.getAttribute('aria-controls')).toBe('filter-rail');
+
+    toggle.click();
+    fixture.detectChanges();
+
+    // Removed, not hidden: a select behind a shut panel must not stay in the tab order.
+    expect(el.querySelector('#filter-rail')).toBeNull();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(store2.get('dsh-inspector.rail')).toBe('closed');
+  });
+
+  /**
+   * The accessor is not merely empty in a private window with site data blocked — reading it
+   * throws outright. A dashboard must not fail to start over which panels were last open, so
+   * every access is guarded and the default is the open rail.
+   */
+  it('starts with the rail open when the preference cannot be read at all', () => {
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() { throw new DOMException('denied', 'SecurityError'); },
+    });
+
+    const guarded = TestBed.createComponent(Shell);
+    guarded.detectChanges();
+    // a second shell starts its own shared load; settle it so afterEach stays meaningful
+    for (const req of http.match(() => true)) { req.flush(req.request.url.includes('overview') ? overview : emptyFindings); }
+    const railEl = guarded.nativeElement as HTMLElement;
+
+    expect(railEl.querySelector('#filter-rail'), 'open despite the throw').toBeTruthy();
+    // and toggling it must not propagate the failure either
+    expect(() => (railEl.querySelector('.rail-toggle') as HTMLButtonElement).click()).not.toThrow();
+  });
+
+  /**
+   * A panel that can be shut must not be able to take the fact of filtering with it. An
+   * unexplained short table reads as "there is not much here", which is the same wrong answer
+   * as an empty dashboard that means "you typed something wrong".
+   */
+  it('carries the number of active filters on the toggle, so shutting it hides nothing', () => {
+    const toggle = () => el.querySelector('.rail-toggle') as HTMLButtonElement;
+    expect(el.querySelector('.rail-badge'), 'nothing to report on an unfiltered view').toBeNull();
+    expect(toggle().getAttribute('aria-label')).toBe('Hide filters');
+
+    store.filters.update(f => ({ ...applyPreset(f, '7d', 1_790_000_000_000), schema: 'V0' }));
+    store.code.set('FS_STALE_VERSION');
+    fixture.detectChanges();
+
+    // the range, the facet and the code drill-down
+    expect(el.querySelector('.rail-badge')!.textContent!.trim()).toBe('3');
+    expect(toggle().getAttribute('aria-label')).toBe('Hide filters (3 active)');
+
+    toggle().click();
+    fixture.detectChanges();
+    expect(el.querySelector('.rail-badge')!.textContent!.trim()).toBe('3');
+    expect(toggle().getAttribute('aria-label')).toBe('Show filters (3 active)');
+
+    // writing the signals above does not itself fetch; nothing may be left in flight
+    http.verify();
   });
 });
