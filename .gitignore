@@ -49,8 +49,9 @@ docs/superpowers/
 # showing; until then it stays local.
 docs/tasks/
 
-# local working notes kept beside the code and never published
+# local working notes and one-shot scripts kept beside the code, never published
 *.local.md
+*.local.sh
 
 # browser-automation scratch output (snapshots, screenshots, console logs)
 .playwright-mcp/
