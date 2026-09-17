@@ -1,10 +1,11 @@
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
-import { NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter, map } from 'rxjs';
 import { InsightsStore } from '../state/insights.store';
+import { findingsAxisDiffers, fromParams, sharedFiltersDiffer, type UrlState } from '../state/url-state';
 import { FilterRail } from './filter-rail';
 
 /**
@@ -25,7 +26,11 @@ import { FilterRail } from './filter-rail';
 export class Shell {
   readonly store = inject(InsightsStore);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
+
+  /** The last state the URL described, so a change can be told apart from a repetition. */
+  private applied: UrlState | null = null;
 
   readonly tabs = [
     { key: 'overview', label: 'Overview', link: '' },
@@ -65,10 +70,37 @@ export class Shell {
       map(e => (e as NavigationEnd).urlAfterRedirects),
       takeUntilDestroyed(this.destroyRef),
     ).subscribe(url => this.currentUrl.set(url));
-    // The rail lives in the shell and needs the vocabulary, so the shell starts the
-    // one shared load; the routes render whatever the store holds and never fetch
-    // anything of their own in Task 6.
-    this.store.loadAll();
+    // The URL is upstream of the data. The shell reads it, writes the store, and asks for
+    // exactly the loads the change requires — so the initial load, a shared link, a reload
+    // and the back button all arrive through the same path instead of three of them being
+    // special cases. The rail lives in the shell and needs the vocabulary, which the
+    // overview load brings with it.
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(map => this.applyUrl(fromParams(key => map.get(key))));
+  }
+
+  /**
+   * Feed the store from the URL, then load what actually changed. A page change must not
+   * re-ask the overview: it describes the same population as before, and the cohorts screen
+   * re-asks itself through the filters signal it already watches.
+   */
+  private applyUrl(next: UrlState): void {
+    const previous = this.applied;
+    this.applied = next;
+
+    this.store.filters.set(next.filters);
+    this.store.code.set(next.code);
+    this.store.sort.set(next.sort);
+    this.store.page.set(next.page);
+    this.store.size.set(next.size);
+
+    if (previous === null || sharedFiltersDiffer(previous, next)) {
+      this.store.loadAll();
+      return;
+    }
+    if (findingsAxisDiffers(previous, next)) {
+      this.store.loadFindings();
+    }
   }
 
   tabActive(key: string): boolean {

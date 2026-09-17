@@ -3,6 +3,8 @@ import { PLANE_COLOURS } from '../charts/theme';
 import type { Category, FindingDetailDto, FindingDto, Plane, SortDir, SortField } from '../api/types';
 import { InsightsStore } from '../state/insights.store';
 import { FindingDetail, confidenceLabel, confidenceTip, planeLabel, timeShort } from './finding-detail';
+import { ViewUrl } from '../state/view-url';
+import { applyPreset } from '../state/filters';
 
 /**
  * The findings table. Dense, sorted on the server, honest about what a page is:
@@ -19,6 +21,7 @@ import { FindingDetail, confidenceLabel, confidenceTip, planeLabel, timeShort } 
 })
 export class Findings {
   readonly store = inject(InsightsStore);
+  private readonly url = inject(ViewUrl);
   readonly PLANE_COLOURS = PLANE_COLOURS;
 
   readonly loaded = computed(() => this.store.findings() !== null);
@@ -84,8 +87,7 @@ export class Findings {
     // Clicking the active header flips its direction; a new header starts desc —
     // the way the backend's default reads, and the direction users scan first.
     const dir: SortDir = cur.field === field ? (cur.dir === 'desc' ? 'asc' : 'desc') : 'desc';
-    this.store.setSort({ field, dir });
-    this.store.loadFindings();
+    this.url.patch({ sort: { field, dir }, page: 0 });
   }
 
   isSorted(field: SortField): boolean {
@@ -159,8 +161,7 @@ export class Findings {
   toPage(oneBased: number): void {
     const target = oneBased - 1;
     if (target < 0 || target >= this.pageCount() || target === this.store.page()) { return; }
-    this.store.setPage(target);
-    this.store.loadFindings();
+    this.url.patch({ page: target });
   }
 
   /**
@@ -170,17 +171,14 @@ export class Findings {
    */
   setSize(size: number): void {
     if (size === this.store.size()) { return; }
-    this.store.setSize(size);
-    this.store.setPage(0);
-    this.store.loadFindings();
+    this.url.patch({ size, page: 0 });
   }
 
   readonly sizes = [20, 50, 100] as const;
 
   /** The empty-state fix: the range is the usual suspect, so widen it and reload both screens. */
   useAllTime(): void {
-    this.store.setPreset('all');
-    this.store.loadAll();
+    this.url.patch({ filters: applyPreset(this.store.filters(), 'all'), page: 0 });
   }
 
   // ---- cell renderers, the rules stated once and used everywhere ----
@@ -194,8 +192,7 @@ export class Findings {
   readonly activeCode = computed(() => this.store.code());
 
   clearCode(): void {
-    this.store.showCode(null);
-    this.store.loadFindings();
+    this.url.patch({ code: null, page: 0 });
   }
 
   confidenceWord(c: number | null, category: Category | null): string { return confidenceLabel(c, category); }

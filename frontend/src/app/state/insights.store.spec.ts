@@ -4,6 +4,7 @@ import { TestBed } from '@angular/core/testing';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FindingDto, FindingDetailDto, FindingsPageDto, OverviewDto } from '../api/types';
 import { InsightsStore } from './insights.store';
+import { applyPreset } from './filters';
 
 // Invented fixture data: the model name, session id and paths are not from any real corpus.
 const goodOverview: OverviewDto = {
@@ -50,8 +51,8 @@ describe('InsightsStore', () => {
   afterEach(() => http.verify({ ignoreCancelled: true }));
 
   it('sends the same filter params to overview and findings from the one filter state', () => {
-    store.setPreset('7d', 1_790_000_000_000);
-    store.setFilters({ schema: 'V0' });
+    store.filters.update(f => applyPreset(f, '7d', 1_790_000_000_000));
+    store.filters.update(f => ({ ...f, ...{ schema: 'V0' } }));
     store.loadOverview();
     store.loadFindings();
 
@@ -78,8 +79,8 @@ describe('InsightsStore', () => {
   });
 
   it('lets a facet be cleared to null, and a null facet is not sent', () => {
-    store.setFilters({ schema: 'V0' });
-    store.setFilters({ schema: null });
+    store.filters.update(f => ({ ...f, ...{ schema: 'V0' } }));
+    store.filters.update(f => ({ ...f, ...{ schema: null } }));
     expect(store.filters().schema).toBeNull();
     store.loadOverview();
     const req = http.expectOne(r => r.url === '/api/overview');
@@ -92,7 +93,7 @@ describe('InsightsStore', () => {
     http.expectOne(r => r.url === '/api/overview').flush(goodOverview);
     expect(store.overview()?.tiles.sessions).toBe(165);
 
-    store.setFilters({ schema: 'nope' });
+    store.filters.update(f => ({ ...f, ...{ schema: 'nope' } }));
     store.loadOverview();
     http.expectOne(r => r.url === '/api/overview').flush(
       { status: 400, title: 'Unknown filter value', filter: 'schema', value: 'nope', allowed: ['V0', 'V3'] },
@@ -107,7 +108,7 @@ describe('InsightsStore', () => {
     http.expectOne(r => r.url === '/api/findings').flush(goodFindings);
     expect(store.findings()?.total).toBe(389);
 
-    store.setFilters({ schema: 'nope' });
+    store.filters.update(f => ({ ...f, ...{ schema: 'nope' } }));
     store.loadFindings();
     http.expectOne(r => r.url === '/api/findings').flush(
       { status: 400, title: 'Unknown filter value', filter: 'schema', value: 'nope', allowed: ['V0', 'V3'] },

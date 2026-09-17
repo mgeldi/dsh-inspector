@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { InsightsStore } from '../state/insights.store';
-import { DEFAULT_PRESET, PRESETS, type Filters, type PresetId } from '../state/filters';
+import { applyPreset, DEFAULT_PRESET, emptyFilters, PRESETS, type Filters, type PresetId } from '../state/filters';
+import { ViewUrl } from '../state/view-url';
 
 type FacetKey = 'schema' | 'model' | 'preset' | 'harnessVersion';
 type VocabKey = 'schemas' | 'models' | 'presets' | 'harnessVersions';
@@ -40,6 +41,7 @@ const FACETS: readonly Facet[] = [
 })
 export class FilterRail {
   readonly store = inject(InsightsStore);
+  private readonly url = inject(ViewUrl);
   readonly facets = FACETS;
   readonly presets = PRESETS;
 
@@ -106,17 +108,20 @@ export class FilterRail {
    * filtered" — the backend reads '' as a value and answers 400.
    */
   changeFacet(facet: Facet, value: string): void {
-    this.store.setFilters({ [facet.key]: value === '' ? null : value } as Partial<Filters>);
-    this.store.loadAll();
+    // Back to the first page: page 7 of a wider selection is not page 7 of a narrower one,
+    // and a filter that leaves the reader stranded past the end of its own result reads as
+    // "no findings" — the answer this screen must never give by accident.
+    this.url.patch({
+      filters: { ...this.store.filters(), [facet.key]: value === '' ? null : value },
+      page: 0,
+    });
   }
 
   changePreset(id: PresetId): void {
-    this.store.setPreset(id);
-    this.store.loadAll();
+    this.url.patch({ filters: applyPreset(this.store.filters(), id), page: 0 });
   }
 
   clear(): void {
-    this.store.clearFilters();
-    this.store.loadAll();
+    this.url.patch({ filters: emptyFilters(), code: null, page: 0 });
   }
 }

@@ -136,7 +136,7 @@ describe('Cohorts', () => {
   it('re-requests with the shared filters when a facet changes', () => {
     load(page({ groupBy: 'harnessVersion' }));
 
-    store.setFilters({ model: 'demo-flash-8b' });
+    store.filters.update(f => ({ ...f, ...{ model: 'demo-flash-8b' } }));
     fixture.detectChanges();
 
     const req = http.expectOne(

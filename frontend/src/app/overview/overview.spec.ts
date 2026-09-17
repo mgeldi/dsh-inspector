@@ -2,10 +2,11 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import { signal } from '@angular/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { OverviewDto } from '../api/types';
-import type { PresetId } from '../state/filters';
+import { emptyFilters, type PresetId } from '../state/filters';
 import { InsightsStore } from '../state/insights.store';
 import { PLANE_COLOURS } from '../charts/theme';
 import { Overview } from './overview';
+import { ViewUrl } from '../state/view-url';
 
 // jsdom has no ResizeObserver; the chart wrapper only needs the API surface.
 class FakeResizeObserver {
@@ -47,18 +48,25 @@ vi.mock('echarts/renderers', () => ({ CanvasRenderer: {} }));
 
 // A stubbed store, per the plan: the screen reads one overview() signal and writes through
 // setPreset / loadAll / reindex, so the stub only has to hold those four.
+/** Records where a control wanted to go, which is the component's whole job now. */
+class StubUrl {
+  readonly gos: { path: readonly string[]; state: Record<string, unknown> }[] = [];
+  readonly patches: Record<string, unknown>[] = [];
+  patch(state: Record<string, unknown>): void { this.patches.push(state); }
+  go(path: readonly string[], state: Record<string, unknown>): void { this.gos.push({ path, state }); }
+}
+
 class StubStore {
   readonly overview = signal<OverviewDto | null>(null);
   readonly busy = signal(0);
+  readonly filters = signal(emptyFilters());
   readonly setPresetCalls: PresetId[] = [];
-  readonly showCodeCalls: (string | null)[] = [];
   loadAllCalls = 0;
   loadFindingsCalls = 0;
   reindexCalls = 0;
   setPreset(id: PresetId): void { this.setPresetCalls.push(id); }
   loadAll(): void { this.loadAllCalls += 1; }
   loadFindings(): void { this.loadFindingsCalls += 1; }
-  showCode(code: string | null): void { this.showCodeCalls.push(code); }
   reindex(): void { this.reindexCalls += 1; }
 }
 
@@ -83,12 +91,17 @@ describe('Overview', () => {
   let fixture: ComponentFixture<Overview>;
   let el: HTMLElement;
   let stub: StubStore;
+  let url: StubUrl;
 
   beforeEach(async () => {
     stub = new StubStore();
+    url = new StubUrl();
     await TestBed.configureTestingModule({
       imports: [Overview],
-      providers: [{ provide: InsightsStore, useValue: stub }],
+      providers: [
+        { provide: InsightsStore, useValue: stub },
+        { provide: ViewUrl, useValue: url },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Overview);
@@ -200,9 +213,11 @@ describe('Overview', () => {
     (entries[0] as HTMLElement).click();
     fixture.detectChanges();
 
-    // the code is handed to the store and the rows are fetched before the route changes
-    expect(stub.showCodeCalls).toEqual(['FS_NOT_OBSERVED']);
-    expect(stub.loadFindingsCalls).toBe(1);
+    // One navigation carries both the screen and the narrowing, and the shell turns that
+    // into the fetch — so the link is shareable as exactly what it shows.
+    expect(url.gos).toHaveLength(1);
+    expect(url.gos[0].path).toEqual(['/findings']);
+    expect(url.gos[0].state).toEqual({ code: 'FS_NOT_OBSERVED', page: 0 });
     // the shared rail is untouched: the code narrows that selection, it does not replace it
     expect(stub.setPresetCalls).toEqual([]);
   });
@@ -236,8 +251,11 @@ describe('Overview', () => {
     const allTime = Array.from(empty!.querySelectorAll('button'))
       .find(b => b.textContent?.includes('All time')) as HTMLButtonElement;
     allTime.click();
-    expect(stub.setPresetCalls).toContain('all');
-    expect(stub.loadAllCalls).toBe(1);
+    // The fix navigates rather than reaching into the store, so the widened range is in the
+    // URL and the screen it produces can be linked to like any other.
+    expect(url.patches).toHaveLength(1);
+    expect((url.patches[0]['filters'] as { presetId: string }).presetId).toBe('all');
+    expect(url.patches[0]['page']).toBe(0);
 
     const reindex = Array.from(empty!.querySelectorAll('button'))
       .find(b => b.textContent?.includes('Run indexer')) as HTMLButtonElement;

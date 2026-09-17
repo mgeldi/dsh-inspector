@@ -6,6 +6,8 @@ import { ChartComponent } from '../charts/chart';
 import { CHART_AXIS, CHART_BASE, DAILY_BAR_COLOUR, PLANE_COLOURS } from '../charts/theme';
 import { InsightsStore } from '../state/insights.store';
 import type { Plane } from '../api/types';
+import { ViewUrl } from '../state/view-url';
+import { applyPreset } from '../state/filters';
 
 const DAY_MS = 86_400_000;
 
@@ -38,6 +40,7 @@ interface PlaneRow { plane: Plane; count: number; share: number; shareText: stri
 })
 export class Overview {
   readonly store = inject(InsightsStore);
+  private readonly url = inject(ViewUrl);
   private readonly router = inject(Router);
   readonly PLANE_COLOURS = PLANE_COLOURS;
 
@@ -161,12 +164,10 @@ export class Overview {
    * number on the summary and the number of rows that arrive are the same number.
    */
   openCode(code: string): void {
-    this.store.showCode(code);
-    // Fetch before navigating, not after: the findings screen renders whatever the store
-    // holds and has no load of its own, so without this the table would arrive showing the
-    // previous, unfiltered page under a banner announcing the filter.
-    this.store.loadFindings();
-    void this.router.navigate(['/findings']);
+    // One navigation carries both the screen and the narrowing. The shell reads the new URL
+    // and issues the fetch, so the table cannot arrive showing the previous, unfiltered page
+    // under a banner announcing a filter — and the link is shareable as what it shows.
+    this.url.go(['/findings'], { code, page: 0 });
   }
 
   /**
@@ -198,8 +199,7 @@ export class Overview {
   }
 
   useAllTime(): void {
-    this.store.setPreset('all');
-    this.store.loadAll();
+    this.url.patch({ filters: applyPreset(this.store.filters(), 'all'), page: 0 });
   }
 
   runIndexer(): void { this.store.reindex(); }

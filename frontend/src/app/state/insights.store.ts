@@ -91,28 +91,9 @@ export class InsightsStore {
 
   // ---- filter writes ----
 
-  setFilters(patch: Partial<Filters>): void {
-    this.filters.update(f => ({ ...f, ...patch }));
-  }
 
-  setPreset(id: PresetId, now: number = Date.now()): void {
-    this.filters.update(f => applyPreset(f, id, now));
-  }
 
-  /** The rail's "Clear": nulls are written, not empty strings, so nothing is sent. */
-  clearFilters(): void {
-    this.filters.set(emptyFilters());
-    this.code.set(null);
-  }
 
-  /**
-   * Open a code as the rows behind it: the findings table, filtered, from page one. Called
-   * by the overview's breakdown, which is the only control that writes this.
-   */
-  showCode(code: string | null): void {
-    this.code.set(code);
-    this.page.set(0);
-  }
 
   /**
    * Dismiss the error bar. The bar shows whatever `error()` holds and the store is
@@ -124,9 +105,9 @@ export class InsightsStore {
   /** Same rule as {@link dismissError}: the store is the only writer, so nothing stays hidden. */
   dismissNotice(): void { this.notice.set(null); }
 
-  setSort(sort: { field: SortField; dir: SortDir } | null): void { this.sort.set(sort); }
-  setPage(page: number): void { this.page.set(page); }
-  setSize(size: number): void { this.size.set(size); }
+
+
+
 
   // ---- loads: all of them through the one filter state ----
 

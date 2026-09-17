@@ -5,6 +5,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { FindingDetailDto, FindingDto, FindingsPageDto, OverviewDto } from '../api/types';
 import { InsightsStore } from '../state/insights.store';
 import { Findings } from './findings';
+import { ViewUrl } from '../state/view-url';
+import { FakeViewUrl } from '../state/view-url.testing';
 
 // Invented fixture data only — session ids, paths and commands are not from any real corpus.
 const finding7: FindingDto = {
@@ -70,7 +72,13 @@ describe('Findings', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [Findings],
-      providers: [provideHttpClient(withFetch()), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(withFetch()),
+        provideHttpClientTesting(),
+        // The controls navigate now; this closes the same loop the shell closes, so these
+        // specs keep asserting what a user gets rather than only that a URL was requested.
+        { provide: ViewUrl, useFactory: () => new FakeViewUrl(TestBed.inject(InsightsStore)) },
+      ],
     }).compileComponents();
 
     fixture = TestBed.createComponent(Findings);

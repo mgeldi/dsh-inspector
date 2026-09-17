@@ -4,6 +4,9 @@ import { TestBed, type ComponentFixture } from '@angular/core/testing';
 import type { FindingsPageDto, OverviewDto } from '../api/types';
 import { InsightsStore } from '../state/insights.store';
 import { FilterRail } from './filter-rail';
+import { ViewUrl } from '../state/view-url';
+import { FakeViewUrl } from '../state/view-url.testing';
+import { applyPreset } from '../state/filters';
 
 // Invented test data: the vocabulary mixes multi-valued facets, one single-valued
 // facet and `unknown` as an ordinary value. Nothing is from any real corpus.
@@ -32,7 +35,13 @@ describe('FilterRail', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [FilterRail],
-      providers: [provideHttpClient(withFetch()), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(withFetch()),
+        provideHttpClientTesting(),
+        // The controls navigate now; this closes the same loop the shell closes, so these
+        // specs keep asserting what a user gets rather than only that a URL was requested.
+        { provide: ViewUrl, useFactory: () => new FakeViewUrl(TestBed.inject(InsightsStore)) },
+      ],
     }).compileComponents();
 
     store = TestBed.inject(InsightsStore);
@@ -122,7 +131,7 @@ describe('FilterRail', () => {
   });
 
   it('writes null — not an empty string — when (any) is chosen', () => {
-    store.setFilters({ schema: 'V0' });
+    store.filters.update(f => ({ ...f, ...{ schema: 'V0' } }));
     fixture.detectChanges();
     expect(select('schema').value).toBe('V0');
 
@@ -152,8 +161,8 @@ describe('FilterRail', () => {
   });
 
   it('clears every facet and the preset on Clear, and reloads', () => {
-    store.setFilters({ schema: 'V0' });
-    store.setPreset('7d', 1_790_000_000_000);
+    store.filters.update(f => ({ ...f, ...{ schema: 'V0' } }));
+    store.filters.update(f => applyPreset(f, '7d', 1_790_000_000_000));
     const loadAll = vi.spyOn(store, 'loadAll');
 
     (el.querySelector('.clear') as HTMLButtonElement).click();
