@@ -37,11 +37,16 @@ are local decisions.
   confidence label that described a search which never ran.
 
 **This is checkable rather than asserted.** Every commit that hosted assistance touched
-carries a `Co-Authored-By` trailer — sixteen of them, twelve with code in them:
+carries a `Co-Authored-By` trailer, so the split is a query rather than a claim:
 
 ```
 git log --format='%H %s' --grep='Co-Authored-By: Claude'
 ```
+
+No count is written here on purpose. An earlier draft said "sixteen of them", and the commit
+that would have corrected it to eighteen carried a trailer of its own — a number that goes
+stale as it is written is the same defect as the prose this section is about, only faster.
+Ask the repository.
 
 An earlier version of this section claimed no hosted assistant had implemented a feature.
 That was true when it was written and stopped being true a day later, which is exactly the
