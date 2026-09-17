@@ -55,6 +55,7 @@ const minimalOverview: OverviewDto = {
   tiles: { sessions: 11, findings: 9, toolCalls: 32, steps: 18 },
   planeMix: { GUARD: 4, MODEL_MISUSE: 3, INFRASTRUCTURE: 2 },
   topDetectors: [{ detector: 'stamp-guard', count: 4 }],
+  topCodes: [{ code: 'FS_STALE_VERSION', count: 4 }],
   series: [{ day: '2026-09-08', findings: 3, toolCalls: 10 }],
   throughput: [{ schema: 'V0', timingSource: 'chunk-events', steps: 18, medianDecodeTps: 163.4, medianTtftMs: 563.5 }],
   vocabulary: { schemas: [], models: [], presets: [], harnessVersions: [], codes: [], detectors: [] },

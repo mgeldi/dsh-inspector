@@ -127,6 +127,26 @@ class OverviewControllerTest {
         assertThat(root.path("topDetectors").path(0).path("count").asLong()).isEqualTo(5);
         assertThat(root.path("topDetectors").path(1).path("detector").asText()).isEqualTo("error-plane");
 
+        // The codes, which is the breakdown a reader can act on: a detector name says which
+        // rule fired, a code says what the harness refused. Ordered by count, and every entry
+        // is a legal value of the ?code= filter the findings table takes.
+        final JsonNode codes = root.path("topCodes");
+        assertThat(codes.isArray()).isTrue();
+        assertThat(codes).isNotEmpty();
+        long previous = Long.MAX_VALUE;
+        long summed = 0;
+        for (final JsonNode entry : codes) {
+            final long count = entry.path("count").asLong();
+            assertThat(entry.path("code").asText()).isNotBlank();
+            assertThat(count).as("counts descend").isLessThanOrEqualTo(previous);
+            previous = count;
+            summed += count;
+        }
+        // The fixture corpus emits fewer distinct codes than the panel's limit, so the
+        // breakdown is complete and has to add up to the tile beside it. A panel that
+        // silently dropped a bucket would be the same class of lie as a wrong denominator.
+        assertThat(summed).isEqualTo(root.path("tiles").path("findings").asLong());
+
         // the two daily series, merged
         assertThat(root.path("series").isArray()).isTrue();
         assertThat(root.path("series")).isNotEmpty();

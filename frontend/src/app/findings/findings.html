@@ -18,6 +18,13 @@
          row stays clickable, so reading one finding after another is one click each. -->
     <div class="fmain">
     <div class="fcol">
+    @if (activeCode(); as code) {
+      <p class="code-filter">
+        Showing only findings with code <span class="code-filter-name">{{ code }}</span>, as
+        selected on the overview. The rail's filters still apply.
+        <button type="button" class="btn btn-ghost" (click)="clearCode()">Show all codes</button>
+      </p>
+    }
     <!-- The wrapper is the scroll container: the header sticks inside it, not inside the page. -->
     <div class="ftable-wrap">
       <table class="ftable" aria-label="Findings">

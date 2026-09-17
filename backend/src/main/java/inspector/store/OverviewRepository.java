@@ -42,6 +42,10 @@ public final class OverviewRepository {
     public record PlaneMixRow(String plane, long count) {
     }
 
+    /** One error code and how many findings carry it. A null code reads "unknown". */
+    public record CodeCountRow(String code, long count) {
+    }
+
     public record DetectorCountRow(String detector, long count) {
     }
 
@@ -106,6 +110,30 @@ public final class OverviewRepository {
         return jdbc.sql(sql).params(where.params())
                 .query((RowMapper<DetectorCountRow>) (rs, rowNum) ->
                         new DetectorCountRow(rs.getString("detector"), rs.getLong("n")))
+                .list();
+    }
+
+    /**
+     * Top error codes, count descending, code ascending to break ties.
+     *
+     * <p>The detector answers "which rule fired", which is a fact about this tool. The code
+     * answers "what went wrong", which is a fact about the harness — and it is the one a
+     * reader can act on. A null code (a fatal turn whose embedded code did not parse) folds
+     * into "unknown" rather than vanishing, so the column still sums to the findings tile.
+     */
+    public List<CodeCountRow> topCodes(final FindingFilters.Sql where, final int limit) {
+        // Bound, not spliced. The limit is an int from a constant and could not inject, but
+        // the rule in this package is that a value reaches SQLite as a `?` and the clause text
+        // is assembled only from fixed fragments — a rule with one exception is a rule nobody
+        // can check at a glance.
+        final List<Object> params = new ArrayList<>(where.params());
+        params.add(limit);
+        final String sql = "select coalesce(f.code, 'unknown') as code, count(*) as n "
+                + SqlSupport.FINDING_JOIN + " " + where.asWhere()
+                + " group by 1 order by n desc, 1 asc limit ?";
+        return jdbc.sql(sql).params(params)
+                .query((RowMapper<CodeCountRow>) (rs, rowNum) ->
+                        new CodeCountRow(rs.getString("code"), rs.getLong("n")))
                 .list();
     }
 

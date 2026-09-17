@@ -60,6 +60,27 @@ app-finding-detail,
   border-radius: 8px;
 }
 
+// A narrowing the user did not set in the rail has to say so where the rows are, not only
+// where it was clicked.
+.code-filter {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+  padding: 8px 12px;
+  background: color-mix(in srgb, $accent 9%, transparent);
+  border: 1px solid color-mix(in srgb, $accent 26%, transparent);
+  border-radius: 8px;
+  font-size: 13px;
+  color: $text-lo;
+}
+
+.code-filter-name {
+  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  color: $text-hi;
+}
+
 // ---- the table ----
 
 // The wrapper is the scroll container: the header sticks inside it, so the columns stay

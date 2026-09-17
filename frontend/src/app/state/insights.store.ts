@@ -67,9 +67,14 @@ export class InsightsStore {
   readonly notice = signal<string | null>(null);
 
   // Findings-only request state. The from/to/schema/model/preset/harnessVersion filters
-  // above are shared with overview; these are not. The backend also accepts per-row
-  // plane/detector/session/code filters (FindingsRequest); no screen drives them, so the
-  // store holds no state for them — a filter nothing writes is not a filter, it is residue.
+  // above are shared with overview; these are not.
+  //
+  // `code` used to be in the same sentence as plane/detector/session: accepted by the
+  // backend, driven by no screen, and dismissed here as residue. It stopped being residue
+  // when the overview grew a breakdown by code — the panel exists precisely so a count can
+  // be opened as the rows behind it, and that drill-down is this signal. The other three
+  // are still unwritten, and still residue until a control writes them.
+  readonly code = signal<string | null>(null);
   readonly sort = signal<{ field: SortField; dir: SortDir } | null>(null);
   readonly page = signal(0);
   readonly size = signal(20);
@@ -95,7 +100,19 @@ export class InsightsStore {
   }
 
   /** The rail's "Clear": nulls are written, not empty strings, so nothing is sent. */
-  clearFilters(): void { this.filters.set(emptyFilters()); }
+  clearFilters(): void {
+    this.filters.set(emptyFilters());
+    this.code.set(null);
+  }
+
+  /**
+   * Open a code as the rows behind it: the findings table, filtered, from page one. Called
+   * by the overview's breakdown, which is the only control that writes this.
+   */
+  showCode(code: string | null): void {
+    this.code.set(code);
+    this.page.set(0);
+  }
 
   /**
    * Dismiss the error bar. The bar shows whatever `error()` holds and the store is
@@ -126,6 +143,7 @@ export class InsightsStore {
     // null means "no filter" and maps to absence at this boundary.
     this.track(this.api.findings({
       filters: this.filters(),
+      code: this.code() ?? undefined,
       sort: this.sort() ?? undefined,
       page: this.page(),
       size: this.size(),

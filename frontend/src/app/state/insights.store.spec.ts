@@ -10,6 +10,7 @@ const goodOverview: OverviewDto = {
   tiles: { sessions: 165, findings: 389, toolCalls: 16450, steps: 13733 },
   planeMix: { GUARD: 95, INFRASTRUCTURE: 140, MODEL_MISUSE: 154 },
   topDetectors: [{ detector: 'error-plane', count: 233 }, { detector: 'retry-storm', count: 72 }],
+  topCodes: [{ code: 'FS_NOT_OBSERVED', count: 180 }],
   series: [{ day: '2026-09-01', findings: 46, toolCalls: 1043 }],
   throughput: [
     { schema: 'V0', timingSource: 'chunk-events', steps: 9040, medianDecodeTps: 163.4, medianTtftMs: 563.5 },

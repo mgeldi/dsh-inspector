@@ -222,3 +222,40 @@
   .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .row { grid-template-columns: 1fr; }
 }
+
+// ---- the code breakdown ----
+
+// Each row is a button that fills its line, so the whole row is the target rather than the
+// few characters of the code. It reads as a list until it is hovered or focused.
+.code-open {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 3px 6px;
+  margin: -3px -6px;
+  background: none;
+  border: none;
+  border-radius: 5px;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.13s ease;
+
+  &:hover { background: color-mix(in srgb, $text-hi 6%, transparent); }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: 1px;
+  }
+}
+
+.code-name {
+  overflow: hidden;
+  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: $text-lo;
+}

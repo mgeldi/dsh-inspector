@@ -137,6 +137,19 @@ export class Findings {
 
   // ---- cell renderers, the rules stated once and used everywhere ----
 
+  /**
+   * The code the overview handed over, if any. It has to be on screen: arriving at a table
+   * showing 89 of 455 rows with nothing saying why is the same failure as an empty dashboard
+   * that means "you typed something wrong" — the number looks like the answer to the question
+   * the rail appears to be asking, and it is the answer to a different one.
+   */
+  readonly activeCode = computed(() => this.store.code());
+
+  clearCode(): void {
+    this.store.showCode(null);
+    this.store.loadFindings();
+  }
+
   confidenceWord(c: number | null, category: Category | null): string { return confidenceLabel(c, category); }
   confidenceTipFor(c: number | null, category: Category | null): string { return confidenceTip(c, category); }
   planeName(p: Plane): string { return planeLabel(p); }

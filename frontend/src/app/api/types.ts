@@ -20,6 +20,7 @@ export interface OverviewDto {
   tiles: { sessions: number; findings: number; toolCalls: number; steps: number };
   planeMix: Partial<Record<Plane, number>>;
   topDetectors: { detector: string; count: number }[];
+  topCodes: { code: string; count: number }[];
   series: { day: string; findings: number; toolCalls: number }[];
   throughput: {
     schema: string; timingSource: TimingSource; steps: number;

@@ -12,6 +12,7 @@ const overview: OverviewDto = {
   tiles: { sessions: 12, findings: 9, toolCalls: 32, steps: 24 },
   planeMix: { GUARD: 4, MODEL_MISUSE: 3, INFRASTRUCTURE: 2 },
   topDetectors: [{ detector: 'error-plane', count: 6 }],
+  topCodes: [{ code: 'FS_NOT_FOUND', count: 6 }],
   series: [{ day: '2026-09-01', findings: 3, toolCalls: 16 }],
   throughput: [],
   vocabulary: {

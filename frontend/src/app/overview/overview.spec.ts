@@ -51,10 +51,14 @@ class StubStore {
   readonly overview = signal<OverviewDto | null>(null);
   readonly busy = signal(0);
   readonly setPresetCalls: PresetId[] = [];
+  readonly showCodeCalls: (string | null)[] = [];
   loadAllCalls = 0;
+  loadFindingsCalls = 0;
   reindexCalls = 0;
   setPreset(id: PresetId): void { this.setPresetCalls.push(id); }
   loadAll(): void { this.loadAllCalls += 1; }
+  loadFindings(): void { this.loadFindingsCalls += 1; }
+  showCode(code: string | null): void { this.showCodeCalls.push(code); }
   reindex(): void { this.reindexCalls += 1; }
 }
 
@@ -64,6 +68,7 @@ const baseOverview: OverviewDto = {
   tiles: { sessions: 165, findings: 389, toolCalls: 16450, steps: 13733 },
   planeMix: { GUARD: 95, MODEL_MISUSE: 154, INFRASTRUCTURE: 140 },
   topDetectors: [{ detector: 'error-plane', count: 233 }, { detector: 'retry-storm', count: 72 }],
+  topCodes: [{ code: 'FS_NOT_OBSERVED', count: 180 }, { code: 'FS_EDIT_NOT_FOUND', count: 125 }],
   series: [
     { day: '2026-09-01', findings: 46, toolCalls: 1043 },
     { day: '2026-09-02', findings: 12, toolCalls: 300 },
@@ -178,10 +183,34 @@ describe('Overview', () => {
     expect(data.slice(1, 13).every(v => v === null), 'missing days are null, not drawn bars').toBe(true);
   });
 
+  /**
+   * The board had two breakdowns and neither answered "how often does this kind of error
+   * happen": plane is three buckets, detector names this tool's own rules. The code is the
+   * fact about the harness, and every count on the panel is a control — the rows behind it
+   * were already browsable one screen away, with nothing connecting the two.
+   */
+  it('opens a code as the rows behind it, without touching the rail', () => {
+    render();
+
+    const entries = el.querySelectorAll('.codes .code-open');
+    expect(entries.length).toBe(2);
+    expect(entries[0].textContent).toContain('FS_NOT_OBSERVED');
+    expect(entries[0].textContent).toContain('180');
+
+    (entries[0] as HTMLElement).click();
+    fixture.detectChanges();
+
+    // the code is handed to the store and the rows are fetched before the route changes
+    expect(stub.showCodeCalls).toEqual(['FS_NOT_OBSERVED']);
+    expect(stub.loadFindingsCalls).toBe(1);
+    // the shared rail is untouched: the code narrows that selection, it does not replace it
+    expect(stub.setPresetCalls).toEqual([]);
+  });
+
   it('names the likely cause and offers the fix when the range has no findings', () => {
     render({
       tiles: { sessions: 0, findings: 0, toolCalls: 0, steps: 0 },
-      planeMix: {}, topDetectors: [], series: [], throughput: [],
+      planeMix: {}, topDetectors: [], topCodes: [], series: [], throughput: [],
     });
 
     const empty = el.querySelector('.empty');

@@ -18,9 +18,18 @@ public record OverviewDto(
         Tiles tiles,
         Map<String, Long> planeMix,
         List<DetectorCount> topDetectors,
+        List<CodeCount> topCodes,
         List<DayPoint> series,
         List<ThroughputRow> throughput,
         VocabularyOptions vocabulary) {
+
+    /**
+     * One error code and how many findings carry it. The detector says which rule fired —
+     * a fact about this tool; the code says what went wrong — a fact about the harness, and
+     * the one a reader can act on. Selecting it filters the findings table to those rows.
+     */
+    public record CodeCount(String code, long count) {
+    }
 
     /** Headline counters over the filtered index. */
     public record Tiles(long sessions, long findings, long toolCalls, long steps) {

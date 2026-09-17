@@ -1,5 +1,6 @@
 import { DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
+import { Router } from '@angular/router';
 import type { EChartsCoreOption } from 'echarts/core';
 import { ChartComponent } from '../charts/chart';
 import { CHART_AXIS, CHART_BASE, DAILY_BAR_COLOUR, PLANE_COLOURS } from '../charts/theme';
@@ -37,6 +38,7 @@ interface PlaneRow { plane: Plane; count: number; share: number; shareText: stri
 })
 export class Overview {
   readonly store = inject(InsightsStore);
+  private readonly router = inject(Router);
   readonly PLANE_COLOURS = PLANE_COLOURS;
 
   readonly overview = computed(() => this.store.overview());
@@ -126,7 +128,29 @@ export class Overview {
   });
 
   readonly detectors = computed(() => this.store.overview()?.topDetectors ?? []);
+
+  /**
+   * The breakdown by error code. `topDetectors` answers "which of my rules fired", which is a
+   * fact about this tool; this answers "what did the harness refuse", which is the fact a
+   * reader can act on — and until it existed the overview could not answer "how often does
+   * this kind of error happen" at all, though every row behind it was already browsable.
+   */
+  readonly codes = computed(() => this.store.overview()?.topCodes ?? []);
   readonly throughput = computed(() => this.store.overview()?.throughput ?? []);
+
+  /**
+   * A count on the board, opened as the rows behind it. The shared rail filters stay exactly
+   * as they are — the code narrows the same selection rather than replacing it — so the
+   * number on the summary and the number of rows that arrive are the same number.
+   */
+  openCode(code: string): void {
+    this.store.showCode(code);
+    // Fetch before navigating, not after: the findings screen renders whatever the store
+    // holds and has no load of its own, so without this the table would arrive showing the
+    // previous, unfiltered page under a banner announcing the filter.
+    this.store.loadFindings();
+    void this.router.navigate(['/findings']);
+  }
 
   /**
    * The screen-level empty state. tiles.findings === 0 means the current range holds no

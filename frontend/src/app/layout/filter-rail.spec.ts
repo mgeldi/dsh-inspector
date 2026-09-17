@@ -10,7 +10,7 @@ import { FilterRail } from './filter-rail';
 const overview: OverviewDto = {
   tiles: { sessions: 12, findings: 9, toolCalls: 32, steps: 24 },
   planeMix: {},
-  topDetectors: [],
+  topDetectors: [], topCodes: [],
   series: [],
   throughput: [],
   vocabulary: {

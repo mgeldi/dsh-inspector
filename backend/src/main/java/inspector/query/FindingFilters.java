@@ -142,12 +142,32 @@ public final class FindingFilters {
         axisClause(clauses, params, "s.harness_version", harnessVersion);
     }
 
-    /** One {@code column = ?} clause for a present value. The value binds, never splices. */
+    /**
+     * One clause for a present value. The value binds, never splices.
+     *
+     * <p>{@code unknown} is the one value that cannot be compared with {@code =}. The rail's
+     * options come from {@code select distinct coalesce(col, 'unknown')}, so every row with a
+     * NULL in that column is offered to the user under that name — and {@code col = 'unknown'}
+     * matches none of them, because NULL is equal to nothing. The rail therefore offered four
+     * facet values that guaranteed an empty dashboard: measured on a real index,
+     * {@code ?model=unknown} answered 0 sessions, 0 findings, 0 tool calls, 0 steps out of 183
+     * sessions. An empty screen that means "you picked the wrong option" reads as "nothing is
+     * wrong here", which is the worst answer this tool can give.
+     *
+     * <p>The bucket is what the vocabulary promised, so the filter reproduces the bucket: NULL
+     * or the literal. A column holding a genuine string {@code "unknown"} lands in the same
+     * bucket on the way out, and belongs in the same selection on the way back in.
+     */
     private static void axisClause(
             final List<String> clauses, final List<Object> params, final String column, final String value) {
-        if (value != null) {
-            clauses.add(column + " = ?");
-            params.add(value);
+        if (value == null) {
+            return;
         }
+        if (Vocabulary.UNKNOWN.equals(value)) {
+            clauses.add("(" + column + " is null or " + column + " = ?)");
+        } else {
+            clauses.add(column + " = ?");
+        }
+        params.add(value);
     }
 }

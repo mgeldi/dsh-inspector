@@ -74,6 +74,24 @@
         </div>
 
         <div class="card">
+          <h3 class="card-title">Top error codes</h3>
+          <!-- Every entry is a control, not a label: the count is the number of rows behind
+               it, and selecting one opens exactly those rows in the findings table with the
+               rail's filters untouched. -->
+          <ol class="detectors codes">
+            @for (c of codes(); track c.code) {
+              <li>
+                <button type="button" class="code-open" [attr.aria-label]="'Show ' + c.count + ' findings with code ' + c.code"
+                        (click)="openCode(c.code)">
+                  <span class="code-name">{{ c.code }}</span>
+                  <span class="det-count num">{{ c.count | number }}</span>
+                </button>
+              </li>
+            }
+          </ol>
+        </div>
+
+        <div class="card">
           <h3 class="card-title">Throughput by convention</h3>
           <table class="tput">
             <thead>

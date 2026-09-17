@@ -55,6 +55,32 @@ final class FindingFiltersTest {
         assertThat(sql.asWhere()).isEmpty();
     }
 
+    /**
+     * The rail lists its options as {@code coalesce(col, 'unknown')}, so every NULL row is
+     * offered under that name — and {@code col = 'unknown'} matches none of them. Four facets
+     * were therefore offering a value that guaranteed an empty screen: on a real index,
+     * {@code ?model=unknown} answered 0 of 183 sessions. The clause has to reproduce the
+     * bucket the vocabulary promised, which is NULL or the literal.
+     */
+    @Test
+    void theUnknownBucketSelectsTheRowsItWasBuiltFrom() {
+        final FindingFilters filters =
+                new FindingFilters(new InsightFilter(null, null, null, "unknown", null, null));
+        final FindingFilters.Sql sql = filters.forSession();
+
+        assertThat(sql.where()).isEqualTo("(s.model is null or s.model = ?)");
+        assertThat(sql.params()).containsExactly("unknown");
+    }
+
+    /** A named value stays an equality: only the bucket name needs the wider clause. */
+    @Test
+    void aNamedValueIsStillAPlainEquality() {
+        final FindingFilters filters =
+                new FindingFilters(new InsightFilter(null, null, null, "some-model", null, null));
+
+        assertThat(filters.forSession().where()).isEqualTo("s.model = ?");
+    }
+
     @Test
     void theTimeColumnFollowsTheRootTable() {
         final FindingFilters filters = new FindingFilters(new InsightFilter(1L, 2L, null, null, null, null));

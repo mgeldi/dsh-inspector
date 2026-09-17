@@ -28,6 +28,13 @@ import org.springframework.stereotype.Service;
 @Service
 public final class OverviewService {
 
+    /**
+     * How many codes the board shows. Enough to cover what a corpus actually emits without
+     * turning a summary panel into a second findings table — the table is one click away,
+     * and that click is the point of the list.
+     */
+    private static final int TOP_CODES = 8;
+
     private final OverviewRepository overviewRepository;
     private final VocabularyService vocabularyService;
 
@@ -63,6 +70,11 @@ public final class OverviewService {
             topDetectors.add(new OverviewDto.DetectorCount(row.detector(), row.count()));
         }
 
+        final List<OverviewDto.CodeCount> topCodes = new ArrayList<>();
+        for (final OverviewRepository.CodeCountRow row : overviewRepository.topCodes(findings, TOP_CODES)) {
+            topCodes.add(new OverviewDto.CodeCount(row.code(), row.count()));
+        }
+
         final List<OverviewDto.ThroughputRow> throughput = new ArrayList<>();
         for (final OverviewRepository.ThroughputBucket bucket : overviewRepository.throughput(steps)) {
             // A null median means "this bucket measured nothing", and it crosses the boundary as
@@ -80,6 +92,7 @@ public final class OverviewService {
                 tiles,
                 planeMix,
                 topDetectors,
+                topCodes,
                 mergeSeries(overviewRepository.findingSeries(findings),
                         overviewRepository.toolCallSeries(toolCalls)),
                 throughput,
