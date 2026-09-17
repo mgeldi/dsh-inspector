@@ -161,3 +161,7 @@ Thirty minutes, in this order:
 If you would rather read a rule than a paragraph: `FilterContractTest`,
 `PrivacyBoundaryTest`, `PackageCycleTest` and `frontend/src/app/architecture.spec.ts` are
 the project's conventions written as build failures rather than as comments.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
