@@ -1,7 +1,6 @@
-package inspector.config;
+package inspector.index;
 
-import inspector.index.IndexAlreadyRunningException;
-import inspector.index.IndexService;
+import inspector.config.InspectorProperties;
 import inspector.store.IndexWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;

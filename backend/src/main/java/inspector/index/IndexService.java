@@ -76,7 +76,7 @@ public final class IndexService {
      * the same corpus again for no reason — and between the refusal and the queue it would have
      * sat behind, the first run's prune has already made the index equal to the corpus.
      *
-     * <p>{@link inspector.config.StartupIndexRunner} indexes through this method, so a manual
+     * <p>{@link StartupIndexRunner} indexes through this method, so a manual
      * request that arrives while startup is still indexing is refused the same way rather than
      * allowed to interleave with a run the operator never asked for. (The embedded server is
      * already listening while {@code ApplicationRunner}s run — that is what makes the window

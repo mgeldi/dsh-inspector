@@ -9,7 +9,6 @@ import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
 import com.github.luben.zstd.ZstdOutputStream;
 import inspector.config.InspectorProperties;
-import inspector.config.StartupIndexRunner;
 import inspector.detect.Detector;
 import inspector.detect.ErrorPlaneDetector;
 import inspector.detect.FatalTurnDetector;
