@@ -13,13 +13,24 @@
       </div>
     </section>
   } @else {
+    <!-- Table and detail are siblings in one row, not a page with something floating over it.
+         The panel is a column: opening it narrows the table instead of covering it, and every
+         row stays clickable, so reading one finding after another is one click each. -->
+    <div class="fmain">
+    <div class="fcol">
     <!-- The wrapper is the scroll container: the header sticks inside it, not inside the page. -->
     <div class="ftable-wrap">
       <table class="ftable" aria-label="Findings">
         <!-- A column budget rather than twelve hundred pixels of auto layout: with table-layout
              fixed every column keeps its design width at every window size, so the header never
-             clips and the long identifiers ellipsize where they are supposed to. CODE is the one
-             column left unassigned, and it absorbs whatever the viewport offers. -->
+             clips and the long identifiers ellipsize where they are supposed to.
+
+             PATH is the column left unassigned, and it absorbs whatever the viewport offers.
+             It used to be CODE, which put the squeeze on exactly the wrong column: once the
+             detail panel took its share of the row, the error code — the thing the table is
+             scanned for — collapsed to "F…" while two long identifiers kept their full width.
+             A path truncating is expected and the full value is in its title; an error code
+             truncating makes the row useless. -->
         <colgroup>
           <col style="width: 104px" />
           <!-- 108px fitted "Guard" and clipped the other two plane names at every window
@@ -27,10 +38,10 @@
                the gap and the cell padding. -->
           <col style="width: 134px" />
           <col style="width: 100px" />
-          <col />
-          <col style="width: 168px" />
-          <col style="width: 112px" />
+          <col style="width: 190px" />
           <col style="width: 152px" />
+          <col style="width: 112px" />
+          <col />
           <col style="width: 100px" />
         </colgroup>
         <thead>
@@ -228,16 +239,15 @@
       </span>
       <button type="button" class="btn btn-ghost" aria-label="Next page" [disabled]="!canNext()" (click)="goPage(1)">Next</button>
     </div>
-  }
+    </div>
 
-  @if (openDetail() !== null || detailLoading()) {
-    <div class="detail-backdrop" (click)="close()"></div>
-  }
-  @if (openDetail() !== null) {
-    <app-finding-detail [detail]="openDetail()!" (close)="close()"></app-finding-detail>
-  } @else if (detailLoading()) {
-    <aside class="detail loading">
-      <p class="muted">Loading finding…</p>
-    </aside>
+    @if (openDetail() !== null) {
+      <app-finding-detail [detail]="openDetail()!" (close)="close()"></app-finding-detail>
+    } @else if (detailLoading()) {
+      <aside class="detail-pending" aria-label="Finding detail">
+        <p class="muted">Loading finding…</p>
+      </aside>
+    }
+    </div>
   }
 </section>

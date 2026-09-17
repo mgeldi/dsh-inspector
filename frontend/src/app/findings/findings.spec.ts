@@ -224,10 +224,38 @@ describe('Findings', () => {
     expect(panel.querySelector('.evidence')).toBeTruthy();
     expect(panel.textContent).toContain('MUTATING');
 
-    // closing via the backdrop dismisses the panel
-    (el.querySelector('.detail-backdrop') as HTMLElement).click();
+    // closing via the panel's own control dismisses it
+    (el.querySelector('app-finding-detail button[aria-label="Close detail"]') as HTMLElement).click();
     fixture.detectChanges();
     expect(el.querySelector('app-finding-detail .detail')).toBeNull();
+  });
+
+  /**
+   * The panel was a modal dressed as a sidebar: `position: fixed` over a dimming backdrop,
+   * `role="dialog"`, and the table underneath unclickable. On a screen whose whole purpose is
+   * reading findings one after another, that cost a close and a reopen per row. It is a column
+   * of the same row now, so a second row can be opened straight from the first.
+   */
+  it('opens a second finding directly, without closing the first', () => {
+    loadPage({ total: 2, page: 0, size: 20, items: [finding7, external9] });
+
+    const rows = el.querySelectorAll('tbody tr.frow');
+    (rows[0] as HTMLElement).click();
+    http.expectOne(r => r.url === '/api/findings/7').flush(detail7);
+    fixture.detectChanges();
+    // the chain seqs identify which finding is on screen; both rows share a detector name
+    expect(el.querySelector('app-finding-detail .detail')?.textContent).toContain('refused at 300');
+
+    // no dimming layer may exist over the table
+    expect(el.querySelector('.detail-backdrop')).toBeNull();
+
+    // the second row is still reachable while the panel is open
+    (rows[1] as HTMLElement).click();
+    http.expectOne(r => r.url === '/api/findings/9').flush(detail9);
+    fixture.detectChanges();
+    const swapped = el.querySelector('app-finding-detail .detail')?.textContent ?? '';
+    expect(swapped).toContain('refused at 500');
+    expect(swapped).not.toContain('refused at 300');
   });
 
   it('shows no evidence section at all for an EXTERNAL finding', () => {

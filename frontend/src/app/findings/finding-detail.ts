@@ -79,7 +79,7 @@ export function confidenceTip(c: number | null, category: Category | null): stri
   template: `
     @let d = detail();
     @let f = d.finding;
-    <aside class="detail" role="dialog" aria-label="Finding detail">
+    <aside class="detail" aria-label="Finding detail">
       <header class="detail-head">
         <div class="title-row">
           <span class="dot" [style.background]="PLANE_COLOURS[f.plane]"></span>

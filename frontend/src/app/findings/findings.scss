@@ -19,6 +19,47 @@
 
 .floading { margin: 8px 0; }
 
+// ---- table beside detail ----
+
+// The panel used to be `position: fixed` over a dimming backdrop: a modal wearing a side
+// panel's clothes. It read as anchored furniture and behaved as a popup — the table under it
+// was unclickable, so the one thing this screen is for, reading findings one after another,
+// cost a close and a reopen per row. Now both are columns of the same row.
+.fmain {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+// min-width: 0 is what lets the table actually give up space. Without it the flex item
+// refuses to shrink below its content and the panel is pushed off the right edge instead.
+.fcol {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 12px;
+}
+
+app-finding-detail,
+.detail-pending {
+  flex: 0 0 min(380px, 36%);
+  // Same reason as .fcol, and the one that actually bit: a flex item's automatic minimum
+  // size is its content, and the evidence excerpt is one long unwrapped monospace line. With
+  // min-width left at auto the panel claimed 1209px against a 392px basis and squeezed the
+  // table to nothing. The excerpt scrolls inside its own box; the panel must not grow for it.
+  min-width: 0;
+}
+
+// The loading placeholder had the child component's class and none of its styles — that class
+// is scoped to the component, so the box rendered unstyled. It is its own class now.
+.detail-pending {
+  padding: 16px 18px;
+  background: $surface-raised;
+  border: 1px solid $hairline;
+  border-radius: 8px;
+}
+
 // ---- the table ----
 
 // The wrapper is the scroll container: the header sticks inside it, so the columns stay
@@ -40,7 +81,9 @@
   // Below this the wrapper scrolls instead of crushing a column into three characters. The
   // number is deliberately under a 1280 window's usable outlet width (~1000 px): the table
   // should fit the laptop it is demoed on, and scroll only past that.
-  min-width: 900px;
+  // 892 px of fixed columns plus a readable minimum for PATH. Raised from 900 when CODE
+  // stopped being the flexible column: the budget has to cover the code in full now.
+  min-width: 940px;
   border-collapse: collapse;
   font-size: 13px;
 }
