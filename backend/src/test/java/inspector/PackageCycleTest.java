@@ -81,6 +81,24 @@ final class PackageCycleTest {
                         + " (FindingNotFoundException stays on the web side of that line)");
     }
 
+    /**
+     * The only rule here that points <em>downward</em>, and it was missing until someone read the
+     * other four and observed that they prove nothing about this direction: {@code store ↛ api}
+     * and {@code insight ↛ api} forbid reaching up, and say nothing about a controller reaching
+     * past its service into a repository or straight at a {@code JdbcClient}. The web layer was
+     * in fact clean when the rule was written — no import of {@code inspector.store}, no
+     * {@code java.sql} — so this pins the arrangement rather than demanding one, which is the
+     * cheapest moment there is to add a boundary.
+     */
+    @Test
+    void theWebLayerDoesNotReachPastTheServices() {
+        assertNoForbiddenReferences("inspector/api", forbidden("store"),
+                "a controller binds parameters and delegates; the repositories belong to"
+                        + " inspector.insight. Reaching into inspector.store from a controller"
+                        + " puts query logic back above the service layer, which is the half of"
+                        + " the split the other rules do not cover");
+    }
+
     @Test
     void queryDependsOnNeitherTheWebPackageNorTheStore() {
         assertNoForbiddenReferences("inspector/query", forbidden("api", "store"),
