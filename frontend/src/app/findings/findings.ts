@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { PLANE_COLOURS } from '../charts/theme';
-import type { FindingDetailDto, FindingDto, Plane, SortDir, SortField } from '../api/types';
+import type { Category, FindingDetailDto, FindingDto, Plane, SortDir, SortField } from '../api/types';
 import { InsightsStore } from '../state/insights.store';
 import { FindingDetail, confidenceLabel, confidenceTip, planeLabel, timeShort } from './finding-detail';
 
@@ -137,8 +137,8 @@ export class Findings {
 
   // ---- cell renderers, the rules stated once and used everywhere ----
 
-  confidenceWord(c: number | null): string { return confidenceLabel(c); }
-  confidenceTipFor(c: number | null): string { return confidenceTip(c); }
+  confidenceWord(c: number | null, category: Category | null): string { return confidenceLabel(c, category); }
+  confidenceTipFor(c: number | null, category: Category | null): string { return confidenceTip(c, category); }
   planeName(p: Plane): string { return planeLabel(p); }
   fmtTimeShort = timeShort;
 }

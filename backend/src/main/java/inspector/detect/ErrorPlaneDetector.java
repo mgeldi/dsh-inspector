@@ -8,8 +8,14 @@ import org.springframework.stereotype.Component;
 
 /**
  * One row per tool error not owned elsewhere. Confidence stays null because there is no
- * attribution to grade, and the UI distinguishes these by {@code detector}, not by rendering
- * every null as "unattributed".
+ * attribution to grade — a different fact from stamp-guard's {@code EXTERNAL}, where a cause
+ * was looked for in the window and none was found.
+ *
+ * <p>The screen tells those two apart by {@code category}, which is null here and always set
+ * by the detector that does attribute. This sentence used to say "by {@code detector}" and the
+ * UI ignored it, rendering every null confidence as "unattributed" under a tooltip claiming a
+ * search had failed — for rows where no search is ever run. The rule is now
+ * {@code findings.spec.ts} rather than this paragraph, which is the only reason to trust it.
  *
  * <p>One owner per source event: this detector skips exactly the codes <em>other</em> detectors
  * claim, so no source error produces two findings. It asks every detector, because

@@ -202,8 +202,8 @@
                   }
                 }
               </td>
-              <td class="conf" [class.unattributed]="f.confidence === null" [attr.title]="confidenceTipFor(f.confidence)">
-                {{ confidenceWord(f.confidence) }}
+              <td class="conf" [class.unattributed]="f.confidence === null" [attr.title]="confidenceTipFor(f.confidence, f.category)">
+                {{ confidenceWord(f.confidence, f.category) }}
               </td>
               <td class="path" [attr.title]="f.pathHint ?? undefined">{{ f.pathHint ?? '—' }}</td>
               <td class="sid num" [attr.title]="f.sessionId">{{ f.sessionId }}</td>

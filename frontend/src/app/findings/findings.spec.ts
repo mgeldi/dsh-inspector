@@ -29,6 +29,17 @@ const external9: FindingDto = {
   summary: 'The file changed outside the window: no model-caused mutation could be attributed.',
 };
 
+// A finding from a detector that performs no attribution at all: error-plane maps a tool
+// error onto a plane and stops. No category, therefore no attribution verdict to report —
+// which is a different fact from external9's "a cause was looked for and not found".
+const errorPlane10: FindingDto = {
+  id: 10, sessionId: 'demo-session-4', detector: 'error-plane', plane: 'MODEL_MISUSE',
+  category: null, code: 'FS_EDIT_NOT_FOUND', confidence: null,
+  pathHint: 'docs/demo-notes.md', seq: 600, staleSeq: null, causeSeq: null,
+  occurredAt: Date.parse('2026-09-11T09:15:00Z'),
+  summary: 'edit returned FS_EDIT_NOT_FOUND',
+};
+
 const detail7: FindingDetailDto = {
   finding: finding7,
   tool: 'write',
@@ -112,6 +123,26 @@ describe('Findings', () => {
     expect(el.textContent).not.toContain('0%');
     // the unattributed tier is visually distinct from the measured tiers
     expect(cell.classList.contains('unattributed')).toBe(true);
+    // ...and it says a search happened, because for this row one did
+    expect(cell.getAttribute('title')).toMatch(/was looked for/i);
+  });
+
+  /**
+   * A null confidence means two different things and the screen used to tell one story for
+   * both. `ErrorPlaneDetector`'s own javadoc says the UI "distinguishes these by detector,
+   * not by rendering every null as 'unattributed'" — and the UI rendered every null as
+   * 'unattributed', with a tooltip claiming a cause "could not be attributed" for detectors
+   * that never attempt attribution. A sentence describing a search that never ran.
+   */
+  it('distinguishes a detector that found no cause from one that never looks', () => {
+    loadPage({ total: 1, page: 0, size: 20, items: [errorPlane10] });
+
+    const cell = el.querySelector('td.conf')!;
+    expect(cell.textContent?.trim()).toBe('n/a');
+    expect(cell.textContent?.trim()).not.toBe('unattributed');
+    // the tooltip must not claim a failed search on a detector that runs none
+    expect(cell.getAttribute('title')).not.toMatch(/could not be attributed|was looked for/i);
+    expect(cell.getAttribute('title')).toMatch(/does not attribute a cause/i);
   });
 
   it('marks a vcs-restore row as legitimate work, not a violation', () => {

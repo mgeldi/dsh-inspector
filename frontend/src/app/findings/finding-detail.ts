@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { PLANE_COLOURS } from '../charts/theme';
-import type { FindingDetailDto, Plane } from '../api/types';
+import type { Category, FindingDetailDto, Plane } from '../api/types';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -32,24 +32,36 @@ export function planeLabel(p: Plane): string {
 }
 
 /**
- * The §5.3 confidence tier as a word: 0.9 → high, 0.6 → medium. null is
- * 'unattributed' — never a dash and never 0: a zero would assert "the model is
- * certainly not the cause", the opposite of "we could not attribute it".
+ * The §5.3 confidence tier as a word: 0.9 → high, 0.6 → medium. A null confidence is
+ * never a dash and never 0 — a zero would assert "the model is certainly not the cause",
+ * the opposite of what null means.
+ *
+ * <p>But null means two different things, and rendering both as 'unattributed' was a lie
+ * the backend had already forbidden in prose: {@code ErrorPlaneDetector} says the UI
+ * "distinguishes these by detector, not by rendering every null as 'unattributed'", and
+ * the UI did exactly that. A finding from a detector that performs no attribution at all
+ * was labelled as one whose attribution had been attempted and had failed.
+ *
+ * <p>The signal is `category`, not the detector id: stamp-guard is the only detector that
+ * attributes, and it always records which of the three outcomes it reached, while the
+ * other three pass null. So a null category is "no attribution model applies here" —
+ * a fact about the row rather than a name the frontend has to know.
  */
-export function confidenceLabel(c: number | null): string {
-  if (c === null) { return 'unattributed'; }
+export function confidenceLabel(c: number | null, category: Category | null): string {
+  if (c === null) { return category === null ? 'n/a' : 'unattributed'; }
   if (c >= 0.9) { return 'high'; }
   if (c >= 0.6) { return 'medium'; }
   return 'low';
 }
 
 /** The tooltip on a confidence label: what each tier measured, per §5.3. */
-export function confidenceTip(c: number | null): string {
-  switch (confidenceLabel(c)) {
+export function confidenceTip(c: number | null, category: Category | null): string {
+  switch (confidenceLabel(c, category)) {
     case 'high': return 'high: absolute-path match plus a mutating verb';
     case 'medium': return 'medium: basename match plus a mutating verb';
     case 'low': return 'low: text-pattern fallback';
-    default: return 'unattributed: no evidence in the window — the cause could not be attributed, not that it did not exist';
+    case 'unattributed': return 'unattributed: a cause was looked for in the window and none was found — not that none existed';
+    default: return 'not applicable: this detector reports the error, it does not attribute a cause — only stamp-guard does';
   }
 }
 
@@ -81,7 +93,7 @@ export function confidenceTip(c: number | null): string {
           @if (f.code) {
             <span class="chip code-chip">{{ f.code }}</span>
           }
-          <span class="chip conf" [class.unattributed]="f.confidence === null" [attr.title]="confidenceTip(f.confidence)">{{ confidenceLabel(f.confidence) }}</span>
+          <span class="chip conf" [class.unattributed]="f.confidence === null" [attr.title]="confidenceTip(f.confidence, f.category)">{{ confidenceLabel(f.confidence, f.category) }}</span>
           @if (f.pathHint) {
             <span class="chip path-chip" [attr.title]="f.pathHint">{{ f.pathHint }}</span>
           }
