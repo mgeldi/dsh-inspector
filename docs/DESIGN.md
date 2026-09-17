@@ -50,14 +50,14 @@ Not built, by decision:
 | LLM-based session analysis | The value is a deterministic, re-runnable, auditable classifier. A model judging models is not evidence. |
 | Anonymising *export* transport | The redaction boundary exists and is enforced (§4); the transport does not, because there is no recipient. |
 
-Each exclusion is an engineering argument, not a time excuse. "What did
-you deliberately leave out" is only a useful question if every answer has a reason attached.
+Each exclusion is an engineering argument, not a time excuse. "What did you deliberately leave
+out" is only a useful question if every answer has a reason attached.
 
 ### 2.1 Time budget, stated honestly
 
-The budget set at the start was ~3 hours. Post-cut, this build is realistically **8 hours above the line, ~9.5
-with stretch** — roughly three times that, and saying so is more useful than defending a
-rounder number. Two independent reviews costed the earlier draft at 10–14 hours and the machinery
+The budget set at the start was ~3 hours. Post-cut, this build is realistically **8 hours above
+the line, ~9.5 with stretch** — roughly three times that, and saying so is more useful than
+defending a rounder number. Two independent reviews costed the earlier draft at 10–14 hours and the machinery
 removals in §2.2 are what brought it down; the estimate is still the least rigorous figure in
 this document, because it is the only one that cannot be measured. It carries an explicit cut
 line so that overrunning is a decision rather than a failure:
@@ -304,6 +304,47 @@ is a cross-check, not a second source of truth.
                     │ SERVE       read-only REST  +  Angular Material  │
                     └─────────────────────────────────────────────────┘
 ```
+
+**The packages, and what each one owns.** The reporting side is organised by dependency role
+rather than by feature, because the roles *are* the packages and that is what makes the edges
+below checkable by package name. The three views share their filtering and their vocabulary,
+so those live in `query` instead of being duplicated into a package per screen.
+
+| Package | Owns |
+|---|---|
+| `ingest` | decompress, parse, emit typed records; the only layer that sees a raw line |
+| `detect` | the `Detector` SPI and the four detectors; produces `Finding` |
+| `index` | orchestration: scan → ingest → detect → write, plus the startup rule and the single-flight lock |
+| `store` | SQLite access; returns rows of the index, never wire shapes |
+| `insight` | the services: validation, rate maths, sort whitelist, row → DTO mapping |
+| `api` | binding and delegation; HTTP status decisions; problem+json |
+| `dto` | the wire contract, and nothing else |
+| `query` | what `api` and `store` both point at: the filter contract and the vocabulary record |
+| `config` | configuration properties |
+
+**The forbidden edges.** These are not conventions. `PackageCycleTest` reads the compiled
+constant pool of every class in the named package and fails the build on a reference to a
+forbidden one — so the rule cannot be dodged by writing `inspector.api.Foo.bar()` inline, and
+it fails loudly if it ever scans nothing at all.
+
+| Rule | Why |
+|---|---|
+| `store ↛ api` | the store reads an index; it does not know what a client is waiting for |
+| `store ↛ dto` | a `ResultSet` mapped straight into a DTO welds the JSON contract to the SQL |
+| `insight ↛ api` | whether a row exists is the service's answer; making it a 404 is the controller's |
+| `api ↛ store` | a controller binds and delegates; reaching past its service puts query logic back on top |
+| `query ↛ api`, `query ↛ store` | the shared package may not point back at either, or the cycle returns |
+| `dto ↛ everything of ours` | a wire shape that references its serving layer stops being a wire shape |
+
+Read the table as directed edges and nothing more. `store ↛ api` says nothing about the
+reverse — which is why `api ↛ store` is listed separately rather than assumed. It was added
+last, after the other five were read together and found to prove nothing about that direction;
+the web layer was already clean, so the rule pinned an arrangement instead of demanding one.
+
+A feature-first layout (`findings/`, `cohorts/`, `overview/`) would read more locally, and it
+could keep these edges by nesting a role package inside each feature. It is not done here
+because at three views and roughly fifteen movable classes it buys nesting and a migration
+without solving a problem anyone has had.
 
 ### 4.1 The privacy boundary, and its one named exception
 
@@ -1068,10 +1109,10 @@ dsh-inspector/
 Three directories, and everything a reader needs sitting at the root. Two deliberate
 consequences:
 
-**`docs/` contains only what a reviewer wants.** No process scaffolding, no dated spec archive,
+**`docs/` contains only what a reader wants.** No process scaffolding, no dated spec archive,
 no tooling-generated trees — the design doc and the AI working notes, both named for what they
-are. Notes on how the AI tools were used are a document of their own, and `AI-NOTES.md` is a first-class
-deliverable rather than a section buried in the README.
+are. How the AI tools were used is a document of its own rather than a section buried in the
+README, because the process turned out to be worth as much as the result.
 
 **The fixture generator lives in `backend/`, not in a root `tools/` directory.** It is a small
 Java `main`, because `zstd-jni` is already a backend dependency, so writing `.zstd` fixtures
@@ -1115,8 +1156,8 @@ both are the kind of thing that reads as a bug if discovered at demo time.
 
 ## 14. How this spec was checked
 
-Recorded because how the AI assistance was used is part of what this project is about, and the process is more
-informative than the prose.
+Recorded because how the AI assistance was used is part of what this project is about, and the
+process is more informative than the prose.
 
 The full account — the spec revisions, the implementation batches, and the defect ledger
 with what caught each one and what it would have cost — is in `docs/AI-NOTES.md`; this
