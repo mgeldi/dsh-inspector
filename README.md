@@ -6,13 +6,14 @@ attributed causes. It answers two questions: "is this build worse than the last 
 answered as a rate against a baseline cohort, and "why did this one go wrong?", answered as
 the causal chain behind a single finding.
 
-It is self-referential by design: it was written inside DSH by a locally hosted agent stack
-— no cloud coding assistant designed, planned or implemented any of it, no hosted API,
-nothing leaving the machine — so on the author's own corpus the tool measures the harness
-that built it. `docs/AI-NOTES.md` §0 states exactly where a hosted assistant *was* used, in
-a review pass and a documentation pass, and what each one changed; §3 is the defect ledger
-from building it. The committed fixtures are synthetic, so `./run-live.sh` is where that
-loop actually closes.
+It is self-referential by design: it was designed and built inside DSH by a locally hosted
+agent stack, with nothing leaving the machine — so on the author's own corpus the tool
+measures the harness that built it. The read side was later worked on with a hosted
+assistant as well. `docs/AI-NOTES.md` §0 draws that line precisely, down to which packages
+each side has and has not touched, and every commit with hosted assistance in it carries a
+`Co-Authored-By` trailer, so the split is checkable rather than asserted. §3 is the defect
+ledger from building it. The committed fixtures are synthetic, so `./run-live.sh` is where
+the self-reference actually closes.
 
 ![The dashboard, on the committed fixture corpus](docs/overview.png)
 
@@ -111,7 +112,7 @@ corpus".
 
 ```bash
 cd backend && mvn test                 # 247 tests, 1 skipped
-cd frontend && npm test -- --watch=false   # 76 tests; Vitest 4 + jsdom, run through the Angular builder
+cd frontend && npm test -- --watch=false   # 95 tests; Vitest 4 + jsdom, run through the Angular builder
 ```
 
 ## Ports

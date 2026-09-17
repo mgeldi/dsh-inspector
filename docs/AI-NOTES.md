@@ -7,23 +7,47 @@ author — see the last section for what that means in practice.*
 
 ## 0. The setup, named
 
-The application was written by a locally hosted stack, on one machine, with no request
-leaving it. No cloud coding assistant designed it, planned it, or implemented a feature of
-it — no Claude Code, no Codex, no hosted API.
+This project was designed, planned and built by a locally hosted stack, on one machine,
+with no request leaving it. Later it was worked on with a hosted assistant as well. Both
+are true, the split is not tidy, and the interesting part is where the line actually falls
+— so it is drawn here rather than summarised.
 
-The claim is worth stating exactly rather than broadly, because a hosted assistant was used
-twice, and both times are on the record:
+**Built locally, and not touched since:** the specification, the data model, the detection
+model and every decision in it. `inspector.ingest` — the layer that sees raw session lines
+and the one the privacy boundary is drawn around — has no commit from the hosted assistant
+at all. Neither has `StampGuardDetector`, the causal attribution that is the only real
+domain reasoning in the program. The cut list, the measured numbers and the plane mapping
+are local decisions.
+
+**Where the hosted assistant worked, in three rounds:**
 
 - **A review pass.** It read the finished codebase and reported defects. Every one of the
   fifteen fixes in §3 was then written by the local stack, and two of them corrected the
   reviewer: the severity it reported was understated in one case, and its instruction for
   the foreign keys could not have worked at all.
-- **A finishing pass, where it edited files directly.** Bounded and listed here: the
-  `@Operation`/`@Parameter`/`@Schema` descriptions on the five routes and the shared filter,
-  the two tests in `OpenApiDocumentTest` that fail when a parameter arrives without a
-  sentence, the README's screenshots and reading order, and the restructuring of §3 below.
-  No behaviour changed; the suite went 241 → 243. Everything that decides what this program
-  *does* was written locally.
+- **A documentation pass.** The `@Operation`/`@Parameter`/`@Schema` descriptions on the five
+  routes, the two `OpenApiDocumentTest` cases that fail when a parameter arrives without a
+  sentence, the README's screenshots and reading order, and the restructuring of §3.
+- **A round of work on the read side, which did change behaviour.** URL-addressable state
+  for the filters, the sort, the page and the code drill-down; the numbered pager; the
+  collapsible filter rail; the error-code breakdown on the board and the drill-down it
+  opens; the detail panel turned from a modal into a real side panel. Plus correctness
+  fixes it found by running the tool on a real corpus: an unmapped error code landing on
+  the wrong plane, a filter facet that could not select its own `unknown` bucket, and a
+  confidence label that described a search which never ran.
+
+**This is checkable rather than asserted.** Every commit that hosted assistance touched
+carries a `Co-Authored-By` trailer — sixteen of them, twelve with code in them:
+
+```
+git log --format='%H %s' --grep='Co-Authored-By: Claude'
+```
+
+An earlier version of this section claimed no hosted assistant had implemented a feature.
+That was true when it was written and stopped being true a day later, which is exactly the
+failure this document exists to catch — prose describing a state the code has moved past.
+It is corrected rather than quietly deleted, because the correction is the more useful
+record.
 
 - **DSH** — the DeepSeek Harness, the agent runtime: tool dispatch, session logging, the
   permission model, the web UI on `:3080`. It is also the subject of this project. The
