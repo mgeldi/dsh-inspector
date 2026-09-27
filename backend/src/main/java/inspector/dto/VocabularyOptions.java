@@ -9,12 +9,12 @@ import java.util.List;
  * harness versions, error codes, detector ids — so the payload a dashboard pays for its rail
  * stays roughly the same size no matter how much has been indexed.
  *
- * <p>The seventh list of {@code inspector.query.Vocabulary}, every session id in the index, is
+ * <p>The one list of {@code inspector.query.Vocabulary} missing here, every session id in the index, is
  * deliberately absent. It is the only list whose length <em>is</em> the size of the corpus, so
  * shipping it meant paying for it on every dashboard load forever: measured on the real corpus
  * copy, 165 ids were 6,812 of an 8,997-byte {@code /api/overview} response (T11 Log), and the
- * number grows with every session ever indexed while no screen on earth reads it — the rail has
- * four facets and the per-row session filter is a documented seam the UI never writes
+ * number grows with every session ever indexed while no screen on earth reads it — the rail offers
+ * facets, and the per-row session filter is a documented seam the UI never writes
  * ({@code insights.store.ts} says a filter nothing writes is residue, not a filter).
  *
  * <p>Removing it from the payload does not remove the filter. The server still reads the ids —
@@ -27,5 +27,7 @@ public record VocabularyOptions(
         List<String> presets,
         List<String> harnessVersions,
         List<String> codes,
-        List<String> detectors) {
+        List<String> detectors,
+        List<String> providers,
+        List<String> roles) {
 }

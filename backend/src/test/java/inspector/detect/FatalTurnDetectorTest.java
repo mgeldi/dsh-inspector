@@ -34,21 +34,22 @@ final class FatalTurnDetectorTest {
     @Test
     void aTurnEndingInErrorBecomesOneInfrastructureFinding() {
         final List<Finding> findings =
-                detector.detect(facts(new FatalTurn(7, "media_budget_exceeded", T0)));
+                detector.detect(facts(new FatalTurn(7, "INVALID_REQUEST", "media_budget_exceeded", T0)));
 
         assertThat(findings).singleElement().satisfies(f -> {
             assertThat(f.detector()).isEqualTo(FatalTurnDetector.ID);
             assertThat(f.plane()).isEqualTo(Plane.INFRASTRUCTURE);
             assertThat(f.category()).isNull();
-            assertThat(f.code()).isEqualTo("media_budget_exceeded");
+            assertThat(f.code()).isEqualTo("INVALID_REQUEST");
+            assertThat(f.detail()).isEqualTo("media_budget_exceeded");
             assertThat(f.confidence()).isNull();
-            assertThat(f.summary()).isEqualTo("turn 7 ended in error (media_budget_exceeded)");
+            assertThat(f.summary()).isEqualTo("turn 7 ended in error: INVALID_REQUEST (media_budget_exceeded)");
         });
     }
 
     @Test
     void aFatalTurnWithoutAParsedCodeOmitsTheCodeFromTheSummary() {
-        final List<Finding> findings = detector.detect(facts(new FatalTurn(3, null, T0 + 500)));
+        final List<Finding> findings = detector.detect(facts(new FatalTurn(3, null, null, T0 + 500)));
 
         assertThat(findings).singleElement()
                 .satisfies(f -> assertThat(f.summary()).isEqualTo("turn 3 ended in error"));
@@ -56,7 +57,7 @@ final class FatalTurnDetectorTest {
 
     @Test
     void theFindingCarriesTheTurnEndEventTime() {
-        final List<Finding> findings = detector.detect(facts(new FatalTurn(7, null, T0 + 777)));
+        final List<Finding> findings = detector.detect(facts(new FatalTurn(7, null, null, T0 + 777)));
 
         assertThat(findings).singleElement()
                 .satisfies(f -> assertThat(f.occurredAt()).isEqualTo(T0 + 777));
@@ -77,6 +78,49 @@ final class FatalTurnDetectorTest {
         assertThat(detector.detect(ingested)).isEmpty();
     }
 
+    /**
+     * The shape DSH actually writes: {@code reason = {kind, error: {code, message}}}. The ingestor
+     * used to read {@code reason.message} — a field that does not exist there — so every real fatal
+     * turn came out with no code at all, and the fixtures, generated in the wrong shape, agreed.
+     */
+    @Test
+    void theTypedCodeIsReadFromTheErrorObjectAndTheProviderCodeFromItsBody() throws IOException {
+        final StreamFacts ingested = ingest(
+                sessionLine(),
+                turnEndLine(2, "{\"code\":\"INVALID_REQUEST\",\"message\":"
+                        + "\"400: {\\\"code\\\":\\\"media_budget_exceeded\\\",\\\"type\\\":\\\"invalid_request_error\\\"}\"}"),
+                turnEndLine(3, "{\"code\":\"SERVER\",\"message\":"
+                        + "\"503: {\\\"code\\\":503,\\\"type\\\":\\\"unavailable_error\\\"}\"}"),
+                turnEndLine(4, "{\"code\":\"TIMEOUT\",\"message\":\"the stream went idle for too long\"}"));
+
+        assertThat(ingested.fatalTurns()).extracting(FatalTurn::turn, FatalTurn::code, FatalTurn::detail)
+                .containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(2, "INVALID_REQUEST", "media_budget_exceeded"),
+                        // a numeric code is not a constant; the body's type is the next place to look
+                        org.assertj.core.groups.Tuple.tuple(3, "SERVER", "unavailable_error"),
+                        // prose yields no detail — the message is never parsed as free text
+                        org.assertj.core.groups.Tuple.tuple(4, "TIMEOUT", null));
+    }
+
+    /** An older harness wrote the message flat on the reason; its detail still parses. */
+    @Test
+    void theLegacyFlatMessageStillYieldsItsDetail() throws IOException {
+        final StreamFacts ingested = ingest(sessionLine(),
+                "{\"type\":\"turn/end\",\"seq\":" + seq++ + ",\"time\":" + (T0 + 2000)
+                        + ",\"data\":{\"turn\":5,\"reason\":{\"kind\":\"error\",\"message\":"
+                        + "\"400: {\\\"code\\\":\\\"media_budget_exceeded\\\"}\"}}}");
+
+        assertThat(ingested.fatalTurns()).singleElement().satisfies(turn -> {
+            assertThat(turn.code()).isNull();
+            assertThat(turn.detail()).isEqualTo("media_budget_exceeded");
+        });
+    }
+
+    private String turnEndLine(final int turn, final String errorJson) {
+        return "{\"type\":\"turn/end\",\"seq\":" + seq++ + ",\"time\":" + (T0 + 1000 + turn)
+                + ",\"data\":{\"turn\":" + turn + ",\"reason\":{\"kind\":\"error\",\"error\":" + errorJson + "}}}";
+    }
+
     private StreamFacts facts(final FatalTurn... fatalTurns) {
         return new StreamFacts(sessionRecord(), List.of(), List.of(), List.of(), List.of(),
                 List.of(), List.of(fatalTurns), List.of(), 0L);
@@ -84,7 +128,7 @@ final class FatalTurnDetectorTest {
 
     private SessionRecord sessionRecord() {
         return new SessionRecord("s-demo", "session.jsonl.zstd", "demo-project", "V0",
-                T0, null, null, null, null, null, 0, "/home/dev/demo");
+                T0, null, null, null, null, null, null, 0, "/home/dev/demo");
     }
 
     private StreamFacts ingest(final String... lines) throws IOException {

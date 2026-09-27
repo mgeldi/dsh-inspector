@@ -1,3 +1,8 @@
+-- This file is the DDL, and it is applied by inspector.store.SchemaGate — not by spring.sql.init —
+-- because the version gate has to run before anything reads a table: on a file written by an
+-- older build the tables exist in their old shape, and Hibernate's validation of the entities
+-- against them would fail the boot before the gate could drop and rebuild them.
+--
 -- The foreign keys below are declarations of what the writers already promise, and they are
 -- enforced: the datasource URL carries foreign_keys=on. SQLite applies that pragma per
 -- connection and ships it off (sqlite.org/foreignkeys.html §2, "must be enabled separately for
@@ -20,6 +25,11 @@ CREATE TABLE IF NOT EXISTS session (
     agent_preset      TEXT,
     delegation_depth  INTEGER,
     model             TEXT,
+    -- request/context.provider, last seen. The route, which is what tells two models apart
+    -- when both are served under one model id.
+    provider          TEXT,
+    -- 'orchestrator' (delegation depth 0), 'subagent' (depth >= 1), NULL when the header has none
+    role              TEXT,
     context_window    INTEGER,
     harness_version   TEXT,
     version_inferred  INTEGER NOT NULL DEFAULT 1,
@@ -47,7 +57,6 @@ CREATE TABLE IF NOT EXISTS step (
 );
 
 CREATE TABLE IF NOT EXISTS tool_call (
-    id           INTEGER PRIMARY KEY AUTOINCREMENT,
     session_id   TEXT    NOT NULL,
     source_file  TEXT    NOT NULL,
     turn         INTEGER,
@@ -61,6 +70,11 @@ CREATE TABLE IF NOT EXISTS tool_call (
     plane        TEXT,
     path_hint    TEXT,
     outcome_only INTEGER NOT NULL DEFAULT 0,
+    -- UTC day of started_at, for the daily series, NULL when the call has no start
+    day          TEXT,
+    -- The event seq inside one stream. Unique by construction — one row per event — and this is
+    -- also the index the finding-detail join (session_id, source_file, seq) uses.
+    PRIMARY KEY (session_id, source_file, seq),
     FOREIGN KEY (session_id, source_file) REFERENCES session (id, source_file)
 );
 
@@ -72,12 +86,17 @@ CREATE TABLE IF NOT EXISTS finding (
     plane        TEXT    NOT NULL,
     category     TEXT,
     code         TEXT,
+    -- a second constant under code: the provider's specific reason inside a generic one
+    -- (INVALID_REQUEST / media_budget_exceeded), or the write form of a shell edit
+    detail       TEXT,
     confidence   REAL,
     path_hint    TEXT,
     seq          INTEGER,
     stale_seq    INTEGER,
     cause_seq    INTEGER,
     occurred_at  INTEGER NOT NULL,
+    -- UTC day of occurred_at, for the daily series
+    day          TEXT    NOT NULL,
     summary      TEXT    NOT NULL,
     FOREIGN KEY (session_id, source_file) REFERENCES session (id, source_file)
 );
@@ -113,10 +132,10 @@ DROP INDEX IF EXISTS idx_tool_call_name_error;
 -- is the "USE TEMP B-TREE FOR ORDER BY" line in its query plan. See idx_finding_plane_time below.
 DROP INDEX IF EXISTS idx_finding_occurred;
 
--- The finding-detail join: left join tool_call t on (session_id, source_file, seq).
--- The two equality columns come first and seq last because that is the shape the join
--- constrains on all three at once.
-CREATE INDEX IF NOT EXISTS idx_tool_call_stream    ON tool_call (session_id, source_file, seq);
+-- idx_tool_call_stream (session_id, source_file, seq) is retired: that triple is tool_call's
+-- primary key now, and SQLite's automatic index on it serves the finding-detail lookup the old
+-- index existed for.
+DROP INDEX IF EXISTS idx_tool_call_stream;
 
 -- The (session_id, source_file) join key every read carries (FINDING_JOIN, TOOL_CALL_JOIN),
 -- the session_id filter on the findings page, and the per-stream deletes of a re-index.

@@ -34,7 +34,7 @@ final class EvidenceStoreFlagTest {
 
         // the findings and their causal sequences are unaffected:
         // s-01's stamp finding still points at tool call 13
-        assertThat(jdbc.queryForObject("select count(*) from finding", Long.class)).isEqualTo(9);
+        assertThat(jdbc.queryForObject("select count(*) from finding", Long.class)).isEqualTo(17);
         assertThat(jdbc.queryForObject(
                 "select cause_seq from finding where session_id = 's-01' and detector = 'stamp-guard'",
                 Long.class)).isEqualTo(13L);

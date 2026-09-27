@@ -232,8 +232,8 @@ final class SchemaTest {
     /** The same insert for either connection: a finding is the smallest child row there is. */
     private static void insertFindingOn(final JdbcTemplate target, final String sessionId,
                                         final String sourceFile) {
-        target.update("insert into finding (session_id, source_file, detector, plane, occurred_at, summary)"
-                        + " values (?, ?, 'error-prior', 'tool', ?, ?)",
+        target.update("insert into finding (session_id, source_file, detector, plane, occurred_at, day, summary)"
+                        + " values (?, ?, 'error-prior', 'tool', ?, '2025-10-09', ?)",
                 sessionId, sourceFile, 1_760_000_000_000L, "an invented finding summary");
     }
 }

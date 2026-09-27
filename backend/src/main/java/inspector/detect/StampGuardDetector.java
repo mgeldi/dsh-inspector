@@ -97,7 +97,7 @@ public final class StampGuardDetector implements Detector {
         // The match is absolute when the evidence names the path as the log writes it, not
         // merely by basename: that is what separates a HIGH from a MEDIUM attribution.
         final boolean absolute = cause.referencedPaths().contains(error.absolutePath());
-        return new Finding(ID, Plane.GUARD, Category.DIRECT_MUTATION, error.code(),
+        return new Finding(ID, Plane.GUARD, Category.DIRECT_MUTATION, error.code(), null,
                 absolute ? Confidence.HIGH : Confidence.MEDIUM, error.absolutePath(),
                 error.seq(), stale.seq(), cause.seq(), error.occurredAt(),
                 ("%s refused: stamp stale since seq %d (%s); consistent with a mutating command "
@@ -110,7 +110,7 @@ public final class StampGuardDetector implements Detector {
 
     private Finding vcsRestore(final ErrorEvent error, final FileTouch stale,
                                final ShellEvidence cause) {
-        return new Finding(ID, Plane.GUARD, Category.VCS_RESTORE, error.code(),
+        return new Finding(ID, Plane.GUARD, Category.VCS_RESTORE, error.code(), null,
                 Confidence.HIGH, error.absolutePath(), error.seq(), stale.seq(),
                 cause.seq(), error.occurredAt(),
                 ("%s refused: stamp stale since seq %d; a version-control restore at seq %d is "
@@ -155,7 +155,7 @@ public final class StampGuardDetector implements Detector {
     }
 
     private Finding external(final ErrorEvent error, final Integer staleSeq, final String reason) {
-        return new Finding(ID, Plane.GUARD, Category.EXTERNAL, error.code(), null,
+        return new Finding(ID, Plane.GUARD, Category.EXTERNAL, error.code(), null, null,
                 error.absolutePath(), error.seq(), staleSeq, null, error.occurredAt(),
                 "%s refused: stamp stale%s; %s".formatted(
                         base(error.absolutePath()),

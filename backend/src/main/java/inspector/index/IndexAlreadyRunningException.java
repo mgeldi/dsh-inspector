@@ -10,9 +10,11 @@ package inspector.index;
  * scanned, so the second run's prune discards rows the first run is still writing, and the
  * index that comes out depends on which thread reached {@code pruneToWritten} last.
  *
- * <p>What this does not cover is a reader in the middle of a run: a rebuild is visible either
- * way, and stream-by-stream it is consistent. The answer to that is the asynchronous job
- * deferred in DESIGN.md §9, not a second lock.
+ * <p>A reader in the middle of a run is a different question with a different answer: every read
+ * endpoint answers from one snapshot of the index ({@code inspector.insight.ReadSnapshot}), so a
+ * run landing between two of its reads cannot mix a before and an after into one screen. It can
+ * still show the index half-rebuilt, stream by stream — the rows of the streams written so far —
+ * which is what the asynchronous job deferred in DESIGN.md §9 would remove.
  */
 public final class IndexAlreadyRunningException extends RuntimeException {
 

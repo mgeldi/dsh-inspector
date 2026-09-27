@@ -12,6 +12,9 @@ import java.util.Map;
  * the id list the server keeps for validating {@code ?session=} is precisely the field that must
  * not ride along on every dashboard load. {@link VocabularyOptions} says why.
  *
+ * <p>{@code uncodedFindings} counts the findings no error code belongs to (a shell edit is not an
+ * error), so the codes panel plus its "other codes" remainder plus this sums to the findings tile.
+ *
  * <p>No evidence text anywhere — that is only ever on {@code /api/findings/{id}}.
  */
 public record OverviewDto(
@@ -19,6 +22,7 @@ public record OverviewDto(
         Map<String, Long> planeMix,
         List<DetectorCount> topDetectors,
         List<CodeCount> topCodes,
+        long uncodedFindings,
         List<DayPoint> series,
         List<ThroughputRow> throughput,
         VocabularyOptions vocabulary) {

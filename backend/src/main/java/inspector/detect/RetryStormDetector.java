@@ -33,7 +33,7 @@ public final class RetryStormDetector implements Detector {
                     // absorb is the operator's problem, and the code says what the provider
                     // objected to, not whose fault it was (§5.1's first row). This used to live
                     // in ErrorPlanes.ofRetryCode(code), a method that ignored its parameter.
-                    return new Finding(ID, Plane.INFRASTRUCTURE, null, last.code(), null, null,
+                    return new Finding(ID, Plane.INFRASTRUCTURE, null, last.code(), null, null, null,
                             last.seq(), null, null, last.occurredAt(),
                             "step exhausted its retry budget (%d retries, last %s)"
                                     .formatted(group.size(), last.code()),

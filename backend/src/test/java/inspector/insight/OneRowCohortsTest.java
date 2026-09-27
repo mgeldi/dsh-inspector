@@ -11,6 +11,8 @@ import inspector.dto.CohortDto;
 import inspector.query.InsightFilter;
 import inspector.query.Vocabulary;
 import inspector.store.CohortRepository;
+import inspector.store.entity.SessionEntity;
+import inspector.store.entity.SessionEntity_;
 import inspector.store.VocabularyService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -29,19 +31,20 @@ import org.junit.jupiter.api.Test;
 class OneRowCohortsTest {
 
     private static final InsightFilter NOTHING_SELECTED =
-            new InsightFilter(null, null, null, null, null, null);
+            new InsightFilter(null, null, null, null, null, null, null, null);
 
     private final CohortRepository repository = mock(CohortRepository.class);
     private final CohortService service = new CohortService(repository, vocabulary(
             new Vocabulary(List.of("V0"), List.of("model-a"), List.of("default"),
                     List.of("0.1.5-rc.2"), List.of("FS_STALE_VERSION"),
-                    List.of("stamp-guard"), List.of("s-01"))));
+                    List.of("stamp-guard"), List.of(), List.of(), List.of("s-01"))),
+            inspector.TestPipeline.properties("fixtures/sessions", "unknown", true), ReadSnapshot.none());
 
     @Test
     void oneRowCohortStatesItsBasis() {
-        when(repository.cohorts(eq("agent_preset"), any()))
+        when(repository.cohorts(eq(SessionEntity_.AGENT_PRESET), any()))
                 .thenReturn(new CohortRepository.Result(
-                        List.of(new CohortRepository.Cohort("default", 1, 12, 4, 2)), true));
+                        List.of(new CohortRepository.Cohort("default", 1, 12, 4, 2, 0, 0)), true));
 
         final CohortDto.Page page = service.cohorts(NOTHING_SELECTED, "preset", null);
 
@@ -62,7 +65,7 @@ class OneRowCohortsTest {
                 .contains("inferred")
                 .contains("chosen by highest tool-call count");
         // and the query value became the mapped column, not the axis name
-        verify(repository).cohorts(eq("agent_preset"), any());
+        verify(repository).cohorts(eq(SessionEntity_.AGENT_PRESET), any());
     }
 
     private static VocabularyService vocabulary(final Vocabulary vocabulary) {

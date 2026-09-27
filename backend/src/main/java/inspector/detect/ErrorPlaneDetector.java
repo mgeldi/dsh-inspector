@@ -36,7 +36,7 @@ public final class ErrorPlaneDetector implements Detector {
      * @param detectors every detector in the context. This is not a constructor cycle: the
      *     container does not hand a bean a collection containing the bean under construction, and
      *     {@code ApplicationContextTest} proves it the blunt way — the context boots with this
-     *     detector as one of the four registered in it. The identity filter below keeps the same
+     *     detector as one of the six registered in it. The identity filter below keeps the same
      *     semantics for the lists the tests assemble by hand, where nothing is excluded for
      *     anybody.
      */
@@ -56,7 +56,7 @@ public final class ErrorPlaneDetector implements Detector {
     public List<Finding> detect(final StreamFacts facts) {
         return facts.errors().stream()
                 .filter(e -> !ownedElsewhere.contains(e.code()))
-                .map(e -> new Finding(ID, ErrorPlanes.ofToolCode(e.code()), null, e.code(), null,
+                .map(e -> new Finding(ID, ErrorPlanes.ofToolCode(e.code()), null, e.code(), null, null,
                         e.absolutePath(), e.seq(), null, null, e.occurredAt(),
                         "%s returned %s".formatted(e.tool() == null ? "tool" : e.tool(), e.code()),
                         List.of()))

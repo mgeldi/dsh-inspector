@@ -1,0 +1,10 @@
+# The fixture corpus's harness timeline: two synthetic versions, so the demo's cohorts and judge
+# have a "before" and an "after" to compare. Invented, like everything under fixtures/. run.sh
+# imports it in demo mode only; a real install keeps its own timeline in harness-timeline.yml at
+# the repository root (see harness-timeline.example.yml).
+inspector:
+  harness-timeline:
+    - since: 2026-09-01T00:00:00Z
+      version: instructions-v1
+    - since: 2026-09-07T00:00:00Z
+      version: instructions-v2-read-before-edit

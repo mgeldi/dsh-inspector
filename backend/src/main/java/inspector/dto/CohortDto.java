@@ -21,6 +21,12 @@ import java.util.List;
  * @param violationRatePerK   GUARD findings per 1,000 observed tool calls, null if no observed calls
  * @param findingsPerKCallsDelta    rate minus the baseline rate, in the same units
  * @param violationRatePerKDelta    violation rate minus the baseline, in the same units
+ * @param misuseFindings      MODEL_MISUSE-plane findings in the cohort
+ * @param infraFindings       INFRASTRUCTURE-plane findings in the cohort
+ * @param misuseRatePerK      MODEL_MISUSE findings per 1,000 observed tool calls
+ * @param infraRatePerK       INFRASTRUCTURE findings per 1,000 observed tool calls
+ * @param misuseRatePerKDelta misuse rate minus the baseline's
+ * @param infraRatePerKDelta  infrastructure rate minus the baseline's
  */
 public record CohortDto(
         String key,
@@ -31,7 +37,13 @@ public record CohortDto(
         Double findingsPerKCalls,
         Double violationRatePerK,
         Double findingsPerKCallsDelta,
-        Double violationRatePerKDelta) {
+        Double violationRatePerKDelta,
+        long misuseFindings,
+        long infraFindings,
+        Double misuseRatePerK,
+        Double infraRatePerK,
+        Double misuseRatePerKDelta,
+        Double infraRatePerKDelta) {
 
     /**
      * The whole cohorts screen: the axis, the chosen baseline, the note that

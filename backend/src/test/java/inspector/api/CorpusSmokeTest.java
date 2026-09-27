@@ -1,5 +1,8 @@
 package inspector.api;
 
+import inspector.TestPipeline;
+import inspector.TestStore;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import inspector.config.InspectorProperties;
@@ -62,32 +65,11 @@ final class CorpusSmokeTest {
     @Test
     void theCorpusIndexesCleanlyWithStructureIntact() throws Exception {
         final Path dbFile = temp.resolve("smoke.sqlite");
-        final DriverManagerDataSource dataSource = new DriverManagerDataSource();
-        dataSource.setUrl("jdbc:sqlite:" + dbFile);
-        final JdbcTemplate jdbc = new JdbcTemplate(dataSource);
-        try (var in = new ClassPathResource("schema.sql").getInputStream()) {
-            final String ddl = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            for (final String statement : ddl.split(";")) {
-                if (!statement.isBlank()) {
-                    jdbc.execute(statement.trim());
-                }
-            }
-        }
-
         // evidence storage disabled: no real command text is persisted, anywhere
-        final ObjectMapper mapper = new ObjectMapper();
-        final SessionIngestor ingestor = new SessionIngestor(mapper, new ShellAnalyzer(mapper));
-        final StampGuardDetector stamp = new StampGuardDetector();
-        final FatalTurnDetector fatal = new FatalTurnDetector();
-        final RetryStormDetector retry = new RetryStormDetector();
-        // Spring hands the error detector every other detector in the context; a hand-built list
-        // has to say the same thing or it is testing a wiring the application never has.
-        final List<Detector> detectors = List.of(stamp,
-                new ErrorPlaneDetector(List.of(stamp, fatal, retry)), fatal, retry);
-        final IndexWriter writer = new IndexWriter(jdbc, new DataSourceTransactionManager(dataSource));
-        final IndexService service = new IndexService(new CorpusScanner(), ingestor, detectors, writer,
-                new InspectorProperties(CORPUS.toString(), "smoke",
-                        new InspectorProperties.Evidence(false)));
+        final TestStore store = TestStore.open(dbFile);
+        final JdbcTemplate jdbc = store.jdbc();
+        final IndexService service = TestPipeline.indexService(store,
+                TestPipeline.properties(CORPUS.toString(), "smoke", false));
         final IndexSummary summary = service.run(CORPUS, "smoke");
 
         assertThat(summary.streams()).as("streams scanned").isGreaterThan(150);

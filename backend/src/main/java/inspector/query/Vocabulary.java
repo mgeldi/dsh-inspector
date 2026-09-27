@@ -23,6 +23,8 @@ import java.util.List;
  * @param harnessVersions distinct {@code session.harness_version} values
  * @param codes          distinct {@code finding.code} values
  * @param detectors      distinct {@code finding.detector} ids
+ * @param providers      distinct {@code session.provider} values
+ * @param roles          distinct {@code session.role} values
  * @param sessions       distinct {@code session.id} values; validation only, never on the wire
  *                       — the one list whose size is the size of the corpus, and no screen reads
  *                       it ({@code VocabularyOptions})
@@ -34,6 +36,8 @@ public record Vocabulary(
         List<String> harnessVersions,
         List<String> codes,
         List<String> detectors,
+        List<String> providers,
+        List<String> roles,
         List<String> sessions) {
 
     /** Bucket name for NULL columns; the rail must still be able to select them. */
@@ -56,6 +60,8 @@ public record Vocabulary(
             case "harnessVersion" -> harnessVersions;
             case "code" -> codes;
             case "detector" -> detectors;
+            case "provider" -> providers;
+            case "role" -> roles;
             case "session" -> sessions;
             case "plane" -> PLANES;
             default -> throw new IllegalArgumentException("no vocabulary for field " + field);

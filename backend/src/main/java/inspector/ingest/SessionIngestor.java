@@ -24,8 +24,14 @@ public final class SessionIngestor {
     private static final String READ_TOOL = "read";
     private static final String SHELL_TOOL = "bash";
     private static final List<String> PATH_KEYS = List.of("/file_path", "/path", "/notebook_path");
-    private static final Pattern EMBEDDED_CODE =
-            Pattern.compile("^\\d+:\\s*\\{\\s*\"code\"\\s*:\\s*\"([a-z_]+)\"");
+    private static final List<String> RANGE_KEYS = List.of("offset", "limit", "start_line", "end_line", "lines");
+    /**
+     * The documented shape of a provider failure carried in a turn/end message: an HTTP status,
+     * a colon, and the provider's JSON body. Anything else is prose and yields no detail.
+     */
+    private static final Pattern STATUS_BODY = Pattern.compile("^\\d{3}:\\s*(\\{.*\\})\\s*$", Pattern.DOTALL);
+    /** What a detail may look like: a constant, never a sentence. */
+    private static final Pattern CONSTANT = Pattern.compile("[A-Za-z][A-Za-z0-9_.-]{0,63}");
 
     private final ObjectMapper mapper;
     private final ShellAnalyzer shellAnalyzer;
@@ -68,6 +74,7 @@ public final class SessionIngestor {
         private String agentPreset;
         private Integer depth;
         private String model;
+        private String provider;
         private Integer contextWindow;
         private long parseFailures;
 
@@ -89,6 +96,7 @@ public final class SessionIngestor {
                 }
                 case "request/context" -> {
                     model = ev.text("/model");
+                    provider = ev.text("/provider");
                     contextWindow = ev.integer("/contextWindow");
                 }
                 case "step/start" -> open.put(key(ev), new OpenStep(ev.time()));
@@ -185,7 +193,7 @@ public final class SessionIngestor {
                         ev.integer("/step"), name, ev.time(), absolute));
             }
             if (READ_TOOL.equals(name) && absolute != null) {
-                touches.add(new FileTouch(ev.seq(), absolute, FileTouch.READ));
+                touches.add(new FileTouch(ev.seq(), absolute, FileTouch.READ, isRangedRead(arguments)));
             } else if ("write".equals(name) || "edit".equals(name)) {
                 if (absolute != null) {
                     touches.add(new FileTouch(ev.seq(), absolute, FileTouch.WRITE));
@@ -224,10 +232,14 @@ public final class SessionIngestor {
             if (!"error".equals(ev.text("/reason/kind"))) {
                 return;
             }
-            // §5.2 rule 1: the typed code is generic, the specific one is inside the message.
-            // Fixed parse of a documented prefix — match or null, never a guess.
-            final String message = ev.text("/reason/message");
-            fatal.add(new FatalTurn(orZero(ev.integer("/turn")), parseEmbeddedCode(message), ev.time()));
+            // DSH writes {kind, error: {code, message}}. The typed code is authoritative; the
+            // message is read only far enough to take the provider's own code out of a body of
+            // the documented shape (§5.2 rule 1), and is then dropped. The flat /reason/message
+            // location is still read, because an older harness wrote it there.
+            final String code = ev.text("/reason/error/code");
+            final String message = ev.text("/reason/error/message") != null
+                    ? ev.text("/reason/error/message") : ev.text("/reason/message");
+            fatal.add(new FatalTurn(orZero(ev.integer("/turn")), code, parseDetail(message), ev.time()));
         }
 
         StreamFacts finish() {
@@ -242,7 +254,7 @@ public final class SessionIngestor {
             return new StreamFacts(
                     new SessionRecord(id, source.sourceFile(), source.projectSlug(),
                             source.convention().name(), startedAt == 0 ? 1L : startedAt, endedAt,
-                            agentPreset, depth, model, contextWindow, fatal.size(), cwd),
+                            agentPreset, depth, model, provider, contextWindow, fatal.size(), cwd),
                     steps, calls, touches, shell, errors, fatal, retries, parseFailures);
         }
 
@@ -264,12 +276,52 @@ public final class SessionIngestor {
             return null;
         }
 
-        private String parseEmbeddedCode(final String message) {
+        /** A read that asked for part of the file: any range argument present. */
+        private boolean isRangedRead(final String argumentsJson) {
+            if (argumentsJson == null || argumentsJson.isBlank()) {
+                return false;
+            }
+            try {
+                final JsonNode args = mapper.readTree(argumentsJson);
+                for (final String key : RANGE_KEYS) {
+                    final JsonNode value = args.get(key);
+                    if (value != null && !value.isNull()) {
+                        return true;
+                    }
+                }
+            } catch (JacksonException malformed) {
+                return false;
+            }
+            return false;
+        }
+
+        /**
+         * The provider's own code from a {@code NNN: {json}} message: the body's {@code code} when
+         * it is a string, else its {@code type}, else the same two under a nested {@code error}.
+         * A fixed parse with a defined grammar — it matches the shape or yields null, and what it
+         * yields must look like a constant, so no sentence can pass through it.
+         */
+        private String parseDetail(final String message) {
             if (message == null) {
                 return null;
             }
-            final Matcher m = EMBEDDED_CODE.matcher(message);
-            return m.find() ? m.group(1) : null;
+            final Matcher m = STATUS_BODY.matcher(message.strip());
+            if (!m.matches()) {
+                return null;
+            }
+            final JsonNode body;
+            try {
+                body = mapper.readTree(m.group(1));
+            } catch (JacksonException malformed) {
+                return null;
+            }
+            for (final String pointer : List.of("/code", "/type", "/error/code", "/error/type")) {
+                final JsonNode node = body.at(pointer);
+                if (node.isString() && CONSTANT.matcher(node.asText()).matches()) {
+                    return node.asText();
+                }
+            }
+            return null;
         }
     }
 

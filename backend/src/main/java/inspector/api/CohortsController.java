@@ -35,7 +35,7 @@ public final class CohortsController {
     @GetMapping
     public CohortDto.Page cohorts(
             @ParameterObject @ModelAttribute final InsightFilter filter,
-            @Parameter(description = "The grouping axis. One of harnessVersion, model, schema, preset.",
+            @Parameter(description = "The grouping axis. One of harnessVersion, model, provider, role, schema, preset.",
                     example = "harnessVersion", required = true)
             @RequestParam final String groupBy,
             @Parameter(description = "Cohort key to compare against. Defaults to the cohort with the "

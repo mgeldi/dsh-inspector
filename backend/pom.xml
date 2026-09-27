@@ -24,9 +24,22 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!--
+            Spring Data JPA over Hibernate. schema.sql stays the DDL — it carries the foreign keys,
+            the indexes and the reasons for each — and the entities are validated against it at
+            boot by inspector.store.SchemaGate through the JPA schema manager, after the version
+            gate (ddl-auto itself is none: validating before the gate would fail the boot on an
+            index an older build wrote), so a mapping that drifts from the table is a startup
+            failure rather than a wrong column at runtime.
+        -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-jdbc</artifactId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <!-- SQLiteDialect lives in the community dialects; the version comes from Boot's BOM. -->
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-community-dialects</artifactId>
         </dependency>
         <!--
             Health and readiness, on the same port and the same boundary as everything else.
@@ -83,6 +96,21 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- The JPA static metamodel (FindingEntity_ and friends), so the Criteria queries name
+                 attributes the compiler has checked rather than strings a rename would miss. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.hibernate.orm</groupId>
+                            <artifactId>hibernate-processor</artifactId>
+                            <version>${hibernate.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
             </plugin>
             <!-- Regenerates the committed fixture corpus. The generator is development tooling and
                  lives under src/test so it stays out of the deployable jar, which means the java

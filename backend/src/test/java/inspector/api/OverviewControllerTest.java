@@ -97,9 +97,9 @@ class OverviewControllerTest {
         // ids; the list left the payload because no screen reads it, so the ground truth here is
         // SQL. That the server still knows the ids is proved from the wire by
         // FindingsControllerTest.unknownSessionFailsWithTheSessionIdsTheIndexHolds.)
-        assertThat(count("select count(*) from session")).isEqualTo(15);
-        assertThat(count("select count(distinct id) from session")).isEqualTo(14);
-        assertThat(asJson(get("/api/overview")).path("tiles").path("sessions").asLong()).isEqualTo(14);
+        assertThat(count("select count(*) from session")).isEqualTo(16);
+        assertThat(count("select count(distinct id) from session")).isEqualTo(15);
+        assertThat(asJson(get("/api/overview")).path("tiles").path("sessions").asLong()).isEqualTo(15);
     }
 
     @Test
@@ -113,19 +113,20 @@ class OverviewControllerTest {
         assertThat(root.path("tiles").path("toolCalls").asLong())
                 .isEqualTo(count("select count(*) from tool_call"));
         assertThat(root.path("tiles").path("steps").asLong()).isEqualTo(count("select count(*) from step"));
-        // the fixture plan: 15 session rows, 12 findings
-        assertThat(count("select count(*) from session")).isEqualTo(15);
-        assertThat(count("select count(*) from finding")).isEqualTo(12);
+        // the fixture plan: 16 session rows, 21 findings
+        assertThat(count("select count(*) from session")).isEqualTo(16);
+        assertThat(count("select count(*) from finding")).isEqualTo(21);
 
         // plane mix matches the plan
         assertThat(root.path("planeMix").path("GUARD").asLong()).isEqualTo(6);
-        assertThat(root.path("planeMix").path("INFRASTRUCTURE").asLong()).isEqualTo(4);
-        assertThat(root.path("planeMix").path("MODEL_MISUSE").asLong()).isEqualTo(2);
+        assertThat(root.path("planeMix").path("INFRASTRUCTURE").asLong()).isEqualTo(5);
+        assertThat(root.path("planeMix").path("MODEL_MISUSE").asLong()).isEqualTo(10);
 
-        // top detectors in count order
-        assertThat(root.path("topDetectors").path(0).path("detector").asText()).isEqualTo("stamp-guard");
+        // top detectors in count order, ties broken by id: shell-edit and stamp-guard both 5
+        assertThat(root.path("topDetectors").path(0).path("detector").asText()).isEqualTo("shell-edit");
         assertThat(root.path("topDetectors").path(0).path("count").asLong()).isEqualTo(5);
-        assertThat(root.path("topDetectors").path(1).path("detector").asText()).isEqualTo("error-plane");
+        assertThat(root.path("topDetectors").path(1).path("detector").asText()).isEqualTo("stamp-guard");
+        assertThat(root.path("topDetectors").path(2).path("detector").asText()).isEqualTo("error-plane");
 
         // The codes, which is the breakdown a reader can act on: a detector name says which
         // rule fired, a code says what the harness refused. Ordered by count, and every entry
@@ -142,10 +143,15 @@ class OverviewControllerTest {
             previous = count;
             summed += count;
         }
-        // The fixture corpus emits fewer distinct codes than the panel's limit, so the
-        // breakdown is complete and has to add up to the tile beside it. A panel that
-        // silently dropped a bucket would be the same class of lie as a wrong denominator.
-        assertThat(summed).isEqualTo(root.path("tiles").path("findings").asLong());
+        // The panel is capped at eight codes and the fixtures emit nine, so exactly one finding
+        // sits in "other codes"; the five shell edits carry no code at all and are counted
+        // apart rather than folded into an "unknown" code the harness never emitted. The three
+        // have to add up to the tile beside them — a panel that silently dropped a bucket would
+        // be the same class of lie as a wrong denominator.
+        assertThat(codes.size()).isEqualTo(8);
+        assertThat(root.path("uncodedFindings").asLong()).isEqualTo(5);
+        assertThat(root.path("tiles").path("findings").asLong() - summed - root.path("uncodedFindings").asLong())
+                .as("findings in codes beyond the panel's eight").isEqualTo(1);
 
         // the two daily series, merged
         assertThat(root.path("series").isArray()).isTrue();
@@ -163,10 +169,19 @@ class OverviewControllerTest {
         assertThat(strings(root.path("vocabulary").path("harnessVersions")))
                 .containsExactlyInAnyOrder(IndexedCorpus.MAIN_VERSION, IndexedCorpus.SECOND_VERSION);
         assertThat(strings(root.path("vocabulary").path("codes")))
-                .containsExactlyInAnyOrder("FS_STALE_VERSION", "media_budget_exceeded", "TIMEOUT", "SERVER",
-                        "FS_NOT_FOUND", "FS_NOT_OBSERVED", "SEARCH_FAILED", "WEB_PROVIDER_CREDENTIAL_MISSING");
+                .containsExactlyInAnyOrder("FS_STALE_VERSION", "FS_EDIT_NOT_FOUND", "INVALID_REQUEST", "TIMEOUT",
+                        "SERVER", "FS_NOT_FOUND", "FS_NOT_OBSERVED", "SEARCH_FAILED",
+                        "WEB_PROVIDER_CREDENTIAL_MISSING",
+                        // the shell edits carry no code; the bucket is what ?code=unknown selects
+                        Vocabulary.UNKNOWN);
         assertThat(strings(root.path("vocabulary").path("detectors")))
-                .containsExactlyInAnyOrder("stamp-guard", "error-plane", "fatal-turn", "retry-storm");
+                .containsExactlyInAnyOrder("stamp-guard", "edit-miss", "error-plane", "fatal-turn",
+                        "retry-storm", "shell-edit");
+        // two routes, and s-09's missing request/context folded into the bucket the rail can select
+        assertThat(strings(root.path("vocabulary").path("providers")))
+                .containsExactlyInAnyOrder("local", "local-impl", Vocabulary.UNKNOWN);
+        assertThat(strings(root.path("vocabulary").path("roles")))
+                .containsExactlyInAnyOrder("orchestrator", "subagent");
 
         // The vocabulary's wire shape, pinned by name. The session ids are the list missing from
         // it: on the author's corpus 165 ids were 6,812 of an 8,997-byte response, and it is the
@@ -175,7 +190,7 @@ class OverviewControllerTest {
         final List<String> vocabularyFields = new ArrayList<>();
         root.path("vocabulary").propertyNames().forEach(vocabularyFields::add);
         assertThat(vocabularyFields).containsExactlyInAnyOrder(
-                "schemas", "models", "presets", "harnessVersions", "codes", "detectors");
+                "schemas", "models", "presets", "harnessVersions", "codes", "detectors", "providers", "roles");
 
         // no evidence text on the overview
         assertThat(root.toString()).doesNotContain("excerpt");
@@ -192,18 +207,23 @@ class OverviewControllerTest {
                 .andExpect(jsonPath("$.allowed[?(@ == 'demo-brain-27b')]").exists())
                 .andExpect(jsonPath("$.allowed[?(@ == 'unknown')]").exists());
         // the 400 happened before any SQL: the table is intact
-        assertThat(count("select count(*) from session")).isEqualTo(15);
+        assertThat(count("select count(*) from session")).isEqualTo(16);
     }
 
     @Test
     void filteringBySchemaNarrowsTheResult() throws Exception {
-        // V3: s-06 (v3 stream), s-07, s-08, s-10 -> 4 session rows; only s-07's stamp finding
+        // V3: s-06 (v3 stream), s-07, s-08, s-10 -> 4 session rows; only s-07's findings — the
+        // stamp refusal and the script write that caused it, which the shell-edit detector
+        // counts in its own right
         final JsonNode root = asJson(get("/api/overview").param("schema", "V3"));
         assertThat(root.path("tiles").path("sessions").asLong()).isEqualTo(4);
-        assertThat(root.path("tiles").path("findings").asLong()).isEqualTo(1);
+        assertThat(root.path("tiles").path("findings").asLong()).isEqualTo(2);
         assertThat(root.path("planeMix").path("GUARD").asLong()).isEqualTo(1);
+        assertThat(root.path("planeMix").path("MODEL_MISUSE").asLong()).isEqualTo(1);
         assertThat(root.path("planeMix").path("INFRASTRUCTURE").isMissingNode()).isTrue();
-        assertThat(root.path("topDetectors").path(0).path("detector").asText()).isEqualTo("stamp-guard");
+        final List<String> detectors = new ArrayList<>();
+        root.path("topDetectors").forEach(d -> detectors.add(d.path("detector").asText()));
+        assertThat(detectors).containsExactly("shell-edit", "stamp-guard");
     }
 
     @Test

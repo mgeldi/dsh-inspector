@@ -2,9 +2,12 @@ package inspector;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import inspector.query.FindingFilters;
+import inspector.query.DetailRead;
+import inspector.query.FindingsQuery;
+import inspector.query.InsightFilter;
 import inspector.query.IndexWideRead;
 import java.lang.reflect.Method;
+import org.springframework.data.jpa.repository.Modifying;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,10 +20,10 @@ import org.junit.jupiter.api.Test;
 /**
  * DESIGN.md §7 as an executable check: the filter contract is a rule about store reads, and
  * this test walks the compiled main classes in {@code target/classes} and asserts the named
- * predicate — every public method of a top-level {@code inspector.store.*Repository} class
- * or of {@code VocabularyService} that returns query results either takes a
- * {@link FindingFilters} (or its {@code Sql}) or carries an {@link IndexWideRead} whose
- * reason is not blank.
+ * predicate — every public method declared by a top-level {@code inspector.store.*Repository}
+ * type or by {@code VocabularyService} that returns query results either takes the filter
+ * contract ({@link InsightFilter}, or the {@link FindingsQuery} that carries one) or carries an
+ * {@link IndexWideRead} whose reason is not blank.
  *
  * <p>It exists because the one filter-contract bug this app shipped was green end to end: the
  * controller never declared the rail's parameters, the repository never had a WHERE, and no
@@ -31,7 +34,9 @@ import org.junit.jupiter.api.Test;
  * test" degrades into a name lint the moment someone asks what it matches:
  * <ul>
  *   <li>Writes are out of scope on purpose: the contract is about what a read <i>answers</i>,
- *       and {@code IndexWriter} only ever creates the index. No screen claims a filtered
+ *       and {@code IndexWriter} only ever creates the index. A repository's own bulk deletes
+ *       are writes too, and they say so the way Spring Data requires — {@code @Modifying} — so
+ *       that annotation is what takes a method out of scope. No screen claims a filtered
  *       selection of a write, so a write cannot misreport a population. {@code PathHints} is a
  *       string helper on the write side and the nested records are row shapes, not reads; all
  *       three stay outside the scope by name, the same way the privacy lint scopes by type.</li>
@@ -39,8 +44,10 @@ import org.junit.jupiter.api.Test;
  *       contract governs a population a filter narrows, and a primary-key fetch returns at
  *       most one row, which no filter can narrow. The next list, count or aggregate is what
  *       this lint is for.</li>
- *   <li>An exemption is a claim, not a waiver: {@link IndexWideRead} carries the reason next
- *       to the method, and a blank reason fails the test — a blank excuse is not an excuse.
+ *   <li>An exemption is a claim, not a waiver: {@link IndexWideRead} and {@link DetailRead}
+ *       carry the reason next to the method, and a blank reason fails the test — a blank excuse
+ *       is not an excuse. {@code DetailRead} is for the reads that answer about one open
+ *       finding's own stream, which no rail filter may thin out.
  *       The one exemption today is {@code VocabularyService.vocabulary()} (DESIGN.md §7):
  *       the rail's options are the values present in the index, and a filter must never make
  *       one disappear.</li>
@@ -78,11 +85,18 @@ final class FilterContractTest {
                         }
                         for (final Method method : clazz.getDeclaredMethods()) {
                             if (method.isSynthetic() || !Modifier.isPublic(method.getModifiers())
-                                    || !returnsQueryResults(method)) {
+                                    || !returnsQueryResults(method)
+                                    || method.isAnnotationPresent(Modifying.class)) {
                                 continue;
                             }
                             final IndexWideRead exemption = method.getAnnotation(IndexWideRead.class);
-                            if (exemption != null) {
+                            final DetailRead detail = method.getAnnotation(DetailRead.class);
+                            if (detail != null) {
+                                if (detail.reason().isBlank()) {
+                                    violations.add(name + "#" + method.getName()
+                                            + " — @DetailRead reason is blank; say why the read is scoped to one finding");
+                                }
+                            } else if (exemption != null) {
                                 if (exemption.reason().isBlank()) {
                                     violations.add(name + "#" + method.getName()
                                             + " — @IndexWideRead reason is blank; a blank excuse is not an"
@@ -90,16 +104,16 @@ final class FilterContractTest {
                                 }
                             } else if (!declaresFilterContract(method)) {
                                 violations.add(name + "#" + method.getName()
-                                        + " — declare the shared filter contract of §7: take a FindingFilters"
-                                        + " parameter, or mark the read @IndexWideRead with a reason if it is"
-                                        + " deliberately index-wide");
+                                        + " — declare the shared filter contract of §7: take an InsightFilter"
+                                        + " (or a FindingsQuery) parameter, or mark the read @IndexWideRead with"
+                                        + " a reason if it is deliberately index-wide");
                             }
                         }
                     });
         }
         assertThat(violations)
-                .as("store reads that ignore the shared filter contract (DESIGN.md §7: a FindingFilters"
-                        + " parameter or a reasoned @IndexWideRead)")
+                .as("store reads that ignore the shared filter contract (DESIGN.md §7: an InsightFilter"
+                        + " or FindingsQuery parameter, or a reasoned @IndexWideRead)")
                 .isEmpty();
     }
 
@@ -122,11 +136,11 @@ final class FilterContractTest {
         return type != void.class && !Optional.class.isAssignableFrom(type);
     }
 
-    /** At least one parameter assignable to {@code FindingFilters} or {@code FindingFilters.Sql}. */
+    /** At least one parameter assignable to {@code InsightFilter} or {@code FindingsQuery}. */
     private static boolean declaresFilterContract(final Method method) {
         for (final Class<?> type : method.getParameterTypes()) {
-            if (FindingFilters.class.isAssignableFrom(type)
-                    || FindingFilters.Sql.class.isAssignableFrom(type)) {
+            if (InsightFilter.class.isAssignableFrom(type)
+                    || FindingsQuery.class.isAssignableFrom(type)) {
                 return true;
             }
         }

@@ -76,7 +76,10 @@ public final class FixtureGenerator {
      * s-07 (direct mutation via a python heredoc, embedded v3 timings, isSeeded) and
      * s-08 (v3 step whose stream entries carry no time). s-06/v0 and s-11 add the
      * model-misuse plane; s-09 has no request/context (a NULL model must stay reachable);
-     * s-08 has no agentPreset (a NULL preset, as v3 headers sometimes omit it).
+     * s-08 has no agentPreset (a NULL preset, as v3 headers sometimes omit it). s-10 and s-11 are
+     * subagents (delegation depth 1) on a second provider route, so the provider and role
+     * cohorts have two rows. s-15 walks every edit-miss category, two shell edits that count and
+     * one file operation that does not, and a fatal turn whose provider body carries a type.
      */
     static int generate(final Path root) {
         clean(root);
@@ -91,7 +94,8 @@ public final class FixtureGenerator {
         files += s08(root);            // v3: step whose stream entries carry no time -> NULL timings
         files += s09(root);            // v0: clean, no request/context -> NULL model
         files += s10(root);            // v3: clean, embedded timings
-        files += s11(root);            // v0: one SEARCH_FAILED -> MODEL_MISUSE
+        files += s11(root);            // v0: one SEARCH_FAILED -> MODEL_MISUSE (subagent, second route)
+        files += s15(root);            // v0: every edit-miss category, shell edits, a 503 fatal turn
         return files;
     }
 
@@ -188,7 +192,7 @@ public final class FixtureGenerator {
         w.userMessage(t + 6_000, "Re-reading the spec: on media_budget_exceeded the turn dies and a"
                 + " retry would resend the images, so the only fix is to stop carrying them.");
         w.stepStart(2, 0, t + 8_000);
-        w.turnEnd(2, t + 9_000, "400: {\"code\":\"media_budget_exceeded\"}");
+        w.turnEnd(2, t + 9_000, "INVALID_REQUEST", "400: {\"code\":\"media_budget_exceeded\"}");
         return write(root, "demo-app", "s-04", "session.jsonl.zstd", w);
     }
 
@@ -306,8 +310,8 @@ public final class FixtureGenerator {
     private static int s10(final Path root) {
         final long b = T0 + 10 * DAY + 11 * HOUR + 26 * MIN;
         final EventWriter w = new EventWriter();
-        w.session("s-10", b, "/home/dev/plain", 3, "planner", 0, Boolean.TRUE);
-        w.requestContext(b + 1_000, "local", "demo-brain-27b", 131_072);
+        w.session("s-10", b, "/home/dev/plain", 3, "planner", 1, Boolean.TRUE);
+        w.requestContext(b + 1_000, "local-impl", "demo-brain-27b", 131_072);
         normalStep3(w, 0, b + 2_000, "/home/dev/plain/README.md");
         normalStep3(w, 1, b + 40_000, "/home/dev/plain/README.md");
         return write(root, "demo-plain", "s-10", "session.v3.jsonl.zstd", w);
@@ -316,8 +320,8 @@ public final class FixtureGenerator {
     private static int s11(final Path root) {
         final long b = T0 + 11 * DAY + 13 * HOUR + 14 * MIN;
         final EventWriter w = new EventWriter();
-        w.session("s-11", b, "/home/dev/plain", 0, "builder", 0, null);
-        w.requestContext(b + 1_000, "local", "demo-flash-8b", 262_144);
+        w.session("s-11", b, "/home/dev/plain", 0, "builder", 1, null);
+        w.requestContext(b + 1_000, "local-impl", "demo-flash-8b", 262_144);
         normalStep0(w, 0, b + 2_000, "/home/dev/plain/src/app.mjs");
         long t = b + 37_000;
         w.stepStart(1, 0, t);
@@ -326,6 +330,52 @@ public final class FixtureGenerator {
         w.result(t + 3_000, "SEARCH_FAILED");
         w.stepEnd(1, 0, t + 3_500);
         return write(root, "demo-plain", "s-11", "session.jsonl.zstd", w);
+    }
+
+    /**
+     * The model-side patterns the edit-miss and shell-edit detectors explain, in one stream:
+     * an edit that quotes the file as it was before the model's own edit (MISS_AFTER_EDIT), the
+     * same edit retried blind (REPEATED_MISS), a miss right after a read (MISS_AFTER_READ), a
+     * heredoc overwrite and a script write of files the file tools had read (two shell edits),
+     * and a copy of a tracked file that is not an edit of it. The turn then dies on a 503 whose
+     * body names the provider's own type.
+     */
+    private static int s15(final Path root) {
+        final long b = T0 + 12 * DAY + 16 * HOUR + 3 * MIN;
+        final EventWriter w = new EventWriter();
+        w.session("s-15", b, "/home/dev/plain", 0, "builder", 0, null);
+        w.requestContext(b + 1_000, "local", "demo-brain-27b", 131_072);
+        normalStep0(w, 0, b + 2_000, "/home/dev/plain/src/app.mjs");
+        long t = b + 30_000;
+        w.stepStart(1, 0, t);
+        w.call("read", 1, 0, t + 1_000, args("file_path", "/home/dev/plain/src/app.mjs"));
+        w.result(t + 1_500, null);
+        w.call("edit", 1, 0, t + 2_000, args("file_path", "/home/dev/plain/src/app.mjs"));
+        w.result(t + 2_500, null);
+        w.call("edit", 1, 0, t + 3_000, args("file_path", "/home/dev/plain/src/app.mjs"));
+        w.result(t + 3_500, "FS_EDIT_NOT_FOUND");             // MISS_AFTER_EDIT
+        w.call("edit", 1, 0, t + 4_000, args("file_path", "/home/dev/plain/src/app.mjs"));
+        w.result(t + 4_500, "FS_EDIT_NOT_FOUND");             // REPEATED_MISS
+        w.call("read", 1, 0, t + 5_000, args("file_path", "/home/dev/plain/src/app.mjs"));
+        w.result(t + 5_500, null);
+        w.call("edit", 1, 0, t + 6_000, args("file_path", "/home/dev/plain/src/app.mjs"));
+        w.result(t + 6_500, "FS_EDIT_NOT_FOUND");             // MISS_AFTER_READ
+        w.call("read", 1, 0, t + 7_000, args("file_path", "/home/dev/plain/notes.md"));
+        w.result(t + 7_500, null);
+        w.call("bash", 1, 0, t + 8_000, args("command",
+                "cat > /home/dev/plain/notes.md <<'EOF'\n# notes\nrewritten\nEOF"));
+        w.result(t + 8_500, null);                            // shell-edit, REDIRECT, full match
+        w.call("bash", 1, 0, t + 9_000, args("command",
+                "python3 - <<'EOF'\nfrom pathlib import Path\nPath('src/app.mjs').write_text('x')\nEOF"));
+        w.result(t + 9_500, null);                            // shell-edit, SCRIPT, suffix match
+        w.call("bash", 1, 0, t + 10_000, args("command",
+                "cp /home/dev/plain/src/app.mjs /home/dev/plain/src/app.mjs.bak"));
+        w.result(t + 10_500, null);                           // a copy: not a shell edit
+        w.stepEnd(1, 0, t + 11_000);
+        w.stepStart(2, 0, t + 12_000);
+        w.turnEnd(2, t + 13_000, "SERVER",
+                "503: {\"code\":503,\"message\":\"Loading model\",\"type\":\"unavailable_error\"}");
+        return write(root, "demo-plain", "s-15", "session.jsonl.zstd", w);
     }
 
     private static int s12(final Path root) {
@@ -581,12 +631,21 @@ public final class FixtureGenerator {
             data("user/message", t, m -> m.put("text", text));
         }
 
-        void turnEnd(final int turn, final long t, final String errorMessage) {
+        /**
+         * The shape DSH writes: {@code reason = {kind: "error", error: {code, message}}}. An
+         * earlier version of this generator put the message flat on the reason, the ingestor read
+         * it from there, and the two agreed with each other while every real fatal turn went
+         * unparsed — the fixture has to be the log's shape, not the parser's.
+         */
+        void turnEnd(final int turn, final long t, final String code, final String errorMessage) {
             data("turn/end", t, m -> {
                 m.put("turn", turn);
+                final Map<String, Object> error = new LinkedHashMap<>();
+                error.put("code", code);
+                error.put("message", errorMessage);
                 final Map<String, Object> reason = new LinkedHashMap<>();
                 reason.put("kind", "error");
-                reason.put("message", errorMessage);
+                reason.put("error", error);
                 m.put("reason", reason);
             });
         }

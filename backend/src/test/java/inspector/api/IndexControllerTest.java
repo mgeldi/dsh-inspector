@@ -65,26 +65,26 @@ class IndexControllerTest {
     void runIndexesTheConfiguredCorpusAndReportsCountsOnly() throws Exception {
         // Re-indexed here rather than trusted from @BeforeAll: the previous test's run
         // re-attributes the index, and this assertion is about the state right after a corpus
-        // switch. The re-run over fixtures/sessions replaces the 12 streams; the 3 rows from
+        // switch. The re-run over fixtures/sessions replaces the 13 streams; the 3 rows from
         // sessions-b survive — the index was seeded from that other corpus, so this run
-        // prunes nothing it never read — so 15 rows remain. But one session is written in
-        // both conventions, so the honest session count is 14, not 15.
+        // prunes nothing it never read — so 16 rows remain. But one session is written in
+        // both conventions, so the honest session count is 15, not 16.
         IndexedCorpus.indexBoth(temp.resolve("index.sqlite"));
 
         mockMvc.perform(post("/api/index/run"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.streams").value(12))
-                .andExpect(jsonPath("$.sessions").value(14))
-                .andExpect(jsonPath("$.toolCalls").value(32))
-                .andExpect(jsonPath("$.findings").value(9))
+                .andExpect(jsonPath("$.streams").value(13))
+                .andExpect(jsonPath("$.sessions").value(15))
+                .andExpect(jsonPath("$.toolCalls").value(43))
+                .andExpect(jsonPath("$.findings").value(17))
                 .andExpect(jsonPath("$.pruned").value(0))
                 .andExpect(jsonPath("$.parseFailures").value(0))
                 .andExpect(jsonPath("$.durationMs").isNumber());
 
         // the database matches: the re-run changed nothing structurally
-        assertThat(count("select count(*) from session")).isEqualTo(15);
-        assertThat(count("select count(*) from finding")).isEqualTo(12);
-        assertThat(count("select count(*) from tool_call")).isEqualTo(41);
+        assertThat(count("select count(*) from session")).isEqualTo(16);
+        assertThat(count("select count(*) from finding")).isEqualTo(21);
+        assertThat(count("select count(*) from tool_call")).isEqualTo(52);
     }
 
     @Test
@@ -98,15 +98,15 @@ class IndexControllerTest {
         mockMvc.perform(post("/api/index/run"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pruned").value(0));
-        assertThat(count("select count(*) from session")).isEqualTo(15);
+        assertThat(count("select count(*) from session")).isEqualTo(16);
 
         mockMvc.perform(post("/api/index/run"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.pruned").value(3))
-                .andExpect(jsonPath("$.sessions").value(11));
+                .andExpect(jsonPath("$.sessions").value(12));
 
-        assertThat(count("select count(*) from session")).isEqualTo(12);
-        assertThat(count("select count(*) from finding")).isEqualTo(9);
+        assertThat(count("select count(*) from session")).isEqualTo(13);
+        assertThat(count("select count(*) from finding")).isEqualTo(17);
         assertThat(count("select count(*) from shell_evidence where finding_id not in"
                 + " (select id from finding)")).isZero();
     }

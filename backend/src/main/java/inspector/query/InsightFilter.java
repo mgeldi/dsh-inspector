@@ -6,7 +6,7 @@ import java.util.List;
 
 /**
  * The one filter contract every GET endpoint shares (DESIGN.md §7): the
- * dashboard rail's six values bound from the query string.
+ * dashboard rail's values bound from the query string.
  *
  * <p>Each endpoint accepts a subset of the fields; an absent value means
  * "no filter", a present value must be in the index vocabulary or the
@@ -24,7 +24,7 @@ import java.util.List;
  * (DESIGN.md §6 enumerated two indexes the code had retired). The single-source alternative is
  * springdoc's javadoc provider, and it was tried: {@code therapi-runtime-javadoc-scribe} 0.15.0
  * produces no output under JDK 26 even with {@code -proc:full}, so the build stays green and the
- * document stays empty. Six short lines, kept next to the sentences they copy, beat a dependency
+ * document stays empty. Eight short lines, kept next to the sentences they copy, beat a dependency
  * that silently does nothing — revisit if the scribe ever ships a JDK 26 build.
  *
  * @param from            event-time lower bound, epoch millis, inclusive
@@ -33,6 +33,8 @@ import java.util.List;
  * @param model           declared model name
  * @param preset          agent preset name
  * @param harnessVersion  declared or inferred harness version
+ * @param provider        the route the session's requests went to ({@code request/context.provider})
+ * @param role            {@code orchestrator} (delegation depth 0) or {@code subagent} (depth ≥ 1)
  */
 public record InsightFilter(
         @Schema(description = "Event-time lower bound, epoch millis, inclusive.", example = "1757894400000")
@@ -46,7 +48,24 @@ public record InsightFilter(
         @Schema(description = "Agent preset name. Must be a value present in the index.")
         String preset,
         @Schema(description = "Declared or inferred harness version. Must be a value present in the index.")
-        String harnessVersion) {
+        String harnessVersion,
+        @Schema(description = "Provider route the session's requests went to. Must be a value present in the index.",
+                example = "local-impl")
+        String provider,
+        @Schema(description = "orchestrator (delegation depth 0) or subagent (depth 1 or more).",
+                example = "subagent")
+        String role) {
+
+    /** No filter at all: every value absent. */
+    public static InsightFilter none() {
+        return new InsightFilter(null, null, null, null, null, null, null, null);
+    }
+
+    /** True when any value would narrow the population. */
+    public boolean isActive() {
+        return from != null || to != null || schema != null || model != null || preset != null
+                || harnessVersion != null || provider != null || role != null;
+    }
 
     /**
      * Validate every present value against the index vocabulary.
@@ -58,6 +77,8 @@ public record InsightFilter(
         requireKnown(vocabulary, "model", model);
         requireKnown(vocabulary, "preset", preset);
         requireKnown(vocabulary, "harnessVersion", harnessVersion);
+        requireKnown(vocabulary, "provider", provider);
+        requireKnown(vocabulary, "role", role);
     }
 
     /**

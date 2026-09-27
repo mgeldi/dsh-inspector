@@ -1,5 +1,6 @@
 package inspector.api;
 
+import inspector.dto.FindingContextDto;
 import inspector.dto.FindingDetailDto;
 import inspector.dto.FindingsPageDto;
 import inspector.insight.FindingsService;
@@ -49,6 +50,20 @@ public final class FindingsController {
             @Parameter(description = "Rows per page.", example = "20")
             @RequestParam(defaultValue = "20") final int size) {
         return findingsService.page(filter, plane, detector, session, code, sort, page, size);
+    }
+
+    @Operation(summary = "The tool-call sequence around one finding",
+            description = "The calls of the finding's own stream before and after it, and the findings"
+                    + " among them: tool names, outcome codes, project-relative paths and timings — no text"
+                    + " of any kind. A finding with no tool-call seq of its own (a fatal turn, a retry"
+                    + " storm) is placed at the last call that had started by its event time.")
+    @GetMapping("/{id}/context")
+    public FindingContextDto context(
+            @Parameter(description = "Finding id, as served by the findings page.", example = "1")
+            @PathVariable final long id,
+            @Parameter(description = "Calls to show on each side, 1 to 50.", example = "12")
+            @RequestParam(defaultValue = "12") final int window) {
+        return findingsService.context(id, window).orElseThrow(() -> new FindingNotFoundException(id));
     }
 
     @Operation(summary = "One finding, with its evidence",

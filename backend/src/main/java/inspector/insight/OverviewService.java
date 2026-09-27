@@ -1,8 +1,8 @@
 package inspector.insight;
 
+import inspector.dto.BreakdownDto;
 import inspector.dto.OverviewDto;
 import inspector.dto.VocabularyOptions;
-import inspector.query.FindingFilters;
 import inspector.query.InsightFilter;
 import inspector.query.Vocabulary;
 import inspector.store.OverviewRepository;
@@ -20,10 +20,9 @@ import org.springframework.stereotype.Service;
  * population the shared {@link InsightFilter} selects. No evidence text anywhere: that is
  * only ever on the findings detail (§4.1).
  *
- * <p>Four of the six numbers take a <i>different</i> WHERE, because the filter has to be
- * rooted in the table each aggregate counts from (§7). That rooting is what
- * {@link FindingFilters} exists for, and it is why this class asks for four {@code Sql}
- * fragments rather than one.
+ * <p>The four tiles take a <i>different</i> WHERE each, because the filter has to be rooted in the
+ * table each aggregate counts from (§7) — a finding's event time, a session's start, a call's
+ * start, a step's start. The repository roots it; this class hands every read the same filter.
  */
 @Service
 public final class OverviewService {
@@ -37,46 +36,47 @@ public final class OverviewService {
 
     private final OverviewRepository overviewRepository;
     private final VocabularyService vocabularyService;
+    private final ReadSnapshot snapshot;
 
-    public OverviewService(
-            final OverviewRepository overviewRepository, final VocabularyService vocabularyService) {
+    public OverviewService(final OverviewRepository overviewRepository,
+                           final VocabularyService vocabularyService, final ReadSnapshot snapshot) {
         this.overviewRepository = overviewRepository;
         this.vocabularyService = vocabularyService;
+        this.snapshot = snapshot;
     }
 
+    /** The board, read from one snapshot of the index (ReadSnapshot). */
     public OverviewDto overview(final InsightFilter filter) {
+        return snapshot.read(() -> board(filter));
+    }
+
+    private OverviewDto board(final InsightFilter filter) {
         final Vocabulary vocabulary = vocabularyService.vocabulary();
         filter.validate(vocabulary);
 
-        final FindingFilters filters = new FindingFilters(filter);
-        final FindingFilters.Sql findings = filters.forFinding();
-        final FindingFilters.Sql sessions = filters.forSession();
-        final FindingFilters.Sql toolCalls = filters.forToolCall();
-        final FindingFilters.Sql steps = filters.forStep();
-
         final OverviewDto.Tiles tiles = new OverviewDto.Tiles(
-                overviewRepository.sessionCount(sessions),
-                overviewRepository.findingCount(findings),
-                overviewRepository.toolCallCount(toolCalls),
-                overviewRepository.stepCount(steps));
+                overviewRepository.sessionCount(filter),
+                overviewRepository.findingCount(filter),
+                overviewRepository.toolCallCount(filter),
+                overviewRepository.stepCount(filter));
 
         final Map<String, Long> planeMix = new LinkedHashMap<>();
-        for (final OverviewRepository.PlaneMixRow row : overviewRepository.planeMix(findings)) {
+        for (final OverviewRepository.PlaneMixRow row : overviewRepository.planeMix(filter)) {
             planeMix.put(row.plane(), row.count());
         }
 
         final List<OverviewDto.DetectorCount> topDetectors = new ArrayList<>();
-        for (final OverviewRepository.DetectorCountRow row : overviewRepository.topDetectors(findings)) {
+        for (final OverviewRepository.DetectorCountRow row : overviewRepository.topDetectors(filter)) {
             topDetectors.add(new OverviewDto.DetectorCount(row.detector(), row.count()));
         }
 
         final List<OverviewDto.CodeCount> topCodes = new ArrayList<>();
-        for (final OverviewRepository.CodeCountRow row : overviewRepository.topCodes(findings, TOP_CODES)) {
+        for (final OverviewRepository.CodeCountRow row : overviewRepository.topCodes(filter, TOP_CODES)) {
             topCodes.add(new OverviewDto.CodeCount(row.code(), row.count()));
         }
 
         final List<OverviewDto.ThroughputRow> throughput = new ArrayList<>();
-        for (final OverviewRepository.ThroughputBucket bucket : overviewRepository.throughput(steps)) {
+        for (final OverviewRepository.ThroughputBucket bucket : overviewRepository.throughput(filter)) {
             // A null median means "this bucket measured nothing", and it crosses the boundary as
             // null: 0 would be a speed the index never measured, and the frontend renders the two
             // differently ("n/a" next to a number a reviewer could disprove).
@@ -93,10 +93,28 @@ public final class OverviewService {
                 planeMix,
                 topDetectors,
                 topCodes,
-                mergeSeries(overviewRepository.findingSeries(findings),
-                        overviewRepository.toolCallSeries(toolCalls)),
+                overviewRepository.uncodedCount(filter),
+                mergeSeries(overviewRepository.findingSeries(filter),
+                        overviewRepository.toolCallSeries(filter)),
                 throughput,
                 wireVocabulary(vocabulary));
+    }
+
+    /**
+     * Findings by kind, with each kind's rate per 1,000 observed calls of the same selection — the
+     * denominator a harness change is judged against.
+     */
+    public List<BreakdownDto> breakdown(final InsightFilter filter) {
+        return snapshot.read(() -> kinds(filter));
+    }
+
+    private List<BreakdownDto> kinds(final InsightFilter filter) {
+        filter.validate(vocabularyService.vocabulary());
+        final long calls = overviewRepository.toolCallCount(filter);
+        return overviewRepository.breakdown(filter).stream()
+                .map(row -> new BreakdownDto(row.detector(), row.plane(), row.category(), row.code(),
+                        row.detail(), row.count(), CohortService.rate(row.count(), calls)))
+                .toList();
     }
 
     /**
@@ -112,7 +130,9 @@ public final class OverviewService {
                 vocabulary.presets(),
                 vocabulary.harnessVersions(),
                 vocabulary.codes(),
-                vocabulary.detectors());
+                vocabulary.detectors(),
+                vocabulary.providers(),
+                vocabulary.roles());
     }
 
     /**

@@ -81,11 +81,12 @@ class CohortsControllerTest {
     @Test
     void twoRowCohortsComputeRatesAndDeltasInPercentagePoints() throws Exception {
         // ground truth from the indexed fixture corpora:
-        //   0.1.5-rc.2: 11 sessions in 12 stored files, 32 tool calls, 9 findings, 4 guard findings
-        //   0.1.4:       3 sessions,  9 tool calls, 3 findings, 2 guard findings
-        assertThat(count("select count(*) from session")).isEqualTo(15);
-        assertThat(count("select count(*) from tool_call")).isEqualTo(41);
-        assertThat(count("select count(*) from finding")).isEqualTo(12);
+        //   0.1.5-rc.2: 12 sessions in 13 stored files, 43 tool calls, 17 findings: 4 guard,
+        //               9 misuse (3 edit misses, 4 shell edits, 2 error-plane), 4 infrastructure
+        //   0.1.4:       3 sessions,  9 tool calls, 4 findings: 2 guard, 1 misuse, 1 infrastructure
+        assertThat(count("select count(*) from session")).isEqualTo(16);
+        assertThat(count("select count(*) from tool_call")).isEqualTo(52);
+        assertThat(count("select count(*) from finding")).isEqualTo(21);
 
         final JsonNode root = asJson(get("/api/cohorts?groupBy=harnessVersion"));
         assertThat(root.path("groupBy").asText()).isEqualTo("harnessVersion");
@@ -100,27 +101,37 @@ class CohortsControllerTest {
         assertThat(byKey.keySet()).containsExactlyInAnyOrder(IndexedCorpus.MAIN_VERSION, IndexedCorpus.SECOND_VERSION);
 
         final JsonNode main = byKey.get(IndexedCorpus.MAIN_VERSION);
-        // 11 distinct sessions from 12 stored files: s-06 exists under both conventions
-        assertThat(main.path("sessions").asLong()).isEqualTo(11);
-        assertThat(main.path("toolCalls").asLong()).isEqualTo(32);
-        assertThat(main.path("findings").asLong()).isEqualTo(9);
+        // 12 distinct sessions from 13 stored files: s-06 exists under both conventions
+        assertThat(main.path("sessions").asLong()).isEqualTo(12);
+        assertThat(main.path("toolCalls").asLong()).isEqualTo(43);
+        assertThat(main.path("findings").asLong()).isEqualTo(17);
         assertThat(main.path("guardFindings").asLong()).isEqualTo(4);
-        assertThat(main.path("findingsPerKCalls").asDouble()).isEqualTo(281.25);
-        assertThat(main.path("violationRatePerK").asDouble()).isEqualTo(125.0);
+        assertThat(main.path("misuseFindings").asLong()).isEqualTo(9);
+        assertThat(main.path("infraFindings").asLong()).isEqualTo(4);
+        assertThat(main.path("findingsPerKCalls").asDouble()).isEqualTo(395.35);
+        assertThat(main.path("violationRatePerK").asDouble()).isEqualTo(93.02);
+        assertThat(main.path("misuseRatePerK").asDouble()).isEqualTo(209.3);
+        assertThat(main.path("infraRatePerK").asDouble()).isEqualTo(93.02);
         // the baseline's own deltas are zero
         assertThat(main.path("findingsPerKCallsDelta").asDouble()).isEqualTo(0.0);
         assertThat(main.path("violationRatePerKDelta").asDouble()).isEqualTo(0.0);
+        assertThat(main.path("misuseRatePerKDelta").asDouble()).isEqualTo(0.0);
+        assertThat(main.path("infraRatePerKDelta").asDouble()).isEqualTo(0.0);
 
         final JsonNode second = byKey.get(IndexedCorpus.SECOND_VERSION);
         assertThat(second.path("sessions").asLong()).isEqualTo(3);
         assertThat(second.path("toolCalls").asLong()).isEqualTo(9);
-        assertThat(second.path("findings").asLong()).isEqualTo(3);
+        assertThat(second.path("findings").asLong()).isEqualTo(4);
         assertThat(second.path("guardFindings").asLong()).isEqualTo(2);
-        assertThat(second.path("findingsPerKCalls").asDouble()).isEqualTo(333.33);
+        assertThat(second.path("findingsPerKCalls").asDouble()).isEqualTo(444.44);
         assertThat(second.path("violationRatePerK").asDouble()).isEqualTo(222.22);
+        assertThat(second.path("misuseRatePerK").asDouble()).isEqualTo(111.11);
+        assertThat(second.path("infraRatePerK").asDouble()).isEqualTo(111.11);
         // deltas in percentage points, computed from the rounded rates
-        assertThat(second.path("findingsPerKCallsDelta").asDouble()).isEqualTo(52.08);
-        assertThat(second.path("violationRatePerKDelta").asDouble()).isEqualTo(97.22);
+        assertThat(second.path("findingsPerKCallsDelta").asDouble()).isEqualTo(49.09);
+        assertThat(second.path("violationRatePerKDelta").asDouble()).isEqualTo(129.2);
+        assertThat(second.path("misuseRatePerKDelta").asDouble()).isEqualTo(-98.19);
+        assertThat(second.path("infraRatePerKDelta").asDouble()).isEqualTo(18.09);
     }
 
     // The explicit-baseline case (same numbers, negated, with the choice note dropped) is not
@@ -150,9 +161,11 @@ class CohortsControllerTest {
                 .andExpect(jsonPath("$.allowed[?(@ == 'harnessVersion')]").exists())
                 .andExpect(jsonPath("$.allowed[?(@ == 'model')]").exists())
                 .andExpect(jsonPath("$.allowed[?(@ == 'schema')]").exists())
-                .andExpect(jsonPath("$.allowed[?(@ == 'preset')]").exists());
+                .andExpect(jsonPath("$.allowed[?(@ == 'preset')]").exists())
+                .andExpect(jsonPath("$.allowed[?(@ == 'provider')]").exists())
+                .andExpect(jsonPath("$.allowed[?(@ == 'role')]").exists());
         // the table is intact
-        assertThat(count("select count(*) from finding")).isEqualTo(12);
+        assertThat(count("select count(*) from finding")).isEqualTo(21);
     }
 
     @Test
@@ -167,17 +180,33 @@ class CohortsControllerTest {
         });
         assertThat(sessions.stream().mapToLong(Long::longValue).sum())
                 .isEqualTo(distinctSessionsPerCohortSum("model"));
-        assertThat(calls.stream().mapToLong(Long::longValue).sum()).isEqualTo(41);
+        assertThat(calls.stream().mapToLong(Long::longValue).sum()).isEqualTo(52);
+    }
+
+    /**
+     * The axis the harness-improvement loop needs most: the orchestrator and its subagents run
+     * different models on this setup, and a rate that mixes them describes neither. s-10 and s-11
+     * are the fixture's subagents.
+     */
+    @Test
+    void groupingByRoleSeparatesOrchestratorsFromSubagents() throws Exception {
+        final Map<String, JsonNode> byRole = cohortsByKey(asJson(get("/api/cohorts?groupBy=role")));
+        assertThat(byRole.keySet()).containsExactlyInAnyOrder("orchestrator", "subagent");
+        assertThat(byRole.get("subagent").path("sessions").asLong()).isEqualTo(2);
+        assertThat(byRole.get("orchestrator").path("sessions").asLong()).isEqualTo(13);
+
+        final Map<String, JsonNode> byProvider = cohortsByKey(asJson(get("/api/cohorts?groupBy=provider")));
+        assertThat(byProvider.keySet()).containsExactlyInAnyOrder("local", "local-impl", "unknown");
     }
 
     @Test
     void emptyFilterStillCoversEveryCohort() throws Exception {
-        // no InsightFilter parameters: the whole index is grouped. 14, not 15: the session
+        // no InsightFilter parameters: the whole index is grouped. 15, not 16: the session
         // table has one row per stored file and s-06 is stored under both conventions.
         final JsonNode root = asJson(get("/api/cohorts?groupBy=harnessVersion"));
         final long[] sessions = {0};
         root.path("cohorts").forEach(row -> sessions[0] += row.path("sessions").asLong());
-        assertThat(sessions[0]).isEqualTo(14);
+        assertThat(sessions[0]).isEqualTo(15);
     }
 
     /**
@@ -189,20 +218,20 @@ class CohortsControllerTest {
      */
     @Test
     void aSessionStoredUnderBothConventionsCountsOnceInItsCohort() throws Exception {
-        assertThat(count("select count(distinct id) from session")).isEqualTo(14);
+        assertThat(count("select count(distinct id) from session")).isEqualTo(15);
         assertThat(count("select count(*) from session where id = 's-06'")).isEqualTo(2);
 
         final Map<String, JsonNode> byVersion = cohortsByKey(asJson(get("/api/cohorts?groupBy=harnessVersion")));
-        assertThat(byVersion.get(IndexedCorpus.MAIN_VERSION).path("sessions").asLong()).isEqualTo(11);
+        assertThat(byVersion.get(IndexedCorpus.MAIN_VERSION).path("sessions").asLong()).isEqualTo(12);
         assertThat(byVersion.get(IndexedCorpus.SECOND_VERSION).path("sessions").asLong()).isEqualTo(3);
 
         // on the schema axis the same session legitimately belongs to both cohorts.
-        // V3 = s-06's v3 file, s-07, s-08, s-10; V0 = the other 8 of this corpus plus all
-        // three of sessions-b. The two cohorts sum to 15 for 14 sessions, and that is the
+        // V3 = s-06's v3 file, s-07, s-08, s-10; V0 = the other 9 of this corpus plus all
+        // three of sessions-b. The two cohorts sum to 16 for 15 sessions, and that is the
         // correct reading: s-06 is genuinely in both.
         final Map<String, JsonNode> bySchema = cohortsByKey(asJson(get("/api/cohorts?groupBy=schema")));
         assertThat(bySchema.get("V3").path("sessions").asLong()).isEqualTo(4);
-        assertThat(bySchema.get("V0").path("sessions").asLong()).isEqualTo(11);
+        assertThat(bySchema.get("V0").path("sessions").asLong()).isEqualTo(12);
     }
 
     /**

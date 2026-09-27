@@ -89,8 +89,8 @@ final class NoDuplicateFindingOwnerTest {
         final long plantedId = count("select coalesce(max(id), 0) + 1 from finding");
         jdbc.update(
                 "insert into finding (id, session_id, source_file, detector, plane, code, seq,"
-                        + " occurred_at, summary) select ?, session_id, source_file,"
-                        + " 'planted-duplicate', plane, code, seq, occurred_at, summary"
+                        + " occurred_at, day, summary) select ?, session_id, source_file,"
+                        + " 'planted-duplicate', plane, code, seq, occurred_at, day, summary"
                         + " from finding where seq is not null limit 1",
                 plantedId);
         try {

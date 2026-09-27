@@ -176,11 +176,13 @@ final class SessionIngestorTest {
     void theFatalTurnCarriesTheTurnEndEventTime() throws IOException {
         final StreamFacts facts = ingest(Convention.V0,
                 line("turn/end", T0 + 600,
-                        "{\"turn\":3,\"reason\":{\"kind\":\"error\",\"message\":\"400: {\\\"code\\\":\\\"media_budget_exceeded\\\"}\"}}"));
+                        "{\"turn\":3,\"reason\":{\"kind\":\"error\",\"error\":{\"code\":\"INVALID_REQUEST\","
+                                + "\"message\":\"400: {\\\"code\\\":\\\"media_budget_exceeded\\\"}\"}}}"));
 
         assertThat(facts.fatalTurns()).singleElement().satisfies(f -> {
             assertThat(f.turn()).isEqualTo(3);
-            assertThat(f.code()).isEqualTo("media_budget_exceeded");
+            assertThat(f.code()).isEqualTo("INVALID_REQUEST");
+            assertThat(f.detail()).isEqualTo("media_budget_exceeded");
             assertThat(f.occurredAt()).isEqualTo(T0 + 600);
         });
     }

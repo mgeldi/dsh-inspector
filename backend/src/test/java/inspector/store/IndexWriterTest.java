@@ -3,13 +3,11 @@ package inspector.store;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import com.zaxxer.hikari.HikariDataSource;
-import inspector.query.FindingFilters;
+import inspector.TestStore;
 import inspector.query.InsightFilter;
 import inspector.detect.Category;
 import inspector.detect.Finding;
 import inspector.detect.Plane;
-import inspector.index.IndexService;
 import inspector.ingest.Convention;
 import inspector.ingest.ErrorEvent;
 import inspector.ingest.FatalTurn;
@@ -23,28 +21,23 @@ import inspector.ingest.StepRecord;
 import inspector.ingest.StreamFacts;
 import inspector.ingest.ToolCallRecord;
 import inspector.ingest.VerbClass;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
+import inspector.store.entity.SessionEntity_;
+import inspector.store.entity.ToolCallId;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.simple.JdbcClient;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
-import org.springframework.jdbc.datasource.DriverManagerDataSource;
-import org.springframework.util.FileCopyUtils;
 
 /**
  * No Spring context on purpose: the writer is exercised by hand against a SQLite file in a
- * temp dir, with schema.sql executed directly. That is faster than booting the context and
- * keeps the assertions pointed at the SQL, where the idempotence actually lives.
+ * temp dir ({@link TestStore}, which runs the same schema gate a boot does). The assertions read
+ * the file with plain SQL, because what is on disk is where the idempotence actually lives.
  *
  * <p>Every path in this test is invented.
  */
@@ -56,33 +49,20 @@ final class IndexWriterTest {
     @TempDir
     Path temp;
 
+    private TestStore store;
     private JdbcTemplate jdbc;
     private IndexWriter writer;
-    private DriverManagerDataSource dataSource;
 
     @BeforeEach
-    void createDatabase() throws IOException {
-        dataSource = new DriverManagerDataSource();
-        // foreign_keys=on, like the application URL. Without it every delete order in the
-        // writer is tested against a database that would not notice the wrong order, and the
-        // comments in IndexWriter that justify that ordering would be claims no test reads.
-        dataSource.setUrl("jdbc:sqlite:" + temp.resolve("index.sqlite") + "?foreign_keys=on");
-        jdbc = new JdbcTemplate(dataSource);
-        writer = new IndexWriter(jdbc, new DataSourceTransactionManager(dataSource));
-        executeSchema(jdbc);
+    void createDatabase() {
+        store = TestStore.open(temp.resolve("index.sqlite"));
+        jdbc = store.jdbc();
+        writer = store.writer();
     }
 
-    /** The shipped DDL, statement by statement — the same source the app applies. */
-    private void executeSchema(final JdbcTemplate jdbc) throws IOException {
-        try (InputStream in = new ClassPathResource("schema.sql").getInputStream()) {
-            final String ddl = FileCopyUtils.copyToString(
-                    new java.io.InputStreamReader(in, StandardCharsets.UTF_8));
-            for (final String statement : ddl.split(";")) {
-                if (!statement.isBlank()) {
-                    jdbc.execute(statement.trim());
-                }
-            }
-        }
+    @AfterEach
+    void closeDatabase() {
+        store.close();
     }
 
     @Test
@@ -241,7 +221,7 @@ final class IndexWriterTest {
         // drift into marking everything.
         final StreamFacts orphan = new StreamFacts(
                 new SessionRecord("s-1", "session.jsonl.zstd", "demo-app", "V0", T0, T0 + 60_000,
-                        null, null, "model-a", 131072, 0, "/home/dev/demo"),
+                        null, null, "model-a", "provider-a", 131072, 0, "/home/dev/demo"),
                 List.of(),
                 List.of(
                         new ToolCallRecord(0, 0, 5, "edit", T0 + 200, T0 + 300, 100L, null,
@@ -255,7 +235,7 @@ final class IndexWriterTest {
                 List.of(),
                 0L);
         writer.writeStream(source(), orphan,
-                List.of(new Finding("error-plane", Plane.MODEL_MISUSE, null, "FS_NOT_FOUND", null,
+                List.of(new Finding("error-plane", Plane.MODEL_MISUSE, null, "FS_NOT_FOUND", null, null,
                         "/home/dev/demo/App.java", 5, null, null, T0 + 300,
                         "edit returned FS_NOT_FOUND", List.of())),
                 VERSION, false, T0 + 999);
@@ -286,19 +266,14 @@ final class IndexWriterTest {
 
         // excluded from the tile count: the overview's tool-call tile counts observed calls,
         // not rows
-        final JdbcClient client = JdbcClient.create(dataSource);
-        assertThat(new OverviewRepository(client)
-                .toolCallCount(new FindingFilters.Sql("", List.of())))
+        assertThat(store.overview().toolCallCount(InsightFilter.none()))
                 .as("the tile counts observed calls")
                 .isEqualTo(1);
 
         // excluded from the rate denominators: the cohort's toolCalls is exactly the value the
-        // controller divides findings by — one observed call, not two rows. With the orphan
+        // service divides findings by — one observed call, not two rows. With the orphan
         // counted the rate would read 500.0 instead of 1000.0.
-        assertThat(new CohortRepository(client)
-                .cohorts("harness_version", new FindingFilters(
-                        new InsightFilter(null, null, null, null, null, null)))
-                .cohorts())
+        assertThat(store.cohorts().cohorts(SessionEntity_.HARNESS_VERSION, InsightFilter.none()).cohorts())
                 .singleElement()
                 .satisfies(cohort -> {
                     assertThat(cohort.toolCalls()).as("the rate denominator").isEqualTo(1);
@@ -306,12 +281,12 @@ final class IndexWriterTest {
                     assertThat(cohort.guardFindings()).isZero();
                 });
 
-        // the finding on the matched row is unaffected: the seq join still resolves its tool.
-        // Asserted on the store's own row, because that is what the store reads — the wire
-        // record is FindingsService's business and this test has no business knowing it.
-        final FindingRepository.FindingDetailRow detail =
-                new FindingRepository(client).detail(1L).orElseThrow();
-        assertThat(detail.tool()).isEqualTo("edit");
+        // the finding on the matched row is unaffected: the seq still resolves its tool
+        final long id = jdbc.queryForObject("select id from finding", Long.class);
+        final var finding = store.findings().findDetail(id).orElseThrow();
+        assertThat(store.toolCalls().nameAt(
+                new ToolCallId(finding.getSessionId(), finding.getSourceFile(), finding.getSeq())))
+                .contains("edit");
     }
 
     @Test
@@ -323,7 +298,7 @@ final class IndexWriterTest {
         writeAll();
         writer.seedMeta("0");
 
-        final int discarded = writer.resetIfStale(IndexService.SCHEMA_VERSION);
+        final int discarded = writer.resetIfStale(IndexWriter.SCHEMA_VERSION);
 
         assertThat(discarded).isEqualTo(1);
         assertThat(count("session")).isZero();
@@ -333,7 +308,7 @@ final class IndexWriterTest {
         assertThat(count("shell_evidence")).isZero();
         assertThat(writer.countSessions()).isZero();
         assertThat(jdbc.queryForList("select key, value from meta"))
-                .containsExactly(Map.of("key", "schema_version", "value", IndexService.SCHEMA_VERSION));
+                .containsExactly(Map.of("key", "schema_version", "value", IndexWriter.SCHEMA_VERSION));
     }
 
     @Test
@@ -343,9 +318,9 @@ final class IndexWriterTest {
         // inverted, every boot of a healthy install would discard a good index and pay for
         // a rescan nobody asked for.
         writeAll();
-        writer.seedMeta(IndexService.SCHEMA_VERSION);
+        writer.seedMeta(IndexWriter.SCHEMA_VERSION);
 
-        final int discarded = writer.resetIfStale(IndexService.SCHEMA_VERSION);
+        final int discarded = writer.resetIfStale(IndexWriter.SCHEMA_VERSION);
 
         assertThat(discarded).isZero();
         assertThat(count("session")).isEqualTo(1);
@@ -354,7 +329,7 @@ final class IndexWriterTest {
         assertThat(count("finding")).isEqualTo(2);
         assertThat(count("shell_evidence")).isEqualTo(1);
         assertThat(jdbc.queryForList("select key, value from meta"))
-                .containsExactly(Map.of("key", "schema_version", "value", IndexService.SCHEMA_VERSION));
+                .containsExactly(Map.of("key", "schema_version", "value", IndexWriter.SCHEMA_VERSION));
     }
 
     @Test
@@ -362,13 +337,14 @@ final class IndexWriterTest {
         // "No value stored" is a mismatch, not a default to keep: a database that predates
         // the version row is emptied, re-seeded, and left usable.
         writeAll();
+        jdbc.update("delete from meta");
 
-        final int discarded = writer.resetIfStale(IndexService.SCHEMA_VERSION);
+        final int discarded = writer.resetIfStale(IndexWriter.SCHEMA_VERSION);
 
         assertThat(discarded).isEqualTo(1);
         assertThat(count("session")).isZero();
         assertThat(jdbc.queryForList("select key, value from meta"))
-                .containsExactly(Map.of("key", "schema_version", "value", IndexService.SCHEMA_VERSION));
+                .containsExactly(Map.of("key", "schema_version", "value", IndexWriter.SCHEMA_VERSION));
     }
 
     @Test
@@ -432,33 +408,22 @@ final class IndexWriterTest {
     }
 
     @Test
-    void theResetKeepsForeignKeysEnabled() throws IOException {
-        // Production turns the guard on in the JDBC URL; a single-connection pool means the
-        // reset runs on the same connection the assertions read, so a "fix" that disables
-        // the guard to dodge a constraint error cannot hide. The delete order is
-        // child-to-parent precisely so no such fix is ever wanted.
-        final HikariDataSource pooled = new HikariDataSource();
-        pooled.setJdbcUrl("jdbc:sqlite:" + temp.resolve("fk.sqlite") + "?foreign_keys=on");
-        pooled.setMaximumPoolSize(1);
-        try {
-            final JdbcTemplate fk = new JdbcTemplate(pooled);
-            executeSchema(fk);
-            final IndexWriter fkWriter = new IndexWriter(fk, new DataSourceTransactionManager(pooled));
-            fkWriter.writeStream(source(), facts(), findings(), VERSION, true, T0 + 999);
-            fkWriter.seedMeta("0");
+    void theResetKeepsForeignKeysEnabled() {
+        // Production turns the guard on in the JDBC URL, per connection. A "fix" that disabled
+        // the guard to dodge a constraint error during the reset would show up here, on a
+        // connection borrowed after it. The delete order is child-to-parent precisely so no such
+        // fix is ever wanted.
+        writeAll();
+        writer.seedMeta("0");
+        assertThat(jdbc.queryForObject("pragma foreign_keys", Integer.class)).isEqualTo(1);
 
-            assertThat(fk.queryForObject("pragma foreign_keys", Integer.class)).isEqualTo(1);
+        final int discarded = writer.resetIfStale(IndexWriter.SCHEMA_VERSION);
 
-            final int discarded = fkWriter.resetIfStale(IndexService.SCHEMA_VERSION);
-
-            assertThat(discarded).isEqualTo(1);
-            assertThat(fk.queryForObject("select count(*) from shell_evidence", Integer.class)).isZero();
-            assertThat(fk.queryForObject("pragma foreign_keys", Integer.class))
-                    .as("the guard the reset ran under stays on")
-                    .isEqualTo(1);
-        } finally {
-            pooled.close();
-        }
+        assertThat(discarded).isEqualTo(1);
+        assertThat(count("shell_evidence")).isZero();
+        assertThat(jdbc.queryForObject("pragma foreign_keys", Integer.class))
+                .as("the guard the reset ran under stays on")
+                .isEqualTo(1);
     }
 
     /**
@@ -475,35 +440,30 @@ final class IndexWriterTest {
      */
     @Test
     void aDatabaseWrittenBeforeTheConstraintsGainsThemFromTheReset() {
-        final HikariDataSource legacyPool = new HikariDataSource();
-        legacyPool.setJdbcUrl("jdbc:sqlite:" + temp.resolve("legacy.sqlite") + "?foreign_keys=on");
-        legacyPool.setMaximumPoolSize(1);
-        try {
-            final JdbcTemplate legacy = new JdbcTemplate(legacyPool);
+        try (TestStore legacyStore = TestStore.openUngated(temp.resolve("legacy.sqlite"))) {
+            final JdbcTemplate legacy = legacyStore.jdbc();
             legacy.execute("create table session (id text, source_file text, primary key (id, source_file))");
             legacy.execute("create table finding (id integer primary key, session_id text, source_file text)");
             legacy.execute("create table meta (key text primary key, value text not null)");
-            final IndexWriter legacyWriter = new IndexWriter(legacy, new DataSourceTransactionManager(legacyPool));
-            legacyWriter.seedMeta("2");
+            legacy.update("insert into meta (key, value) values ('schema_version', '2')");
             assertThat(legacy.queryForList("pragma foreign_key_list(finding)"))
                     .as("the table this starts from really has no constraint")
                     .isEmpty();
 
-            assertThat(legacyWriter.resetIfStale(IndexService.SCHEMA_VERSION)).isZero();
+            // the gate a boot runs: reset, then validate the entities against what it built
+            legacyStore.gate().open();
 
             assertThat(legacy.queryForList("pragma foreign_key_list(finding)"))
                     .as("the reset re-created the table from schema.sql, constraints included")
                     .isNotEmpty();
             assertThatThrownBy(() -> legacy.update("insert into finding (session_id, source_file,"
-                            + " detector, plane, occurred_at, summary)"
-                            + " values ('gone', 'gone.jsonl', 'error-prior', 'tool', 1, 'orphan')"))
+                            + " detector, plane, occurred_at, day, summary)"
+                            + " values ('gone', 'gone.jsonl', 'error-prior', 'tool', 1, '1970-01-01', 'orphan')"))
                     .hasMessageContaining("FOREIGN KEY");
             // Not only the constraint: the recreated table is the current one. path_hint is a
             // column the hand-written legacy shape above does not have.
             assertThat(legacy.queryForObject("select count(*) from finding where path_hint is null",
                     Integer.class)).isZero();
-        } finally {
-            legacyPool.close();
         }
     }
 
@@ -525,7 +485,7 @@ final class IndexWriterTest {
     private StreamFacts facts() {
         return new StreamFacts(
                 new SessionRecord("s-1", "session.jsonl.zstd", "demo-app", "V0", T0, T0 + 60_000,
-                        null, null, "model-a", 131072, 1, "/home/dev/demo"),
+                        null, null, "model-a", "provider-a", 131072, 1, "/home/dev/demo"),
                 List.of(
                         new StepRecord(0, 0, T0 + 100, T0 + 2000, 1000, 700, 350.0, 500, "chunk-events"),
                         new StepRecord(1, 0, T0 + 3000, null, 1000, 100, null, null, "none")),
@@ -546,20 +506,20 @@ final class IndexWriterTest {
                         "/home/dev/demo/App.java", T0 + 700),
                         new ErrorEvent(11, 1, 0, "write", "FS_NOT_FOUND",
                                 "/home/dev/other/missing.txt", T0 + 900)),
-                List.of(new FatalTurn(2, "media_budget_exceeded", T0 + 55_000)),
+                List.of(new FatalTurn(2, "INVALID_REQUEST", "media_budget_exceeded", T0 + 55_000)),
                 List.of(new RetryEvent(13, 2, 0, "TIMEOUT", T0 + 56_000)),
                 0L);
     }
 
     private List<Finding> findings() {
         return List.of(
-                new Finding("stamp-guard", Plane.GUARD, Category.DIRECT_MUTATION, "FS_STALE_VERSION",
+                new Finding("stamp-guard", Plane.GUARD, Category.DIRECT_MUTATION, "FS_STALE_VERSION", null,
                         0.9, "/home/dev/demo/App.java", 9, 5, 7, T0 + 700,
                         "App.java refused: stamp stale since seq 5 (read); consistent with a mutating"
                                 + " command at seq 7 (absolute path match)",
                         List.of(new ShellEvidence(7, Set.of("/home/dev/demo/App.java"),
                                 VerbClass.MUTATING, new RedactedExcerpt("sed -i 's/a/b/' App.java")))),
-                new Finding("error-plane", Plane.MODEL_MISUSE, null, "FS_NOT_FOUND", null,
+                new Finding("error-plane", Plane.MODEL_MISUSE, null, "FS_NOT_FOUND", null, null,
                         "/home/dev/other/missing.txt", 11, null, null, T0 + 900,
                         "write returned FS_NOT_FOUND", List.of()));
     }

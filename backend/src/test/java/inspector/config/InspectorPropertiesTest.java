@@ -15,20 +15,20 @@ final class InspectorPropertiesTest {
 
     @Test
     void aBlankCorpusIsRefusedRatherThanReadAsTheWorkingDirectory() {
-        assertThatThrownBy(() -> new InspectorProperties("", "0.1.0", evidence()))
+        assertThatThrownBy(() -> new InspectorProperties("", "0.1.0", evidence(), java.util.List.of()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("inspector.corpus");
     }
 
     @Test
     void whitespaceIsBlankForThisPurpose() {
-        assertThatThrownBy(() -> new InspectorProperties("   ", "0.1.0", evidence()))
+        assertThatThrownBy(() -> new InspectorProperties("   ", "0.1.0", evidence(), java.util.List.of()))
                 .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void aConfiguredCorpusIsTakenVerbatim() {
-        assertThatCode(() -> new InspectorProperties("fixtures/sessions", "0.1.0", evidence()))
+        assertThatCode(() -> new InspectorProperties("fixtures/sessions", "0.1.0", evidence(), java.util.List.of()))
                 .doesNotThrowAnyException();
     }
 

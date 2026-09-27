@@ -65,7 +65,7 @@ class FindingsWebTest {
                 .andExpect(jsonPath("$.size").value(5));
 
         verify(findingsService).page(
-                eq(new InsightFilter(1000L, 2000L, "V0", "model-a", "default", "0.1.5-rc.2")),
+                eq(new InsightFilter(1000L, 2000L, "V0", "model-a", "default", "0.1.5-rc.2", null, null)),
                 eq("GUARD"), eq("stamp-guard"), eq("s-01"), eq("FS_STALE_VERSION"),
                 eq("confidence:asc"), eq(2), eq(5));
     }
@@ -77,7 +77,7 @@ class FindingsWebTest {
 
         mockMvc.perform(get("/api/findings")).andExpect(status().isOk());
 
-        verify(findingsService).page(eq(new InsightFilter(null, null, null, null, null, null)),
+        verify(findingsService).page(eq(new InsightFilter(null, null, null, null, null, null, null, null)),
                 eq(null), eq(null), eq(null), eq(null), eq("time:desc"), eq(0), eq(20));
     }
 
@@ -125,7 +125,7 @@ class FindingsWebTest {
     void aFoundFindingIsSerialisedAsTheDetailShape() throws Exception {
         when(findingsService.detail(7L)).thenReturn(Optional.of(new FindingDetailDto(
                 new FindingDto(7, "s-01", "stamp-guard", "GUARD", "DIRECT_MUTATION",
-                        "FS_STALE_VERSION", 0.9, "App.java", 15L, 11L, 4L, 1_700_000_000_000L,
+                        "FS_STALE_VERSION", null, 0.9, "App.java", 15L, 11L, 4L, 1_700_000_000_000L,
                         "a synthetic finding"),
                 "write_file",
                 List.of(new FindingDto.Evidence(0, "write", "App.java", "a synthetic excerpt")))));

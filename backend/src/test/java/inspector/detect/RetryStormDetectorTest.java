@@ -71,6 +71,6 @@ final class RetryStormDetectorTest {
 
     private SessionRecord session() {
         return new SessionRecord("s-demo", "session.jsonl.zstd", "demo-project", "V0",
-                1L, null, null, null, null, null, 0, "/home/dev/demo");
+                1L, null, null, null, null, null, null, 0, "/home/dev/demo");
     }
 }

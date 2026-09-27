@@ -1,5 +1,8 @@
 package inspector.index;
 
+import inspector.TestPipeline;
+import inspector.TestStore;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -62,6 +65,7 @@ final class IndexServiceTest {
     Path temp;
 
     private Path corpus;
+    private TestStore store;
     private JdbcTemplate jdbc;
     private IndexWriter writer;
     private IndexService service;
@@ -74,32 +78,12 @@ final class IndexServiceTest {
         writeS1(corpus);
         writeS2(corpus);
 
-        final DriverManagerDataSource dataSource = new DriverManagerDataSource();
-        dataSource.setUrl("jdbc:sqlite:" + temp.resolve("index.sqlite"));
-        jdbc = new JdbcTemplate(dataSource);
-        writer = new IndexWriter(jdbc, new DataSourceTransactionManager(dataSource));
-        try (var in = new ClassPathResource("schema.sql").getInputStream()) {
-            final String ddl = new String(in.readAllBytes(), StandardCharsets.UTF_8);
-            for (final String statement : ddl.split(";")) {
-                if (!statement.isBlank()) {
-                    jdbc.execute(statement.trim());
-                }
-            }
-        }
-
-        final ObjectMapper mapper = new ObjectMapper();
-        final SessionIngestor ingestor = new SessionIngestor(mapper, new ShellAnalyzer(mapper));
-        final StampGuardDetector stamp = new StampGuardDetector();
-        final FatalTurnDetector fatal = new FatalTurnDetector();
-        final RetryStormDetector retry = new RetryStormDetector();
-        // One instance of each, and the error detector is told what the others own. It used to
-        // be built with a second, throwaway StampGuardDetector while a third one sat in the
-        // pipeline — harmless while the owned set is a constant, and exactly the kind of wiring
-        // that stops matching the context the day an owned code becomes state.
-        final List<Detector> detectors = List.of(
-                new ErrorPlaneDetector(List.of(stamp, fatal, retry)), stamp, fatal, retry);
-        service = new IndexService(new CorpusScanner(), ingestor, detectors, writer,
-                propertiesOf(corpus));
+        store = TestStore.open(temp.resolve("index.sqlite"));
+        jdbc = store.jdbc();
+        writer = store.writer();
+        // The pipeline as the application wires it — every detector, the error detector told
+        // what the others own (TestPipeline says why that matters).
+        service = TestPipeline.indexService(store, propertiesOf(corpus));
 
         logAppender = new ListAppender<>();
         logAppender.start();
@@ -110,6 +94,7 @@ final class IndexServiceTest {
     void detachLogAppender() {
         ((Logger) LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME)).detachAppender(logAppender);
         logAppender.stop();
+        store.close();
     }
 
     @Test
@@ -120,7 +105,9 @@ final class IndexServiceTest {
         assertThat(summary.sessions()).isEqualTo(2);
         assertThat(summary.steps()).isEqualTo(2);
         assertThat(summary.toolCalls()).isEqualTo(4);
-        assertThat(summary.findings()).isEqualTo(3);
+        // stamp-guard, error-plane and retry-storm, plus the shell edit that caused the refusal:
+        // the sed -i rewrote a file the read had put under the file tools' watch
+        assertThat(summary.findings()).isEqualTo(4);
         // The evidence count is the number of rows the run wrote, checked against the table
         // rather than against another number the same code produced.
         assertThat(summary.evidenceRows()).isEqualTo(count("shell_evidence"));
@@ -128,7 +115,7 @@ final class IndexServiceTest {
         assertThat(summary.durationMs()).isGreaterThanOrEqualTo(0);
         // the summary line is counts only — it is the index's only self-report
         assertThat(logMessages(Level.INFO))
-                .anyMatch(msg -> msg.matches("indexed 2 streams, 3 findings \\(\\d+ evidence rows\\)"
+                .anyMatch(msg -> msg.matches("indexed 2 streams, 4 findings \\(\\d+ evidence rows\\)"
                         + " in \\d+ ms \\(0 parse failures, 0 pruned\\)"));
     }
 
@@ -142,7 +129,7 @@ final class IndexServiceTest {
         assertThat(counts()).isEqualTo(before);
         assertThat(second.streams()).isEqualTo(2);
         assertThat(second.sessions()).isEqualTo(2);
-        assertThat(second.findings()).isEqualTo(3);
+        assertThat(second.findings()).isEqualTo(4);
         assertThat(second.pruned()).isZero();
     }
 
@@ -163,7 +150,7 @@ final class IndexServiceTest {
         assertThat(second.pruned()).isEqualTo(1);
         // gone from every table that carried it, evidence rows included
         assertThat(counts()).isEqualTo(Map.of(
-                "session", 1, "step", 1, "tool_call", 4, "finding", 2, "shell_evidence", 1));
+                "session", 1, "step", 1, "tool_call", 4, "finding", 3, "shell_evidence", 2));
         // the assertion that matters: what the run reports and what the index can serve are
         // the same numbers, because a dashboard showing either is showing one screen
         assertThat(count("session")).isEqualTo(second.streams());
@@ -192,7 +179,7 @@ final class IndexServiceTest {
         assertThat(second.pruned()).isZero();
         // s-2 belongs to the other corpus: still there, still to be cleared by the reset
         assertThat(count("session")).isEqualTo(2);
-        assertThat(count("finding")).isEqualTo(3);
+        assertThat(count("finding")).isEqualTo(4);
     }
 
     @Test
@@ -218,9 +205,16 @@ final class IndexServiceTest {
                 .containsExactly(Map.of(
                         "plane", "INFRASTRUCTURE", "code", "TIMEOUT", "seq", 4,
                         "occurred_at", T0 + 1_000_300));
-        // the cause command is the one and only evidence row
+        // shell-edit: the same command, counted as what it is in its own right — a rewrite of a
+        // file the file tools were tracking since the read at seq 6
         assertThat(jdbc.queryForList(
-                "select e.seq, e.verb_class, e.path_hint from shell_evidence e"
+                "select category, detail, confidence, seq, stale_seq from finding"
+                        + " where session_id = 's-1' and detector = 'shell-edit'"))
+                .containsExactly(Map.of("category", "DIRECT_MUTATION", "detail", "IN_PLACE",
+                        "confidence", 0.9, "seq", 8, "stale_seq", 6));
+        // the cause command is the evidence of both findings it explains, and nothing else is
+        assertThat(jdbc.queryForList(
+                "select distinct e.seq, e.verb_class, e.path_hint from shell_evidence e"
                         + " join finding f on f.id = e.finding_id where f.session_id = 's-1'"))
                 .containsExactly(Map.of("seq", 8, "verb_class", "MUTATING", "path_hint", "App.java"));
     }
@@ -302,9 +296,7 @@ final class IndexServiceTest {
 
         /** The real pipeline over the real temp database, with only the detectors swapped. */
         private IndexService gated(final Gate gate) {
-            final ObjectMapper mapper = new ObjectMapper();
-            return new IndexService(new CorpusScanner(),
-                    new SessionIngestor(mapper, new ShellAnalyzer(mapper)),
+            return new IndexService(new CorpusScanner(), TestPipeline.ingestor(),
                     List.of(gate), writer, propertiesOf(corpus));
         }
 
@@ -490,12 +482,71 @@ final class IndexServiceTest {
                     .run(new DefaultApplicationArguments());
 
             assertThat(writer.countSessions()).isEqualTo(2);
-            // two rows: the schema version, and which corpus the rows came from
+            // the schema version, which corpus the rows came from, and which harness timeline
             assertThat(jdbc.queryForList("select key, value from meta"))
                     .containsExactlyInAnyOrder(
-                            Map.of("key", "schema_version", "value", IndexService.SCHEMA_VERSION),
+                            Map.of("key", "schema_version", "value", inspector.store.IndexWriter.SCHEMA_VERSION),
                             Map.of("key", "corpus", "value", corpus.toAbsolutePath()
-                                    .normalize().toString()));
+                                    .normalize().toString()),
+                            // and which timeline the versions came from: none, so the fallback alone
+                            Map.of("key", "harness_timeline", "value", "test-version"),
+                            // and which analysis rules produced the rows
+                            Map.of("key", "analysis_version", "value", IndexService.ANALYSIS_VERSION));
+        }
+
+        /**
+         * The versions are written at index time, so a timeline edit reaches the index only
+         * through a run. A populated index built with another timeline is rebuilt on boot; one
+         * built with this timeline is left alone, as before.
+         */
+        @Test
+        void aChangedHarnessTimelineRebuildsThePopulatedIndex() {
+            service.run();
+            logAppender.list.clear();
+            final InspectorProperties withTimeline = new InspectorProperties(corpus.toString(), "test-version",
+                    new InspectorProperties.Evidence(true), java.util.List.of(new InspectorProperties.HarnessRelease(
+                            java.time.Instant.ofEpochMilli(T0 - 1), "after-the-change")));
+
+            new StartupIndexRunner(TestPipeline.indexService(store, withTimeline), withTimeline, writer)
+                    .run(new DefaultApplicationArguments());
+
+            assertThat(logMessages(Level.INFO)).anyMatch(msg -> msg.contains("harness timeline differs"));
+            assertThat(jdbc.queryForList("select distinct harness_version from session", String.class))
+                    .containsExactly("after-the-change");
+
+            logAppender.list.clear();
+            new StartupIndexRunner(TestPipeline.indexService(store, withTimeline), withTimeline, writer)
+                    .run(new DefaultApplicationArguments());
+            assertThat(logMessages(Level.INFO)).noneMatch(msg -> msg.startsWith("indexed "));
+        }
+
+        /**
+         * A detector change touches no table, so no schema bump rebuilds the file — and an index left
+         * alone serves findings this build would not produce. The analysis version is what notices.
+         */
+        @Test
+        void anIndexBuiltByOtherAnalysisRulesIsRebuilt() {
+            service.run();
+            jdbc.update("update meta set value = 'older-rules' where key = 'analysis_version'");
+            logAppender.list.clear();
+
+            new StartupIndexRunner(service, propertiesOf(corpus), writer).run(new DefaultApplicationArguments());
+
+            assertThat(logMessages(Level.INFO)).anyMatch(msg -> msg.contains("other analysis rules"));
+            assertThat(jdbc.queryForObject("select value from meta where key = 'analysis_version'", String.class))
+                    .isEqualTo(IndexService.ANALYSIS_VERSION);
+        }
+
+        /** The headless report passes --reindex: a snapshot of an older index is the wrong snapshot. */
+        @Test
+        void aReindexFlagRebuildsAPopulatedIndex() {
+            service.run();
+            logAppender.list.clear();
+
+            new StartupIndexRunner(service, propertiesOf(corpus), writer)
+                    .run(new DefaultApplicationArguments("--reindex"));
+
+            assertThat(logMessages(Level.INFO)).anyMatch(msg -> msg.startsWith("indexed "));
         }
 
         @Test
@@ -517,18 +568,25 @@ final class IndexServiceTest {
             writer.seedMeta("0");
             logAppender.list.clear();
 
+            // the boot order: the schema gate first (it owns the reset now, and runs before the
+            // server listens), then the startup rule
+            store.gate().open();
             new StartupIndexRunner(service, propertiesOf(corpus), writer)
                     .run(new DefaultApplicationArguments());
 
             assertThat(writer.countSessions()).isEqualTo(2);
             assertThat(count("step")).isEqualTo(2);
             assertThat(count("tool_call")).isEqualTo(4);
-            assertThat(count("finding")).isEqualTo(3);
+            assertThat(count("finding")).isEqualTo(4);
             assertThat(jdbc.queryForList("select key, value from meta"))
                     .containsExactlyInAnyOrder(
-                            Map.of("key", "schema_version", "value", IndexService.SCHEMA_VERSION),
+                            Map.of("key", "schema_version", "value", inspector.store.IndexWriter.SCHEMA_VERSION),
                             Map.of("key", "corpus", "value", corpus.toAbsolutePath()
-                                    .normalize().toString()));
+                                    .normalize().toString()),
+                            // and which timeline the versions came from: none, so the fallback alone
+                            Map.of("key", "harness_timeline", "value", "test-version"),
+                            // and which analysis rules produced the rows
+                            Map.of("key", "analysis_version", "value", IndexService.ANALYSIS_VERSION));
             // the reset is logged with counts only: how many streams were discarded, never
             // a corpus path or content
             final List<String> info = logMessages(Level.INFO);
@@ -552,7 +610,7 @@ final class IndexServiceTest {
             assertThat(logMessages(Level.INFO)).noneMatch(msg -> msg.startsWith("indexed "));
             assertThat(writer.countSessions()).isEqualTo(2);
             // and the index survives: an unmounted directory invalidates nothing
-            assertThat(count("finding")).isEqualTo(3);
+            assertThat(count("finding")).isEqualTo(4);
         }
 
         @Test
@@ -574,8 +632,8 @@ final class IndexServiceTest {
             assertThat(writer.countSessions())
                     .as("the configured corpus's own streams, not the previous corpus's")
                     .isEqualTo(1);
-            assertThat(count("finding")).as("the new corpus's findings, not the previous corpus's 3")
-                    .isEqualTo(2);
+            assertThat(count("finding")).as("the new corpus's findings, not the previous corpus's 4")
+                    .isEqualTo(3);
             final List<String> info = logMessages(Level.INFO);
             assertThat(info).anyMatch(msg -> msg.contains("different corpus"));
             assertThat(info).anyMatch(msg -> msg.startsWith("indexed 1 stream"));
@@ -598,7 +656,7 @@ final class IndexServiceTest {
 
     private InspectorProperties propertiesOf(final Path path) {
         return new InspectorProperties(path.toString(), "test-version",
-                new InspectorProperties.Evidence(true));
+                new InspectorProperties.Evidence(true), java.util.List.of());
     }
 
     private Map<String, Integer> counts() {

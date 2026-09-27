@@ -139,7 +139,7 @@ class VanishedSessionsAreNotServedTest {
 
         // the run noticed: one stream it did not write, one fewer on the wire than on disk
         assertThat(summary.path("pruned").asInt()).isEqualTo(1);
-        assertThat(summary.path("streams").asInt()).isEqualTo(11);
+        assertThat(summary.path("streams").asInt()).isEqualTo(12);
         assertThat(summary.path("findings").asInt()).isEqualTo(findingsBefore - findingsOfThatStream);
 
         // the screen agrees with itself: no tile carries a row the run did not write

@@ -5,6 +5,11 @@ server:
 spring:
   application:
     name: dsh-inspector
+  main:
+    # Boot's "Starting … (<jar path> started by <user> in <directory>)" line is the one log line that
+    # prints the username and the working directory on every start; the index's own summary line is
+    # held to counts (DESIGN.md §4.1), and the startup banner is held to the same rule.
+    log-startup-info: false
   datasource:
     # Deliberately a bare filename, not var/inspector.sqlite. sqlite-jdbc does not create a
     # missing parent directory, so a path with one makes the packaged jar die at startup with
@@ -12,10 +17,32 @@ spring:
     # directory. A clone with no var/ would have shipped broken. ApplicationContextTest guards it.
     url: jdbc:sqlite:${inspector.db:inspector.sqlite}?journal_mode=WAL&busy_timeout=5000&foreign_keys=on
     driver-class-name: org.sqlite.JDBC
+  # schema.sql is applied by inspector.store.SchemaGate, after the version gate and before
+  # Hibernate validates the entities against it — spring.sql.init would run it too early, and on
+  # an index written by an older build that order fails the boot instead of rebuilding the index.
   sql:
     init:
-      mode: always
-      schema-locations: classpath:schema.sql
+      mode: never
+  jpa:
+    open-in-view: false
+    hibernate:
+      # none here, validate in SchemaGate: validation has to wait for the version gate
+      ddl-auto: none
+    properties:
+      hibernate:
+        dialect: inspector.store.SqliteAffinityDialect
+        jdbc:
+          # A stream is written in one transaction as a few thousand rows; batching is what keeps
+          # a full re-index in seconds. Only finding has a generated id, and it is the smallest table.
+          batch_size: 500
+        order_inserts: true
+
+logging:
+  level:
+    # Hibernate's "Database info" line prints the JDBC URL, and the URL carries the database path —
+    # under a home directory, the username. The same rule as every log line here: counts, never a
+    # path (DESIGN.md §4.1). The line says nothing else an operator acts on.
+    org.hibernate.orm.connections.pooling: WARN
 
 inspector:
   corpus: fixtures/sessions

@@ -72,17 +72,17 @@ class FindingsControllerTest {
 
     @Test
     void paginationIsStable() throws Exception {
-        // size 5 over 12 findings: pages of 5, 5, 2 — disjoint, in the same order
-        final JsonNode page0 = asJson(get("/api/findings?size=5&page=0"));
-        final JsonNode page1 = asJson(get("/api/findings?size=5&page=1"));
-        final JsonNode page2 = asJson(get("/api/findings?size=5&page=2"));
+        // size 8 over 21 findings: pages of 8, 8, 5 — disjoint, in the same order
+        final JsonNode page0 = asJson(get("/api/findings?size=8&page=0"));
+        final JsonNode page1 = asJson(get("/api/findings?size=8&page=1"));
+        final JsonNode page2 = asJson(get("/api/findings?size=8&page=2"));
 
-        assertThat(page0.path("total").asLong()).isEqualTo(12);
-        assertThat(page1.path("total").asLong()).isEqualTo(12);
-        assertThat(page2.path("total").asLong()).isEqualTo(12);
-        assertThat(page0.path("items").size()).isEqualTo(5);
-        assertThat(page1.path("items").size()).isEqualTo(5);
-        assertThat(page2.path("items").size()).isEqualTo(2);
+        assertThat(page0.path("total").asLong()).isEqualTo(21);
+        assertThat(page1.path("total").asLong()).isEqualTo(21);
+        assertThat(page2.path("total").asLong()).isEqualTo(21);
+        assertThat(page0.path("items").size()).isEqualTo(8);
+        assertThat(page1.path("items").size()).isEqualTo(8);
+        assertThat(page2.path("items").size()).isEqualTo(5);
 
         final List<Long> ids0 = ids(page0);
         final List<Long> ids1 = ids(page1);
@@ -90,14 +90,14 @@ class FindingsControllerTest {
         assertThat(ids0).doesNotContainAnyElementsOf(ids1);
         assertThat(ids0).doesNotContainAnyElementsOf(ids2);
         assertThat(ids1).doesNotContainAnyElementsOf(ids2);
-        assertThat(new ArrayList<>(ids0)).hasSize(5);
+        assertThat(new ArrayList<>(ids0)).hasSize(8);
 
         // the union is the whole table, default sort is time descending
         final List<JsonNode> all = new ArrayList<>();
         for (final JsonNode page : List.of(page0, page1, page2)) {
             page.path("items").forEach(all::add);
         }
-        assertThat(all).hasSize(12);
+        assertThat(all).hasSize(21);
         assertThat(all.stream().map(item -> item.path("id").asLong()).toList()).doesNotHaveDuplicates();
         final List<Long> times =
                 all.stream().map(item -> item.path("occurredAt").asLong()).toList();
@@ -130,7 +130,7 @@ class FindingsControllerTest {
                 .andExpect(jsonPath("$.allowed[?(@ == 'time')]").exists())
                 .andExpect(jsonPath("$.allowed[?(@ == 'confidence')]").exists());
         // the table is intact
-        assertThat(count("select count(*) from finding")).isEqualTo(12);
+        assertThat(count("select count(*) from finding")).isEqualTo(21);
     }
 
     @Test
@@ -141,7 +141,7 @@ class FindingsControllerTest {
                 .andExpect(jsonPath("$.value").value("drop"))
                 .andExpect(jsonPath("$.allowed[?(@ == 'asc')]").exists())
                 .andExpect(jsonPath("$.allowed[?(@ == 'desc')]").exists());
-        assertThat(count("select count(*) from finding")).isEqualTo(12);
+        assertThat(count("select count(*) from finding")).isEqualTo(21);
     }
 
     @Test
@@ -153,7 +153,8 @@ class FindingsControllerTest {
                 assertThat(item.path("plane").asText()).isEqualTo("GUARD"));
 
         final JsonNode infra = asJson(get("/api/findings?plane=INFRASTRUCTURE&size=100"));
-        assertThat(infra.path("total").asLong()).isEqualTo(4);
+        // four in sessions/ (two fatal turns, a retry storm, a missing credential), one in sessions-b/
+        assertThat(infra.path("total").asLong()).isEqualTo(5);
     }
 
     @Test
@@ -183,7 +184,7 @@ class FindingsControllerTest {
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PROBLEM_JSON))
                 .andExpect(jsonPath("$.filter").value("session"))
                 .andExpect(jsonPath("$.value").value("not-in-the-index"))
-                .andExpect(jsonPath("$.allowed.length()").value(14));
+                .andExpect(jsonPath("$.allowed.length()").value(15));
     }
 
     /**
@@ -202,7 +203,7 @@ class FindingsControllerTest {
         final JsonNode problem = mapper.readTree(body);
         final JsonNode allowed = problem.path("allowed");
         assertThat(allowed.isArray()).isTrue();
-        assertThat(allowed.size()).isEqualTo(14);
+        assertThat(allowed.size()).isEqualTo(15);
 
         final String detail = problem.path("detail").asText();
         assertThat(detail).contains("session").contains("not-in-the-index");

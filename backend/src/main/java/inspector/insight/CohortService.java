@@ -1,12 +1,14 @@
 package inspector.insight;
 
+import inspector.config.InspectorProperties;
 import inspector.dto.CohortDto;
-import inspector.query.FindingFilters;
 import inspector.query.InsightFilter;
 import inspector.query.UnknownFilterValueException;
 import inspector.query.Vocabulary;
 import inspector.store.CohortRepository;
 import inspector.store.VocabularyService;
+import inspector.store.entity.SessionEntity;
+import inspector.store.entity.SessionEntity_;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -39,27 +41,42 @@ import org.springframework.stereotype.Service;
 @Service
 public final class CohortService {
 
-    /** Fixed GROUP BY whitelist: query value to bare session column (the repository prefixes the alias). */
-    private static final Map<String, String> GROUP_COLUMNS = Map.of(
-            "harnessVersion", "harness_version",
-            "model", "model",
-            "schema", "\"schema\"",
-            "preset", "agent_preset");
+    /** Fixed GROUP BY whitelist: query value to session attribute. Nothing else becomes a path. */
+    static final Map<String, String> GROUP_AXES = Map.of(
+            "harnessVersion", SessionEntity_.HARNESS_VERSION,
+            "model", SessionEntity_.MODEL,
+            "provider", SessionEntity_.PROVIDER,
+            "role", SessionEntity_.ROLE,
+            "schema", SessionEntity_.SCHEMA,
+            "preset", SessionEntity_.AGENT_PRESET);
 
-    private static final List<String> GROUP_KEYS = List.copyOf(GROUP_COLUMNS.keySet());
+    /** The axes in the order a 400 lists them — a Map.of key set has no defined order. */
+    static final List<String> GROUP_KEYS =
+            List.of("harnessVersion", "model", "provider", "role", "schema", "preset");
 
     private final CohortRepository cohortRepository;
     private final VocabularyService vocabularyService;
+    private final boolean timelineConfigured;
+    private final ReadSnapshot snapshot;
 
     public CohortService(final CohortRepository cohortRepository,
-                         final VocabularyService vocabularyService) {
+                         final VocabularyService vocabularyService,
+                         final InspectorProperties properties,
+                         final ReadSnapshot snapshot) {
         this.cohortRepository = cohortRepository;
         this.vocabularyService = vocabularyService;
+        this.timelineConfigured = !properties.harnessTimeline().isEmpty();
+        this.snapshot = snapshot;
     }
 
+    /** The cohort table, read from one snapshot of the index (ReadSnapshot). */
     public CohortDto.Page cohorts(final InsightFilter filter, final String groupBy, final String baseline) {
-        final String axisColumn = GROUP_COLUMNS.get(groupBy);
-        if (axisColumn == null) {
+        return snapshot.read(() -> table(filter, groupBy, baseline));
+    }
+
+    private CohortDto.Page table(final InsightFilter filter, final String groupBy, final String baseline) {
+        final String axis = GROUP_AXES.get(groupBy);
+        if (axis == null) {
             throw new UnknownFilterValueException("groupBy", groupBy, GROUP_KEYS);
         }
         // A filter value outside the vocabulary is a 400 that names the allowed values — not
@@ -67,11 +84,10 @@ public final class CohortService {
         final Vocabulary vocabulary = vocabularyService.vocabulary();
         filter.validate(vocabulary);
 
-        final FindingFilters filters = new FindingFilters(filter);
-        final CohortRepository.Result result = cohortRepository.cohorts(axisColumn, filters);
+        final CohortRepository.Result result = cohortRepository.cohorts(axis, filter);
         if (result.cohorts().isEmpty()) {
             return new CohortDto.Page(groupBy, null,
-                    filters.isActive() ? "no sessions match the current filters" : "the index is empty",
+                    filter.isActive() ? "no sessions match the current filters" : "the index is empty",
                     List.of());
         }
 
@@ -86,11 +102,15 @@ public final class CohortService {
 
         final Double baselineRate = rate(base.findings(), base.toolCalls());
         final Double baselineViolation = rate(base.guardFindings(), base.toolCalls());
+        final Double baselineMisuse = rate(base.misuseFindings(), base.toolCalls());
+        final Double baselineInfra = rate(base.infraFindings(), base.toolCalls());
 
         final List<CohortDto> rows = new ArrayList<>();
         for (final CohortRepository.Cohort cohort : result.cohorts()) {
             final Double findingsPerK = rate(cohort.findings(), cohort.toolCalls());
             final Double violation = rate(cohort.guardFindings(), cohort.toolCalls());
+            final Double misuse = rate(cohort.misuseFindings(), cohort.toolCalls());
+            final Double infra = rate(cohort.infraFindings(), cohort.toolCalls());
             rows.add(new CohortDto(
                     cohort.key(),
                     cohort.sessions(),
@@ -100,11 +120,17 @@ public final class CohortService {
                     findingsPerK,
                     violation,
                     delta(findingsPerK, baselineRate),
-                    delta(violation, baselineViolation)));
+                    delta(violation, baselineViolation),
+                    cohort.misuseFindings(),
+                    cohort.infraFindings(),
+                    misuse,
+                    infra,
+                    delta(misuse, baselineMisuse),
+                    delta(infra, baselineInfra)));
         }
 
         return new CohortDto.Page(groupBy, baselineKey,
-                basisNote(groupBy, baseline, result, baselineKey, filters.isActive()), rows);
+                basisNote(groupBy, baseline, result, baselineKey, filter.isActive(), timelineConfigured), rows);
     }
 
     /** Default baseline: highest tool-call count, key ascending on ties. */
@@ -123,7 +149,8 @@ public final class CohortService {
             final String requestedBaseline,
             final CohortRepository.Result result,
             final String baselineKey,
-            final boolean filtered) {
+            final boolean filtered,
+            final boolean timelineConfigured) {
         final List<String> notes = new ArrayList<>();
         if (filtered) {
             // The screen says so whenever the numbers are a subset: a rate that happens to be
@@ -137,8 +164,11 @@ public final class CohortService {
                     + "not a comparison");
         }
         if (result.allVersionInferred()) {
-            notes.add("harness_version is inferred for every session (version_inferred=1), not declared by the "
-                    + "harness");
+            notes.add(timelineConfigured
+                    ? "harness_version is attributed from the configured harness timeline by session start, "
+                            + "not declared by the harness"
+                    : "harness_version is inferred for every session (version_inferred=1), not declared by the "
+                            + "harness");
         }
         if (requestedBaseline == null) {
             notes.add("baseline " + baselineKey + " chosen by highest tool-call count");

@@ -47,7 +47,7 @@ class CohortsWebTest {
     void theAxisTheBaselineAndTheRailReachTheService() throws Exception {
         when(cohortService.cohorts(any(), eq("model"), eq("0.1.4")))
                 .thenReturn(new CohortDto.Page("model", "0.1.4", "a note", List.of(
-                        new CohortDto("model-a", 8, 20, 5, 3, 250.0, 150.0, 0.0, 0.0))));
+                        new CohortDto("model-a", 8, 20, 5, 3, 250.0, 150.0, 0.0, 0.0, 0, 0, null, null, null, null))));
 
         mockMvc.perform(get("/api/cohorts")
                         .param("groupBy", "model").param("baseline", "0.1.4")
@@ -60,7 +60,7 @@ class CohortsWebTest {
                 .andExpect(jsonPath("$.cohorts[0].findingsPerKCalls").value(250.0));
 
         verify(cohortService).cohorts(
-                eq(new InsightFilter(1000L, 2000L, null, null, "default", null)),
+                eq(new InsightFilter(1000L, 2000L, null, null, "default", null, null, null)),
                 eq("model"), eq("0.1.4"));
     }
 
@@ -72,7 +72,7 @@ class CohortsWebTest {
         mockMvc.perform(get("/api/cohorts?groupBy=schema")).andExpect(status().isOk());
 
         verify(cohortService).cohorts(
-                eq(new InsightFilter(null, null, null, null, null, null)), eq("schema"), isNull());
+                eq(new InsightFilter(null, null, null, null, null, null, null, null)), eq("schema"), isNull());
     }
 
     /**

@@ -48,38 +48,21 @@ final class FixtureCorpusTest {
     private JdbcTemplate jdbc;
     private IndexService service;
 
+    private TestStore store;
+
     @BeforeAll
     void indexBothCorpora() {
-        final DriverManagerDataSource dataSource = new DriverManagerDataSource();
-        dataSource.setUrl("jdbc:sqlite:" + temp.resolve("corpus.sqlite"));
-        jdbc = new JdbcTemplate(dataSource);
-        try (var in = new ClassPathResource("schema.sql").getInputStream()) {
-            final String ddl = new String(in.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
-            for (final String statement : ddl.split(";")) {
-                if (!statement.isBlank()) {
-                    jdbc.execute(statement.trim());
-                }
-            }
-        } catch (java.io.IOException e) {
-            throw new IllegalStateException(e);
-        }
-
-        final ObjectMapper mapper = new ObjectMapper();
-        final SessionIngestor ingestor = new SessionIngestor(mapper, new ShellAnalyzer(mapper));
-        final StampGuardDetector stamp = new StampGuardDetector();
-        final FatalTurnDetector fatal = new FatalTurnDetector();
-        final RetryStormDetector retry = new RetryStormDetector();
-        // Spring hands the error detector every other detector in the context; a hand-built list
-        // has to say the same thing or it is testing a wiring the application never has.
-        final List<Detector> detectors = List.of(stamp,
-                new ErrorPlaneDetector(List.of(stamp, fatal, retry)), fatal, retry);
-        final IndexWriter writer = new IndexWriter(jdbc, new DataSourceTransactionManager(dataSource));
-        service = new IndexService(new CorpusScanner(), ingestor, detectors, writer,
-                new InspectorProperties("fixtures/sessions", MAIN_VERSION,
-                        new InspectorProperties.Evidence(true)));
+        store = TestStore.open(temp.resolve("corpus.sqlite"));
+        jdbc = store.jdbc();
+        service = TestPipeline.indexService(store, TestPipeline.properties("fixtures/sessions", MAIN_VERSION, true));
 
         service.run(Path.of("fixtures/sessions"), MAIN_VERSION);
         service.run(Path.of("fixtures/sessions-b"), SECOND_VERSION);
+    }
+
+    @org.junit.jupiter.api.AfterAll
+    void closeStore() {
+        store.close();
     }
 
     private long count(final String sql) {
@@ -88,15 +71,18 @@ final class FixtureCorpusTest {
 
     @Test
     void theCorpusHasEveryPlannedStream() {
-        assertThat(count("select count(*) from session")).isEqualTo(15);
+        assertThat(count("select count(*) from session")).isEqualTo(16);
         assertThat(count("select count(*) from session where source_file like '%session.jsonl.zstd%'"))
-                .isEqualTo(11);
+                .isEqualTo(12);
         assertThat(count("select count(*) from session where source_file like '%session.v3.jsonl.zstd%'"))
                 .isEqualTo(4);
         // s-06 exists in both conventions: two rows, one session id.
         assertThat(count("select count(*) from session where id = 's-06'")).isEqualTo(2);
-        assertThat(count("select count(distinct id) from session")).isEqualTo(14);
+        assertThat(count("select count(distinct id) from session")).isEqualTo(15);
         assertThat(count("select count(distinct harness_version) from session")).isEqualTo(2);
+        // two routes and two roles, so the provider and role cohorts have something to compare
+        assertThat(count("select count(distinct provider) from session")).isEqualTo(2);
+        assertThat(count("select count(*) from session where role = 'subagent'")).isEqualTo(2);
     }
 
     @Test
@@ -108,8 +94,31 @@ final class FixtureCorpusTest {
         assertThat(byPlane.keySet())
                 .containsExactlyInAnyOrder("INFRASTRUCTURE", "GUARD", "MODEL_MISUSE");
         assertThat(byPlane.get("GUARD")).isEqualTo(6);
-        assertThat(byPlane.get("INFRASTRUCTURE")).isEqualTo(4);
-        assertThat(byPlane.get("MODEL_MISUSE")).isEqualTo(2);
+        assertThat(byPlane.get("INFRASTRUCTURE")).isEqualTo(5);
+        // two error-plane rows, three edit misses (s-15), five shell edits (s-01, s-07, s-12, s-15 twice)
+        assertThat(byPlane.get("MODEL_MISUSE")).isEqualTo(10);
+    }
+
+    /**
+     * s-15 walks every category the edit-miss detector distinguishes, in order, and two shell
+     * edits the shell-edit detector counts — while a copy of the same tracked file, in the same
+     * stream, is not counted: a file operation is not an edit.
+     */
+    @Test
+    void theModelSidePatternsAreExplainedNotJustCounted() {
+        assertThat(jdbc.queryForList("select category from finding where detector = 'edit-miss'"
+                        + " and session_id = 's-15' order by seq", String.class))
+                .containsExactly("MISS_AFTER_EDIT", "REPEATED_MISS", "MISS_AFTER_READ");
+        assertThat(jdbc.queryForList("select detail || ':' || path_hint from finding"
+                        + " where detector = 'shell-edit' and session_id = 's-15' order by seq", String.class))
+                .containsExactly("REDIRECT:notes.md", "SCRIPT:src/app.mjs");
+        assertThat(count("select count(*) from finding where detector = 'error-plane'"
+                + " and code = 'FS_EDIT_NOT_FOUND'"))
+                .as("edit-miss owns the code, so error-plane does not also emit it")
+                .isZero();
+        assertThat(jdbc.queryForMap("select code, detail from finding where detector = 'fatal-turn'"
+                + " and session_id = 's-15'"))
+                .containsEntry("code", "SERVER").containsEntry("detail", "unavailable_error");
     }
 
     @Test
@@ -138,11 +147,15 @@ final class FixtureCorpusTest {
         // one real fatal turn, three user messages merely citing the code: the §5.2 trap.
         assertThat(count("select count(*) from finding where detector = 'fatal-turn'"
                 + " and session_id = 's-04'")).isEqualTo(1);
+        // corpus-wide, the fatal turns are exactly the two real turn/end errors (s-04, s-15):
+        // none of the documentation mentions became one
         assertThat(count("select count(*) from finding where detector = 'fatal-turn'"))
-                .isEqualTo(1);
+                .isEqualTo(2);
         final Map<String, Object> row = jdbc.queryForMap(
-                "select code, plane, confidence from finding where detector = 'fatal-turn'");
-        assertThat(row.get("code")).isEqualTo("media_budget_exceeded");
+                "select code, detail, plane, confidence from finding where detector = 'fatal-turn'"
+                        + " and session_id = 's-04'");
+        assertThat(row.get("code")).isEqualTo("INVALID_REQUEST");
+        assertThat(row.get("detail")).isEqualTo("media_budget_exceeded");
         assertThat(row.get("plane")).isEqualTo("INFRASTRUCTURE");
         assertThat(row.get("confidence")).isNull();
     }

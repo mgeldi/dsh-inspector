@@ -12,6 +12,8 @@ import inspector.query.InsightFilter;
 import inspector.query.UnknownFilterValueException;
 import inspector.query.Vocabulary;
 import inspector.store.CohortRepository;
+import inspector.store.entity.SessionEntity;
+import inspector.store.entity.SessionEntity_;
 import inspector.store.VocabularyService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -29,31 +31,32 @@ import org.junit.jupiter.api.Test;
 class CohortServiceTest {
 
     private static final InsightFilter NOTHING_SELECTED =
-            new InsightFilter(null, null, null, null, null, null);
+            new InsightFilter(null, null, null, null, null, null, null, null);
     private static final InsightFilter WINDOW_SELECTED =
-            new InsightFilter(null, 1_700_000_000_000L, null, null, null, null);
+            new InsightFilter(null, 1_700_000_000_000L, null, null, null, null, null, null);
 
     private final CohortRepository repository = mock(CohortRepository.class);
-    private final CohortService service = new CohortService(repository, vocabulary());
+    private final CohortService service = new CohortService(repository, vocabulary(),
+            inspector.TestPipeline.properties("fixtures/sessions", "unknown", true), ReadSnapshot.none());
 
     @Test
     void theBaselineIsTheCohortWithTheMostToolCallsAndTiesBreakOnKey() {
         assertThat(CohortService.defaultBaseline(List.of(
-                new CohortRepository.Cohort("b", 3, 9, 3, 2),
-                new CohortRepository.Cohort("a", 11, 32, 9, 4))))
+                new CohortRepository.Cohort("b", 3, 9, 3, 2, 0, 0),
+                new CohortRepository.Cohort("a", 11, 32, 9, 4, 0, 0))))
                 .isEqualTo("a");
         assertThat(CohortService.defaultBaseline(List.of(
-                new CohortRepository.Cohort("v0.2", 1, 9, 1, 1),
-                new CohortRepository.Cohort("v0.1", 1, 9, 1, 1))))
+                new CohortRepository.Cohort("v0.2", 1, 9, 1, 1, 0, 0),
+                new CohortRepository.Cohort("v0.1", 1, 9, 1, 1, 0, 0))))
                 .as("equal tool calls, so the earlier key wins rather than the stream order")
                 .isEqualTo("v0.1");
     }
 
     @Test
     void ratesAndDeltasAreComputedAgainstTheChosenBaseline() {
-        given("harness_version", false,
-                new CohortRepository.Cohort("0.1.5-rc.2", 11, 32, 9, 4),
-                new CohortRepository.Cohort("0.1.4", 3, 9, 3, 2));
+        given(SessionEntity_.HARNESS_VERSION, false,
+                new CohortRepository.Cohort("0.1.5-rc.2", 11, 32, 9, 4, 0, 0),
+                new CohortRepository.Cohort("0.1.4", 3, 9, 3, 2, 0, 0));
 
         final CohortDto.Page page = service.cohorts(NOTHING_SELECTED, "harnessVersion", null);
 
@@ -70,9 +73,9 @@ class CohortServiceTest {
 
     @Test
     void anExplicitBaselineFlipsTheDeltasAndStopsClaimingItWasChosen() {
-        given("harness_version", false,
-                new CohortRepository.Cohort("0.1.5-rc.2", 11, 32, 9, 4),
-                new CohortRepository.Cohort("0.1.4", 3, 9, 3, 2));
+        given(SessionEntity_.HARNESS_VERSION, false,
+                new CohortRepository.Cohort("0.1.5-rc.2", 11, 32, 9, 4, 0, 0),
+                new CohortRepository.Cohort("0.1.4", 3, 9, 3, 2, 0, 0));
 
         final CohortDto.Page page = service.cohorts(NOTHING_SELECTED, "harnessVersion", "0.1.4");
 
@@ -94,9 +97,9 @@ class CohortServiceTest {
      */
     @Test
     void aCohortWithNoObservedCallsHasNoRateAndNoDeltas() {
-        given("harness_version", false,
-                new CohortRepository.Cohort("0.1.5-rc.2", 11, 32, 9, 4),
-                new CohortRepository.Cohort("0.9.0", 2, 0, 1, 1));
+        given(SessionEntity_.HARNESS_VERSION, false,
+                new CohortRepository.Cohort("0.1.5-rc.2", 11, 32, 9, 4, 0, 0),
+                new CohortRepository.Cohort("0.9.0", 2, 0, 1, 1, 0, 0));
 
         final CohortDto orphan = service.cohorts(NOTHING_SELECTED, "harnessVersion", null)
                 .cohorts().get(1);
@@ -109,8 +112,8 @@ class CohortServiceTest {
 
     @Test
     void aFilteredPageAnnouncesThatEveryRateBelowIsForTheSubset() {
-        given("harness_version", false,
-                new CohortRepository.Cohort("0.1.5-rc.2", 4, 12, 3, 1));
+        given(SessionEntity_.HARNESS_VERSION, false,
+                new CohortRepository.Cohort("0.1.5-rc.2", 4, 12, 3, 1, 0, 0));
 
         assertThat(service.cohorts(WINDOW_SELECTED, "harnessVersion", null).basisNote())
                 .contains("shared filters are active")
@@ -120,7 +123,7 @@ class CohortServiceTest {
     /** Two ways to get an empty table, and the reader needs to know which one happened. */
     @Test
     void anEmptyIndexAndAFilterThatMatchesNothingSayDifferentThings() {
-        given("harness_version", false);
+        given(SessionEntity_.HARNESS_VERSION, false);
         assertThat(service.cohorts(NOTHING_SELECTED, "harnessVersion", null).basisNote())
                 .isEqualTo("the index is empty");
         assertThat(service.cohorts(WINDOW_SELECTED, "harnessVersion", null).basisNote())
@@ -134,16 +137,17 @@ class CohortServiceTest {
                 .isInstanceOfSatisfying(UnknownFilterValueException.class, ex -> {
                     assertThat(ex.filter()).isEqualTo("groupBy");
                     assertThat(ex.value()).isEqualTo("1;drop table finding");
-                    assertThat(ex.allowed()).containsExactlyInAnyOrder(
-                            "harnessVersion", "model", "schema", "preset");
+                    // in the order a person reads them, the same order the 400 prints
+                    assertThat(ex.allowed()).containsExactly(
+                            "harnessVersion", "model", "provider", "role", "schema", "preset");
                 });
     }
 
     @Test
     void anUnknownBaselineIsRejectedWithTheCohortsThatAreOnScreen() {
-        given("harness_version", false,
-                new CohortRepository.Cohort("0.1.5-rc.2", 11, 32, 9, 4),
-                new CohortRepository.Cohort("0.1.4", 3, 9, 3, 2));
+        given(SessionEntity_.HARNESS_VERSION, false,
+                new CohortRepository.Cohort("0.1.5-rc.2", 11, 32, 9, 4, 0, 0),
+                new CohortRepository.Cohort("0.1.4", 3, 9, 3, 2, 0, 0));
 
         assertThatThrownBy(() -> service.cohorts(NOTHING_SELECTED, "harnessVersion", "9.9.9"))
                 .isInstanceOfSatisfying(UnknownFilterValueException.class, ex -> {
@@ -159,19 +163,19 @@ class CohortServiceTest {
      */
     @Test
     void theAxisReachesSqlAsTheMappedColumnAndNeverAsTheQueryValue() {
-        given("\"schema\"", false, new CohortRepository.Cohort("V0", 8, 20, 5, 3));
+        given(SessionEntity_.SCHEMA, false, new CohortRepository.Cohort("V0", 8, 20, 5, 3, 0, 0));
         assertThat(service.cohorts(NOTHING_SELECTED, "schema", null).cohorts()).hasSize(1);
 
-        given("model", false, new CohortRepository.Cohort("model-a", 8, 20, 5, 3));
+        given(SessionEntity_.MODEL, false, new CohortRepository.Cohort("model-a", 8, 20, 5, 3, 0, 0));
         assertThat(service.cohorts(NOTHING_SELECTED, "model", null).cohorts()).hasSize(1);
     }
 
     /** Every session has an inferred harness version: the screen has to say the axis is a guess. */
     @Test
     void inferredVersionsAreDeclaredInTheBasisNote() {
-        given("harness_version", true,
-                new CohortRepository.Cohort("0.1.5-rc.2", 11, 32, 9, 4),
-                new CohortRepository.Cohort("0.1.4", 3, 9, 3, 2));
+        given(SessionEntity_.HARNESS_VERSION, true,
+                new CohortRepository.Cohort("0.1.5-rc.2", 11, 32, 9, 4, 0, 0),
+                new CohortRepository.Cohort("0.1.4", 3, 9, 3, 2, 0, 0));
 
         assertThat(service.cohorts(NOTHING_SELECTED, "harnessVersion", null).basisNote())
                 .contains("harness_version is inferred for every session");
@@ -188,7 +192,7 @@ class CohortServiceTest {
         when(service.vocabulary()).thenReturn(new Vocabulary(
                 List.of("V0", "V3"), List.of("model-a", "unknown"), List.of("default"),
                 List.of("0.1.4", "0.1.5-rc.2"), List.of("FS_STALE_VERSION"),
-                List.of("stamp-guard"), List.of("s-01")));
+                List.of("stamp-guard"), List.of(), List.of(), List.of("s-01")));
         return service;
     }
 }

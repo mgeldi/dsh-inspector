@@ -33,26 +33,27 @@ import org.springframework.test.web.servlet.MockMvc;
 class OpenApiDocumentTest {
 
     private static final List<String> FILTER_PARAMS =
-            List.of("from", "to", "schema", "model", "preset", "harnessVersion");
+            List.of("from", "to", "schema", "model", "preset", "harnessVersion", "provider", "role");
 
     @Autowired
     private MockMvc mockMvc;
 
     @Test
-    void allFiveRoutesAreDescribed() throws Exception {
+    void everyRouteIsDescribed() throws Exception {
         final DocumentContext doc = document();
 
-        assertThat(doc.<Map<String, Object>>read("$.paths")).containsKeys(
-                "/api/overview", "/api/findings", "/api/findings/{id}", "/api/cohorts",
-                "/api/index/run");
+        assertThat(doc.<Map<String, Object>>read("$.paths")).containsOnlyKeys(
+                "/api/overview", "/api/findings", "/api/findings/{id}", "/api/findings/{id}/context",
+                "/api/cohorts", "/api/judge", "/api/breakdown", "/api/index/run");
         assertThat(doc.<String>read("$.openapi")).startsWith("3.");
     }
 
     @Test
-    void theSharedFilterIsSixQueryParametersAndNotOneObject() throws Exception {
+    void theSharedFilterIsIndividualQueryParametersAndNotOneObject() throws Exception {
         final DocumentContext doc = document();
 
-        for (final String route : List.of("/api/overview", "/api/findings", "/api/cohorts")) {
+        for (final String route : List.of("/api/overview", "/api/findings", "/api/cohorts", "/api/judge",
+                "/api/breakdown")) {
             final List<String> names = namesOf(doc, route);
             assertThat(names)
                     .as("the six %s values on %s, individually", "InsightFilter", route)

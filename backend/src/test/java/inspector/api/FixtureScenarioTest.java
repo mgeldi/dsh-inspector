@@ -61,10 +61,10 @@ final class FixtureScenarioTest {
 
     @Test
     void theMainCorpusIndexesWithThePlannedStreams() {
-        // 11 sessions in 12 streams: s-06 exists in both conventions. A missing fixture file
+        // 12 sessions in 13 streams: s-06 exists in both conventions. A missing fixture file
         // would show up here, where the scenario tests below would only fail obscurely.
-        assertThat(count("select count(*) from session")).isEqualTo(12);
-        assertThat(count("select count(*) from finding")).isEqualTo(9);
+        assertThat(count("select count(*) from session")).isEqualTo(13);
+        assertThat(count("select count(*) from finding")).isEqualTo(17);
     }
 
     @Test
@@ -76,8 +76,10 @@ final class FixtureScenarioTest {
         assertThat(count("select count(*) from finding where session_id = 's-04'"
                 + " and detector = 'fatal-turn'")).isEqualTo(1);
         final Map<String, Object> row = jdbc.queryForMap(
-                "select code, plane, confidence, seq from finding where session_id = 's-04'");
-        assertThat(row.get("code")).isEqualTo("media_budget_exceeded");
+                "select code, detail, plane, confidence, seq from finding where session_id = 's-04'");
+        // the harness's typed code, and the provider's specific one from the documented body
+        assertThat(row.get("code")).isEqualTo("INVALID_REQUEST");
+        assertThat(row.get("detail")).isEqualTo("media_budget_exceeded");
         assertThat(row.get("plane")).isEqualTo("INFRASTRUCTURE");
         assertThat(row.get("confidence")).isNull();
         assertThat(row.get("seq")).isNull();

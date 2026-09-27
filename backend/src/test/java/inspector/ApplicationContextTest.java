@@ -36,6 +36,21 @@ final class ApplicationContextTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @Autowired
+    private java.util.List<inspector.detect.Detector> detectors;
+
+    /**
+     * The hand-built pipeline every indexing test runs ({@code TestPipeline}) has to be the one the
+     * application wires, or a detector added to the context is silently missing from every count
+     * the tests assert.
+     */
+    @Test
+    void theContextHoldsExactlyTheDetectorsTheTestPipelineBuilds() {
+        assertThat(detectors).extracting(inspector.detect.Detector::id)
+                .containsExactlyInAnyOrderElementsOf(TestPipeline.detectors().stream()
+                        .map(inspector.detect.Detector::id).toList());
+    }
+
     @Test
     void contextLoadsWithTheSchemaApplied() {
         assertThat(jdbc.sql("select count(*) from finding").query(Integer.class).single()).isZero();
