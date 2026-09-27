@@ -5,10 +5,11 @@ import type { Observable } from 'rxjs';
 import { describeProblem, isIndexAlreadyRunning, isProblem, type ProblemDetail } from '../api/problem';
 import { ApiService } from '../api/api.service';
 import type {
-  CohortPageDto, FindingDetailDto, FindingsPageDto, IndexSummaryDto, OverviewDto,
-  SortDir, SortField, Vocabulary,
+  BreakdownRow, CohortPageDto, FindingContextDto, FindingDetailDto, FindingsPageDto, IndexSummaryDto,
+  JudgeDto, OverviewDto, SortDir, SortField, Vocabulary,
 } from '../api/types';
-import { applyPreset, emptyFilters, type Filters, type PresetId } from './filters';
+import { emptyFilters, FACET_KEYS, facetIsSet, withoutFacet, type FacetKey, type Filters } from './filters';
+import { DEFAULT_GROUP_BY } from './url-state';
 
 /**
  * The store that owns every fetch. §7's "one filter contract" lives here: overview,
@@ -28,7 +29,18 @@ export class InsightsStore {
   readonly overview = signal<OverviewDto | null>(null);
   readonly findings = signal<FindingsPageDto | null>(null);
   readonly detail = signal<FindingDetailDto | null>(null);
+  readonly context = signal<FindingContextDto | null>(null);
+  /**
+   * The finding whose sequence request failed, if the newest one did. Without it a failed
+   * request left the panel saying "Loading…" for as long as it stayed open — a wait for an
+   * answer that had already come back as an error.
+   */
+  readonly contextFailed = signal<number | null>(null);
+  /** The finding whose detail request failed, by the same rule: the panel matches it by id. */
+  readonly detailFailed = signal<number | null>(null);
   readonly cohorts = signal<CohortPageDto | null>(null);
+  readonly judge = signal<JudgeDto | null>(null);
+  readonly breakdown = signal<BreakdownRow[] | null>(null);
   readonly vocabulary = signal<Vocabulary | null>(null);
   readonly lastIndex = signal<IndexSummaryDto | null>(null);
 
@@ -55,8 +67,30 @@ export class InsightsStore {
    */
   readonly cohortAxis = signal<string | null>(null);
 
+  // The cohorts screen's own state, fed from the URL like everything else: the axis, the
+  // baseline the reader chose (null: the backend picks the busiest cohort) and the cohort the
+  // judge compares against it (null: the only other one, when there is exactly one).
+  readonly cohortGroupBy = signal<FacetKey>(DEFAULT_GROUP_BY);
+  readonly cohortBaseline = signal<string | null>(null);
+  readonly judgeCandidate = signal<string | null>(null);
+
+  /**
+   * Whether the Findings screen is open: the drill-downs (code, detector) narrow that screen
+   * and no other, so what counts as "active" depends on it. Set and cleared by that screen,
+   * as `cohortAxis` is by the cohorts screen.
+   */
+  readonly findingsOpen = signal(false);
+
   /** The human sentence from the last rejected request; a later success clears it. */
   readonly error = signal<string | null>(null);
+
+  /**
+   * The value the server rejected, when the newest request of a lane was refused over one named
+   * filter — a stale baseline or detector from a shared link, or one a re-index removed. The bar
+   * says what is wrong; the screen uses this to offer the one control that fixes it, since a first
+   * load that fails leaves no table and so none of the table's controls.
+   */
+  readonly rejected = signal<{ lane: Lane; filter: string; value: string | null } | null>(null);
 
   /**
    * A request the server refused for a reason that is not a fault: an index run is already
@@ -66,15 +100,15 @@ export class InsightsStore {
    */
   readonly notice = signal<string | null>(null);
 
-  // Findings-only request state. The from/to/schema/model/preset/harnessVersion filters
-  // above are shared with overview; these are not.
+  // Findings-only request state. The time range and the facets in `filters` above are
+  // shared with overview and cohorts; these are not.
   //
-  // `code` used to be in the same sentence as plane/detector/session: accepted by the
-  // backend, driven by no screen, and dismissed here as residue. It stopped being residue
-  // when the overview grew a breakdown by code — the panel exists precisely so a count can
-  // be opened as the rows behind it, and that drill-down is this signal. The other three
-  // are still unwritten, and still residue until a control writes them.
+  // `code` and `detector` used to be in the same sentence as plane and session: accepted by
+  // the backend, driven by no screen, and dismissed here as residue. Each stopped being residue
+  // when an overview panel made its count a control — the codes panel opens a code, the kinds
+  // panel a detector — and the drill-down is this signal. Plane and session are still unwritten.
   readonly code = signal<string | null>(null);
+  readonly detector = signal<string | null>(null);
   readonly sort = signal<{ field: SortField; dir: SortDir } | null>(null);
   readonly page = signal(0);
   readonly size = signal(20);
@@ -84,16 +118,61 @@ export class InsightsStore {
   readonly preset = computed(() => this.filters().presetId);
 
   /**
+   * How many filters narrow what is on screen — the one count the rail's badge shows and the
+   * rail's Clear button is enabled by, so the two cannot tell different stories. The drill-downs
+   * count only on the Findings screen, the one they narrow; on the cohorts screen the facet it
+   * groups by is left out of its requests (the rail dims it and says so), so it does not count
+   * there. Counting either where it filters nothing announced a filter the screen was not applying,
+   * and a Clear enabled by it would change nothing the reader can see.
+   */
+  readonly activeFilterCount = computed(() => {
+    const f = this.filters();
+    const inert = this.cohortAxis();
+    let count = f.presetId === 'all' ? 0 : 1;
+    for (const facet of FACET_KEYS) {
+      if (facet !== inert && facetIsSet(f, facet)) { count += 1; }
+    }
+    if (this.findingsOpen()) {
+      if (this.code()) { count += 1; }
+      if (this.detector()) { count += 1; }
+    }
+    return count;
+  });
+
+  /**
+   * Lanes whose newest request came back as an error, each with its own reason; a new request on
+   * the lane clears it. The reason is kept per lane, not left to the error bar: the bar holds one
+   * sentence and any later success clears it — on a fresh link the overview's 200 lands a few
+   * milliseconds after the cohorts' 400, and a screen that said "the bar above says why" pointed
+   * at nothing.
+   */
+  private readonly failures = signal<ReadonlyMap<Lane, string>>(new Map());
+
+  /**
+   * Whether the newest request of a lane failed. A screen waiting on a lane reads this to stop
+   * saying "Loading…" once the answer has come back as an error — that is an answer.
+   */
+  failed(lane: Lane): boolean { return this.failures().has(lane); }
+
+  /** Why the newest request of a lane failed, in one line — "400 · Unknown filter value: …". */
+  failure(lane: Lane): string | null { return this.failures().get(lane) ?? null; }
+
+  /**
    * Per-id cache for the lazy detail fetch, a plain Map for the session. Any reload
    * clears it: after the data is refetched, a cached detail is stale.
    */
   private detailCache = new Map<number, FindingDetailDto>();
+  private contextCache = new Map<number, FindingContextDto>();
 
-  // ---- filter writes ----
+  /**
+   * The newest request per screen lane. Two loads of one lane overlap all the time — two quick
+   * page clicks, a facet change while the previous answer is still on the wire — and answers do
+   * not come back in the order they were asked. Without this the slower, older answer landed
+   * last, and the table showed page 2 under a URL and a pager that both said page 3.
+   */
+  private readonly latest = new Map<Lane, number>();
 
-
-
-
+  // ---- bars ----
 
   /**
    * Dismiss the error bar. The bar shows whatever `error()` holds and the store is
@@ -105,10 +184,6 @@ export class InsightsStore {
   /** Same rule as {@link dismissError}: the store is the only writer, so nothing stays hidden. */
   dismissNotice(): void { this.notice.set(null); }
 
-
-
-
-
   // ---- loads: all of them through the one filter state ----
 
   loadOverview(): void {
@@ -116,7 +191,7 @@ export class InsightsStore {
     this.track(this.api.overview(this.filters()), v => {
       this.overview.set(v);
       this.vocabulary.set(v.vocabulary);
-    });
+    }, { lane: 'overview' });
   }
 
   loadFindings(): void {
@@ -126,15 +201,34 @@ export class InsightsStore {
     this.track(this.api.findings({
       filters: this.filters(),
       code: this.code() ?? undefined,
+      detector: this.detector() ?? undefined,
       sort: this.sort() ?? undefined,
       page: this.page(),
       size: this.size(),
-    }), v => this.findings.set(v));
+    }), v => this.findings.set(v), { lane: 'findings' });
   }
 
-  loadCohorts(groupBy: string, baseline?: string): void {
+  /** The axis facet is left out of the request: see `withoutFacet` for why, and the rail for the note. */
+  loadCohorts(groupBy: FacetKey, baseline?: string): void {
     this.invalidateDetails();
-    this.track(this.api.cohorts(groupBy, baseline, this.filters()), v => this.cohorts.set(v));
+    this.track(this.api.cohorts(groupBy, baseline, withoutFacet(this.filters(), groupBy)),
+      v => this.cohorts.set(v), { lane: 'cohorts' });
+  }
+
+  /**
+   * Same selection as the cohort table beside it, so the verdict and the deltas agree. The
+   * previous verdict is dropped when the request goes out: it was computed over the previous
+   * selection, and matching it to the table by axis, baseline and candidate alone let it stand
+   * beside a new table of the same pair — and stay there if the new request failed.
+   */
+  loadJudge(groupBy: FacetKey, baseline: string, candidate: string): void {
+    this.judge.set(null);
+    this.track(this.api.judge(groupBy, baseline, candidate, withoutFacet(this.filters(), groupBy)),
+      v => this.judge.set(v), { lane: 'judge' });
+  }
+
+  loadBreakdown(): void {
+    this.track(this.api.breakdown(this.filters()), v => this.breakdown.set(v), { lane: 'breakdown' });
   }
 
   /** Both shared-filter endpoints; the rail reloads both when any facet changes. */
@@ -144,19 +238,39 @@ export class InsightsStore {
   }
 
   /**
-   * Lazy, cached per id: two opens of the same id issue one request. The cache is cleared
-   * by any reload, so a re-indexed corpus cannot be answered from stale evidence.
+   * Lazy, cached per id: two opens of the same id issue one request for the detail and one for
+   * the calls around it. Both caches are cleared by any reload, so a re-indexed corpus cannot be
+   * answered from stale evidence. The two load independently: a sequence that fails to arrive
+   * must not take the evidence down with it.
    */
   selectFinding(id: number): void {
+    // Each in its own lane, so only the newest open may land. Without it, opening one finding and
+    // then another could let the first answer arrive last and overwrite the second's — the panel,
+    // which only shows a context whose id matches the row, then waited on "Loading…" for a
+    // sequence that had already arrived and been replaced. A cache hit takes its lane too, so an
+    // older request still in flight cannot land over it.
+    this.contextFailed.set(null);
+    this.detailFailed.set(null);
     const cached = this.detailCache.get(id);
     if (cached !== undefined) {
+      this.supersede('detail');
       this.detail.set(cached);
-      return;
+    } else {
+      this.track(this.api.finding(id), v => {
+        this.detailCache.set(id, v);
+        this.detail.set(v);
+      }, { lane: 'detail', onError: () => this.detailFailed.set(id) });
     }
-    this.track(this.api.finding(id), v => {
-      this.detailCache.set(id, v);
-      this.detail.set(v);
-    });
+    const context = this.contextCache.get(id);
+    if (context !== undefined) {
+      this.supersede('context');
+      this.context.set(context);
+    } else {
+      this.track(this.api.context(id), v => {
+        this.contextCache.set(id, v);
+        this.context.set(v);
+      }, { lane: 'context', onError: () => this.contextFailed.set(id) });
+    }
   }
 
   /**
@@ -166,30 +280,63 @@ export class InsightsStore {
   reindex(): void {
     this.indexing.set(true);
     this.track(this.api.runIndex(), v => {
+      // Finding ids are never reused, so an open finding and the neighbours in its sequence
+      // name rows the rebuilt index no longer has: a click on one would be a 404. The panel
+      // closes on this (Findings watches `lastIndex`), and nothing of the old one is kept.
+      this.detail.set(null);
+      this.context.set(null);
       this.lastIndex.set(v);
       this.loadOverview();
       this.loadFindings();
       // A cohorts table that is on screen must not survive a re-index as a photograph of the
       // previous index. The axis signal doubles as "is anyone looking at it", so no request is
       // spent on a route nobody is on.
-      const axis = this.cohortAxis();
-      if (axis !== null) {
-        this.loadCohorts(axis);
+      if (this.cohortAxis() !== null) {
+        this.loadCohorts(this.cohortGroupBy(), this.cohortBaseline() ?? undefined);
       }
     // Settled on both paths: a failed index must not leave the button claiming work that
     // stopped happening two seconds ago.
-    }, () => this.indexing.set(false));
+    }, { onSettled: () => this.indexing.set(false) });
   }
 
   // ---- internals ----
 
   private invalidateDetails(): void {
     this.detailCache.clear();
+    this.contextCache.clear();
+  }
+
+  /** Take a lane's ticket without a request: whatever is still in flight on it will not land. */
+  private supersede(lane: Lane): void {
+    this.latest.set(lane, (this.latest.get(lane) ?? 0) + 1);
+    this.settleLane(lane, null);
+  }
+
+  /**
+   * Record a lane's outcome: a reason when its newest request failed, null when a new one goes
+   * out. A new request is not failed yet, and the value it last had rejected is no answer to it.
+   */
+  private settleLane(lane: Lane, reason: string | null): void {
+    const current = this.failures();
+    if ((current.get(lane) ?? null) !== reason) {
+      const next = new Map(current);
+      if (reason === null) { next.delete(lane); } else { next.set(lane, reason); }
+      this.failures.set(next);
+    }
+    if (reason === null && this.rejected()?.lane === lane) { this.rejected.set(null); }
   }
 
   private track<T>(source: Observable<T>, onValue: (value: T) => void,
-                   onSettled?: () => void): void {
+                   { lane, onSettled, onError }: { lane?: Lane; onSettled?: () => void; onError?: () => void } = {}): void {
     this.busy.update(b => b + 1);
+    const ticket = lane === undefined ? 0 : (this.latest.get(lane) ?? 0) + 1;
+    if (lane !== undefined) {
+      this.latest.set(lane, ticket);
+      this.settleLane(lane, null);
+    }
+    // A superseded answer only settles the bookkeeping. Its data would overwrite a newer
+    // view, and its error would put a bar over a screen whose current request succeeded.
+    const superseded = (): boolean => lane !== undefined && this.latest.get(lane) !== ticket;
     // takeUntilDestroyed with the explicit DestroyRef: safe to call from any method, and
     // it completes every subscription when the store is destroyed, so a late response
     // cannot touch state after teardown.
@@ -197,6 +344,7 @@ export class InsightsStore {
       next: value => {
         this.busy.update(b => b - 1);
         onSettled?.();
+        if (superseded()) { return; }
         this.error.set(null);
         this.notice.set(null);
         onValue(value);
@@ -204,6 +352,15 @@ export class InsightsStore {
       error: err => {
         this.busy.update(b => b - 1);
         onSettled?.();
+        if (superseded()) { return; }
+        onError?.();
+        if (lane !== undefined) {
+          this.settleLane(lane, describeFailure(err));
+          const body = (err as HttpErrorResponse | null)?.error;
+          if (isProblem(body) && typeof body.filter === 'string') {
+            this.rejected.set({ lane, filter: body.filter, value: body.value ?? null });
+          }
+        }
         // At most one bar, and it always describes the most recent answer. Two bars at once
         // ("a run is in progress" above "something failed") is a screen that argues with itself.
         //
@@ -225,9 +382,24 @@ export class InsightsStore {
   }
 }
 
+/** The screens whose loads replace one another: only the newest request of a lane may land. */
+export type Lane = 'overview' | 'findings' | 'cohorts' | 'judge' | 'breakdown' | 'detail' | 'context';
+
 /** The toolbar's own sentence for a refused second run. No promise the other run will refresh. */
 const ALREADY_INDEXING =
   'An index run is already in progress, so this request was refused. Reload after it finishes to see the rebuilt index.';
+
+/**
+ * A failure as the screen that waited for it states it: the status, then the sentence. The
+ * status is what tells a refused value (400) from a missing row (404) from a broken server
+ * (5xx); 0 is a request that never got an answer at all.
+ */
+function describeFailure(err: unknown): string {
+  const status = err instanceof HttpErrorResponse ? err.status : null;
+  const sentence = describeError(err);
+  if (status === null) { return sentence; }
+  return status === 0 ? `no answer from the server · ${sentence}` : `${status} · ${sentence}`;
+}
 
 /** The error a human can act on: the problem+json sentence, or the transport message. */
 function describeError(err: unknown): string {

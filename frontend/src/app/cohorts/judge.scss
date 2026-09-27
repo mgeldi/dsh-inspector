@@ -1,0 +1,217 @@
+// Variables-only import, as everywhere: the Material theme never rides into this budget.
+//
+// The judge is its own component because the cohorts stylesheet had no room left under its
+// 4 kB budget. The control, banner and table rules below repeat the cohorts screen's on
+// purpose, the way the findings pager repeats its select: encapsulation scopes those to that
+// component, and borrowing the class names here would have rendered browser defaults.
+@use '../../theme-tokens' as *;
+
+:host { display: block; }
+
+.judge {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 16px;
+  border-top: 1px solid $hairline;
+}
+
+// ---- the choice: which cohort is judged against the baseline ----
+
+.jcontrols {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+}
+
+.jtitle {
+  align-self: center;
+  margin: 0 6px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: $text-hi;
+}
+
+.jfield {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.jlabel {
+  color: $text-lo;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.jselect {
+  min-width: 190px;
+  min-height: 34px;
+  padding: 6px 10px;
+  background: $surface-raised;
+  border: 1px solid $hairline;
+  border-radius: 8px;
+  color: $text-hi;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:disabled { cursor: default; opacity: 0.6; }
+
+  &:focus-visible {
+    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
+    outline-offset: 1px;
+  }
+}
+
+.jagainst,
+.jempty,
+.jsides {
+  margin: 0;
+  font-size: 12.5px;
+}
+
+.jagainst { padding-bottom: 8px; }
+
+.jwait { min-height: 70vh; }
+
+.jkey { color: $text-hi; font-weight: 500; }
+
+// ---- the basis note, as the cohort table states its own ----
+
+.basis-banner {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, $accent 7%, $surface-raised);
+  border: 1px solid color-mix(in srgb, $accent 32%, $hairline);
+  border-radius: 8px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: $text-hi;
+}
+
+.basis-label {
+  flex-shrink: 0;
+  color: $accent;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+// ---- the verdicts ----
+
+.jwrap {
+  overflow-x: auto;
+  border: 1px solid $hairline;
+  border-radius: 8px;
+}
+
+.jtable {
+  width: 100%;
+  border-collapse: collapse;
+  background: $surface-raised;
+  font-size: 13px;
+
+  th {
+    padding: 9px 10px;
+    border-bottom: 1px solid $hairline;
+    color: $text-lo;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  td {
+    padding: 8px 10px;
+    border-bottom: 1px solid color-mix(in srgb, $hairline 55%, transparent);
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  th:first-child,
+  td:first-child { text-align: left; }
+
+  tr:last-child td { border-bottom: none; }
+
+  tbody tr:hover { background: color-mix(in srgb, $text-hi 4%, transparent); }
+
+  tr.jtotal td { font-weight: 600; }
+
+  // Where the table turns from the total and the planes to the codes.
+  tr.jfirst td { border-top: 1px solid $hairline; }
+}
+
+.key { color: $text-hi; font-weight: 500; }
+.count { color: $text-lo; }
+
+.jcode {
+  font-family: ui-monospace, 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  font-size: 12px;
+}
+
+// A null rate or ratio is an absence: italic n/a in the muted tone, never 0.
+.na {
+  font-style: italic;
+  color: $text-lo;
+}
+
+// The verdict reuses the delta hues: worse in the violation colour, better in the accent,
+// and a verdict the data cannot reach stays neutral — it is a statement, not an alarm.
+.verdict {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: $text-lo;
+  background: color-mix(in srgb, $text-lo 12%, transparent);
+}
+
+.verdict-worse {
+  color: $plane-misuse;
+  background: color-mix(in srgb, $plane-misuse 14%, transparent);
+}
+
+.verdict-better {
+  color: $accent;
+  background: color-mix(in srgb, $accent 12%, transparent);
+}
+
+.verdict-no-data {
+  font-weight: 400;
+  font-style: italic;
+  background: none;
+}
+
+// The Haldane mark: small, beside the ratio it qualifies, explained in the legend and the title.
+.jflag {
+  display: inline-block;
+  width: 1.1em;
+  text-align: right;
+  font-size: 11px;
+  color: $text-lo;
+  cursor: help;
+}
+
+// φ and df under the session counts: small, because they qualify the interval, not the counts.
+.jphi {
+  display: block;
+  font-size: 10.5px;
+  color: $text-lo;
+  opacity: 0.85;
+}
+
+.junits {
+  max-width: 860px;
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}

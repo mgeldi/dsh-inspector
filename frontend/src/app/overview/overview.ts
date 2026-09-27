@@ -1,11 +1,11 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { Router } from '@angular/router';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, untracked } from '@angular/core';
 import type { EChartsCoreOption } from 'echarts/core';
 import { ChartComponent } from '../charts/chart';
 import { CHART_AXIS, CHART_BASE, DAILY_BAR_COLOUR, PLANE_COLOURS } from '../charts/theme';
 import { InsightsStore } from '../state/insights.store';
-import type { Plane } from '../api/types';
+import type { BreakdownRow, Plane } from '../api/types';
+import { categoryChip } from '../findings/finding-words';
 import { ViewUrl } from '../state/view-url';
 import { applyPreset } from '../state/filters';
 
@@ -24,6 +24,14 @@ const PLANE_LABELS: Record<Plane, string> = {
 
 interface TileRow { key: string; value: number; context: string; }
 interface PlaneRow { plane: Plane; count: number; share: number; shareText: string; }
+/** `code`: the qualifier is a harness code, set as an identifier; else it is a category in words. */
+interface KindRow { row: BreakdownRow; qualifier: string | null; code: boolean; }
+
+/**
+ * How many kinds the panel lists. Ten is where the measured breakdown turns from kinds that
+ * recur to kinds seen once or twice; the rest is stated as a count below the list.
+ */
+const TOP_KINDS = 10;
 
 /**
  * The dashboard over one filter state. Everything on this screen is read from the store;
@@ -41,7 +49,6 @@ interface PlaneRow { plane: Plane; count: number; share: number; shareText: stri
 export class Overview {
   readonly store = inject(InsightsStore);
   private readonly url = inject(ViewUrl);
-  private readonly router = inject(Router);
   readonly PLANE_COLOURS = PLANE_COLOURS;
 
   readonly overview = computed(() => this.store.overview());
@@ -149,14 +156,40 @@ export class Overview {
    * have to come from the vocabulary, and that list is deliberately index-wide while these
    * counts follow the filter, so under an active rail it would be a different question's
    * answer.
+   *
+   * Findings with no code at all are not in the tail: they are not "in other codes", and the
+   * panel states them on a line of their own (`uncoded` below), so rows + tail + uncoded is
+   * the findings tile exactly.
    */
   readonly codeTail = computed<number>(() => {
     const o = this.store.overview();
     if (o === null) { return 0; }
     const shown = o.topCodes.reduce((sum, c) => sum + c.count, 0);
-    return Math.max(0, o.tiles.findings - shown);
+    return Math.max(0, o.tiles.findings - shown - this.uncoded());
   });
+
+  /**
+   * Findings that carry no error code — a shell rewrite of a tracked file is an event the
+   * detector saw, not a refusal the harness issued. They used to be folded into the list as a
+   * bar named `unknown`, which read as one more harness code and opened as a filter no code
+   * matches. `?? 0` keeps the panel whole against a backend that predates the field.
+   */
+  readonly uncoded = computed<number>(() => this.store.overview()?.uncodedFindings ?? 0);
   readonly throughput = computed(() => this.store.overview()?.throughput ?? []);
+
+  /**
+   * Findings by kind: the detector and what it concluded, the finest grain there is. The codes
+   * panel says what the harness refused; this says which of those refusals are one failure and
+   * which are four — an edit miss after a read and a blind retry of the same miss share a code
+   * and call for different fixes. Busiest first, as the backend sends it.
+   */
+  readonly kinds = computed<KindRow[]>(() =>
+    (this.store.breakdown() ?? []).slice(0, TOP_KINDS)
+      .map(row => ({ row, qualifier: kindQualifier(row), code: row.category === null })));
+
+  /** The findings in kinds below the top slice, stated the way the codes panel states its tail. */
+  readonly kindTail = computed<number>(() =>
+    (this.store.breakdown() ?? []).slice(TOP_KINDS).reduce((sum, k) => sum + k.count, 0));
 
   /**
    * A count on the board, opened as the rows behind it. The shared rail filters stay exactly
@@ -166,8 +199,24 @@ export class Overview {
   openCode(code: string): void {
     // One navigation carries both the screen and the narrowing. The shell reads the new URL
     // and issues the fetch, so the table cannot arrive showing the previous, unfiltered page
-    // under a banner announcing a filter — and the link is shareable as what it shows.
-    this.url.go(['/findings'], { code, page: 0 });
+    // under a banner announcing a filter — and the link is shareable as what it shows. It
+    // replaces a detector drill-down rather than stacking on it: each opens one count's rows.
+    this.url.go(['/findings'], { code, detector: null, page: 0 });
+  }
+
+  /**
+   * A kind, opened as its detector's rows. The backend filters by detector, not by category or
+   * detail, so the table can hold more rows than the kind's count — the findings screen names
+   * the detector it narrowed to, and the rows show the category that tells the kinds apart.
+   */
+  openKind(detector: string): void {
+    this.url.go(['/findings'], { detector, code: null, page: 0 });
+  }
+
+  /** What a kind's row does when chosen, in words: all of its detector's findings, not only this kind's. */
+  kindAction(k: KindRow): string {
+    const kind = k.qualifier === null ? '' : ` (this row counts only ${k.qualifier})`;
+    return `Open all ${k.row.detector} findings${kind}`;
   }
 
   /**
@@ -203,6 +252,38 @@ export class Overview {
   }
 
   runIndexer(): void { this.store.reindex(); }
+
+  /** Ask again after a failed load: the overview for the rail's vocabulary, and this screen's kinds. */
+  retry(): void {
+    this.store.loadOverview();
+    this.store.loadBreakdown();
+  }
+
+  constructor() {
+    // This screen owns the breakdown request, as the cohorts screen owns its own: the shell
+    // loads what the rail needs, and nobody on the findings tab pays for a panel they cannot
+    // see. Reading the filters and the last index run is what re-asks after either changes.
+    effect(() => {
+      this.store.filters();
+      this.store.lastIndex();
+      untracked(() => this.store.loadBreakdown());
+    });
+  }
+}
+
+/**
+ * What a kind is, after its detector: the category in words — and its detail, when the detector
+ * splits one category by it (a shell edit is a direct mutation by script, by redirect, in place);
+ * without it three rows read "shell-edit direct mutation" with three different counts — else the
+ * code and its detail.
+ */
+function kindQualifier(k: BreakdownRow): string | null {
+  if (k.category !== null) {
+    const words = categoryChip(k.category).label;
+    return k.detail === null ? words : `${words} · ${k.detail.toLowerCase().replace(/_/g, ' ')}`;
+  }
+  const parts = [k.code, k.detail].filter((p): p is string => p !== null);
+  return parts.length === 0 ? null : parts.join(' / ');
 }
 
 /**

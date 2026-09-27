@@ -38,6 +38,9 @@ describe('url-state', () => {
     expect(written['sort']).toBeNull();
     expect(written['code']).toBeNull();
     expect(written['schema']).toBeNull();
+    // every facet is spelled, as null, so `merge` can drop one the view no longer carries
+    expect(written['provider']).toBeNull();
+    expect(written['role']).toBeNull();
   });
 
   it('carries the range as its preset id and derives the window from it', () => {
@@ -64,23 +67,28 @@ describe('url-state', () => {
 
   it('round-trips a fully specified view', () => {
     const written = {
-      range: '7d', schema: 'V3', model: 'demo-model', preset: 'builder',
-      harnessVersion: 'v2', code: 'FS_STALE_VERSION', sort: 'confidence:asc',
-      page: '4', size: '50', groupBy: 'schema', baseline: 'V0',
+      range: '7d', schema: 'V3', model: 'demo-model', provider: 'demo-gateway', role: 'subagent',
+      preset: 'builder', harnessVersion: 'v2', code: 'FS_STALE_VERSION', detector: 'edit-miss',
+      sort: 'confidence:asc', page: '4', size: '50', groupBy: 'schema', baseline: 'V0', candidate: 'V3',
     };
     const state = fromParams(params(written), NOW);
 
     expect(state.filters.schema).toBe('V3');
+    expect(state.filters.provider).toBe('demo-gateway');
+    expect(state.filters.role).toBe('subagent');
     expect(state.filters.harnessVersion).toBe('v2');
     expect(state.code).toBe('FS_STALE_VERSION');
     expect(state.sort).toEqual({ field: 'confidence', dir: 'asc' });
     expect(state.page).toBe(3);
     expect(state.size).toBe(50);
     expect(state.groupBy).toBe('schema');
+    expect(state.detector).toBe('edit-miss');
+    expect(state.candidate).toBe('V3');
 
     expect(toParams(state)).toMatchObject({
-      range: '7d', schema: 'V3', code: 'FS_STALE_VERSION',
-      sort: 'confidence:asc', page: '4', size: '50', groupBy: 'schema', baseline: 'V0',
+      range: '7d', schema: 'V3', provider: 'demo-gateway', role: 'subagent', code: 'FS_STALE_VERSION',
+      detector: 'edit-miss', sort: 'confidence:asc', page: '4', size: '50', groupBy: 'schema',
+      baseline: 'V0', candidate: 'V3',
     });
   });
 
@@ -119,5 +127,45 @@ describe('url-state', () => {
 
     expect(sharedFiltersDiffer(base, narrowed)).toBe(true);
     expect(findingsAxisDiffers(base, narrowed)).toBe(false);
+
+    // the new facets narrow the population like the old ones
+    expect(sharedFiltersDiffer(base, fromParams(params({ role: 'orchestrator' }), NOW))).toBe(true);
+    expect(sharedFiltersDiffer(base, fromParams(params({ provider: 'demo-gateway' }), NOW))).toBe(true);
+  });
+
+  it('opens a bare /cohorts on harness version, and writes that default as absence', () => {
+    expect(fromParams(params({}), NOW).groupBy).toBeNull();
+    expect(toParams({ groupBy: 'harnessVersion' })['groupBy']).toBeNull();
+    expect(toParams({ groupBy: 'role' })['groupBy']).toBe('role');
+    // an axis the backend does not group by is the default axis, not a 400 on arrival
+    expect(fromParams(params({ groupBy: 'weather' }), NOW).groupBy).toBeNull();
+  });
+
+  /**
+   * A cohort key only names a cohort inside one selection on one axis. The rule lives here,
+   * where every control's write passes, so no control can forget it.
+   */
+  it('drops the cohort keys a change makes meaningless, and only those', () => {
+    const axis = toParams({ groupBy: 'model' });
+    expect(axis['baseline'], 'a new axis: the old baseline names nothing').toBeNull();
+    expect(axis['candidate'], 'nor does the old candidate').toBeNull();
+
+    const filters = toParams({ filters: fromParams(params({ schema: 'V3' }), NOW).filters });
+    expect(filters['baseline'], 'a new selection: the backend re-picks the baseline (§7)').toBeNull();
+    expect('candidate' in filters, 'the candidate is checked against the new table instead').toBe(false);
+
+    const page = toParams({ page: 2 });
+    expect('baseline' in page, 'a page change touches neither').toBe(false);
+    expect('candidate' in page).toBe(false);
+
+    // an explicit choice in the same write wins over the rule
+    expect(toParams({ groupBy: 'model', baseline: 'demo-model' })['baseline']).toBe('demo-model');
+  });
+
+  it('treats a detector drill-down as a findings-axis change, not a population change', () => {
+    const base = fromParams(params({}), NOW);
+    const narrowed = fromParams(params({ detector: 'shell-edit' }), NOW);
+    expect(findingsAxisDiffers(base, narrowed)).toBe(true);
+    expect(sharedFiltersDiffer(base, narrowed)).toBe(false);
   });
 });

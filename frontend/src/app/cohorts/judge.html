@@ -1,0 +1,117 @@
+<section class="judge" aria-labelledby="judge-title">
+  <div class="jcontrols">
+    <h2 class="jtitle" id="judge-title">Judge</h2>
+    <div class="jfield">
+      <label class="jlabel" for="candidate">Candidate</label>
+      <select
+        class="jselect"
+        id="candidate"
+        [disabled]="candidateKeys().length === 0"
+        (change)="changeCandidate($any($event.target).value)"
+      >
+        @if (candidate() === null) {
+          <option value="" selected disabled>Choose a cohort</option>
+        }
+        @for (k of candidateKeys(); track k) {
+          <option [value]="k" [selected]="k === candidate()">{{ k }}</option>
+        }
+      </select>
+    </div>
+    <p class="jagainst muted">against the baseline <span class="jkey">{{ baseline() }}</span></p>
+  </div>
+
+  @let j = judge();
+  @if (candidateKeys().length === 0) {
+    <p class="jempty muted">This selection holds one cohort, so there is nothing to judge it against.</p>
+  } @else if (candidate() === null) {
+    <p class="jempty muted">
+      @switch (candidateNote()) {
+        @case ('baseline') {
+          <span class="jkey">{{ store.judgeCandidate() }}</span> is the baseline now, and a cohort judged
+          against itself says nothing.
+        }
+        @case ('absent') {
+          <span class="jkey">{{ store.judgeCandidate() }}</span> is not in this selection.
+        }
+      }
+      Choose the cohort to judge against the baseline.
+    </p>
+  } @else if (j) {
+    <p class="jsides muted">
+      <span class="jkey">{{ j.candidate }}</span>: {{ fmt(j.candidateCohort.sessions) }} sessions,
+      {{ fmt(j.candidateCohort.toolCalls) }} observed calls, against
+      <span class="jkey">{{ j.baseline }}</span>: {{ fmt(j.baselineCohort.sessions) }} sessions,
+      {{ fmt(j.baselineCohort.toolCalls) }} observed calls.
+    </p>
+    @if (j.basisNote) {
+      <div class="basis-banner" role="note">
+        <span class="basis-label">Basis</span>
+        <span class="basis-text">{{ j.basisNote }}</span>
+      </div>
+    }
+    <div class="jwrap">
+      <table class="jtable" aria-label="Judge: candidate against baseline">
+        <thead>
+          <tr>
+            <th scope="col">Failure</th>
+            <th scope="col">Findings</th>
+            <th scope="col">Baseline / 1k</th>
+            <th scope="col">Candidate / 1k</th>
+            <th scope="col">Ratio [95% interval]</th>
+            <th scope="col">Sessions</th>
+            <th scope="col">Verdict</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (l of lines(); track l.row.scope + ':' + l.row.key) {
+            <tr [class.jtotal]="l.row.scope === 'total'" [class.jfirst]="l.firstCode">
+              <td class="key" [class.jcode]="l.code">{{ l.label }}</td>
+              <td class="num count">{{ fmt(l.row.baselineCount) }} → {{ fmt(l.row.candidateCount) }}</td>
+              <td class="num rate" [class.na]="l.row.baselinePerK === null">{{ rateText(l.row.baselinePerK) }}</td>
+              <td class="num rate" [class.na]="l.row.candidatePerK === null">{{ rateText(l.row.candidatePerK) }}</td>
+              <!-- The ½ slot is on every row, filled or not, so the ratios stay aligned on their
+                   right edge; a mark only on corrected rows pushed those ratios a glyph left. -->
+              <td class="num" [class.na]="l.row.rateRatio === null">{{ l.ratio }}<span
+                  class="jflag"
+                  [attr.title]="l.corrected ? 'One side has none of this failure: both counts are corrected by ½ before the ratio is taken' : null"
+                  [attr.aria-hidden]="l.corrected ? null : 'true'">{{ l.corrected ? '½' : '' }}</span></td>
+              <td class="num count">
+                {{ fmt(l.row.baselineSessions) }} / {{ fmt(l.row.candidateSessions) }}
+                <span class="jphi" [attr.title]="spreadTip(l.row)">{{ spreadText(l.row) }}</span>
+              </td>
+              <td>
+                <span class="verdict" [class]="'verdict-' + l.row.verdict">{{ verdictLabel(l.row.verdict) }}</span>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+    <p class="junits muted">
+      Findings read baseline → candidate, sessions baseline / candidate. The ratio is the candidate's rate over the
+      baseline's; lower is better, so <strong>better</strong> means the whole 95% interval is below 1
+      and <strong>worse</strong> that it is above, and <strong>inconclusive</strong> that the interval
+      straddles 1 — the data cannot tell the two apart yet. Sessions counts the sessions with at
+      least one such finding: the interval is widened when the findings crowd into a few of them.
+      @if (anyCorrected()) {
+        A ratio marked <strong>½</strong> has a side with none of that failure: a zero has no ratio, so
+        both counts are corrected by ½ before dividing — the ratio is not the quotient of the two
+        rates beside it, and its wide interval is the honest answer to "one side saw nothing".
+      }
+      <code>n/a</code> is a failure neither side had, and <strong>no data</strong> a side with no
+      observed calls.
+      Under the sessions, <strong>φ</strong> is how unevenly the failure falls across them (1 is as
+      evenly as chance would spread it) and widens the interval; <strong>df</strong> is the degrees of
+      freedom of the t quantile the interval uses — at most the sessions that contributed, less two,
+      and fewer when the failures crowd into a few of them. Fewer than three contributing sessions,
+      or a cohort of one session, give no interval and can never be decisive. With a dozen rows at 95% each, about one verdict in twenty is chance: read the row
+      the change was meant to move.
+    </p>
+  } @else if (store.failure('judge'); as reason) {
+    <p class="jempty muted">The verdicts could not be computed: {{ reason }}</p>
+  } @else {
+    <!-- Holds the table's height while the verdict reloads: the page otherwise shrank below the
+         window and lost its scroll position on every candidate change. -->
+    <p class="jempty jwait muted">Judging…</p>
+  }
+</section>

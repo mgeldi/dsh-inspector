@@ -19,23 +19,26 @@
   @for (facet of facets; track facet.key) {
     <section class="facet-group">
       <label class="facet-label" [attr.for]="'facet-' + facet.key">{{ facet.label }}</label>
+      <!-- The shown value is bound per option, not as the select's [value]: that binding runs
+           before the @for below has created the options, so a rail re-opened on a filtered view
+           showed "(any)" while the filter was in force. -->
+      @let shown = facetShownValue(facet);
       <select
         class="facet-select"
         [id]="'facet-' + facet.key"
-        [value]="facetShownValue(facet)"
         [disabled]="facetIsSingle(facet) || facetIsInert(facet)"
         [class.facet-inert]="facetIsInert(facet)"
         (change)="changeFacet(facet, $any($event.target).value)"
       >
-        <option value="" [disabled]="facetIsSingle(facet)">(any)</option>
+        <option value="" [disabled]="facetIsSingle(facet)" [selected]="shown === ''">(any)</option>
         @for (v of facetValues(facet); track v) {
-          <option [value]="v">{{ v }}</option>
+          <option [value]="v" [selected]="v === shown">{{ v }}</option>
         }
       </select>
       @if (facetIsInert(facet)) {
         <!-- Stated rather than implied: a dimmed control with no reason reads as a bug, and
              the reason here is a property of the page, not of the data. -->
-        <p class="facet-note">Cohorts are grouped by this — filtering it would leave one row.</p>
+        <p class="facet-note">{{ facetInertNote(facet) }}</p>
       }
     </section>
   }

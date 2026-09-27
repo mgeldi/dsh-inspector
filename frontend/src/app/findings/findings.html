@@ -1,5 +1,41 @@
 <section class="fpage">
-  @if (!loaded()) {
+  <!-- The drill-downs are stated above every state — loading, failed, empty, rows. An empty table
+       under a code the overview handed over is "nothing with this code", not "the rail excludes
+       everything"; and a code or detector the server rejects (a stale link, or one a re-index
+       removed) leaves no table at all, so the way out has to be on screen before one arrives. -->
+  @if (activeCode(); as code) {
+    <p class="code-filter">
+      @if (rejectedDrill() === 'code') {
+        There is no code <span class="code-filter-name">{{ code }}</span> in this index, so the
+        table could not load.
+      } @else {
+        Showing only findings with code <span class="code-filter-name">{{ code }}</span>, as
+        selected on the overview. The rail's filters still apply.
+      }
+      <button type="button" class="btn btn-ghost" (click)="clearCode()">Show all codes</button>
+    </p>
+  }
+  @if (activeDetector(); as detector) {
+    <p class="code-filter">
+      @if (rejectedDrill() === 'detector') {
+        There is no detector <span class="code-filter-name">{{ detector }}</span> in this index, so
+        the table could not load.
+      } @else {
+        Showing only findings from detector <span class="code-filter-name">{{ detector }}</span>, as
+        selected on the overview. The rail's filters still apply.
+      }
+      <button type="button" class="btn btn-ghost" (click)="clearDetector()">Show all detectors</button>
+    </p>
+  }
+  <!-- A failed request is checked before the loaded rows: rows from the previous request under a
+       drill-down the server refused describe a query that is no longer on screen. The reason is
+       stated here, not left to the error bar, which a later success elsewhere clears. -->
+  @if (store.failure('findings'); as reason) {
+    <p class="floading muted">
+      The findings could not be loaded: {{ reason }}
+      <button type="button" class="btn btn-ghost" (click)="retry()">Try again</button>
+    </p>
+  } @else if (!loaded()) {
     <p class="floading muted">Loading findings…</p>
   } @else if (total() === 0) {
     <section class="fempty" aria-label="No findings">
@@ -8,9 +44,13 @@
         The time range and the rail facets exclude every finding. The range is usually the suspect —
         widen it to All time, or clear the rail facet that excludes everything.
       </p>
-      <div class="fempty-actions">
-        <button type="button" class="btn btn-ghost" (click)="useAllTime()">Use All time</button>
-      </div>
+      <!-- Offered only when the range is narrower than all time: on an all-time view the button
+           navigated to the URL already open, and nothing on screen moved. -->
+      @if (store.preset() !== 'all') {
+        <div class="fempty-actions">
+          <button type="button" class="btn btn-ghost" (click)="useAllTime()">Use All time</button>
+        </div>
+      }
     </section>
   } @else {
     <!-- Table and detail are siblings in one row, not a page with something floating over it.
@@ -18,13 +58,6 @@
          row stays clickable, so reading one finding after another is one click each. -->
     <div class="fmain">
     <div class="fcol">
-    @if (activeCode(); as code) {
-      <p class="code-filter">
-        Showing only findings with code <span class="code-filter-name">{{ code }}</span>, as
-        selected on the overview. The rail's filters still apply.
-        <button type="button" class="btn btn-ghost" (click)="clearCode()">Show all codes</button>
-      </p>
-    }
     <!-- The wrapper is the scroll container: the header sticks inside it, not inside the page. -->
     <div class="ftable-wrap">
       <table class="ftable" aria-label="Findings">
@@ -39,155 +72,60 @@
              A path truncating is expected and the full value is in its title; an error code
              truncating makes the row useless. -->
         <colgroup>
-          <col style="width: 104px" />
-          <!-- 108px fitted "Guard" and clipped the other two plane names at every window
-               width, dot and all. 134px is the widest label ("Infrastructure") plus the dot,
-               the gap and the cell padding. -->
-          <col style="width: 134px" />
-          <col style="width: 100px" />
-          <col style="width: 176px" />
-          <!-- 168px, not the 152 a first pass gave it: "vcs restore · legitimate" is the
-               longest chip and 152 clipped it — the same silent clip this column budget
-               exists to prevent. -->
-          <col style="width: 168px" />
-          <col style="width: 112px" />
+          <!-- Every width below was measured in the running page (2026-09-27): the widest
+               content of the column plus 16px of cell padding (8 each side). The fixed columns
+               total 888px, and the table's floor is 950px (PATH gets at least 62), so it fits
+               the pane a 1280 window leaves beside the open rail with room for two scrollbars:
+               the wrapper's own, once twenty rows outgrow its height, and the page's, when a
+               drill-down banner pushes the page past the viewport. 993px less both is about
+               963px. The budget before this one fitted the bare 993px and scrolled by 7–17px
+               as soon as either bar appeared, cutting the Session column. -->
+          <!-- 84: "09-22 12:00" is 66px and never wider, tabular figures. -->
+          <col style="width: 84px" />
+          <!-- 116: "Infrastructure" with its dot and gap is 99px; 108 once clipped it. -->
+          <col style="width: 116px" />
+          <col style="width: 96px" />
+          <!-- 180: CONTEXT_WINDOW_EXCEEDED, the longest code a fatal turn carries, is 161px. The
+               code is what the table is scanned for; it does not ellipsize. -->
+          <col style="width: 180px" />
+          <!-- 172: "vcs restore · legitimate", the longest chip, is 154px — the same silent clip
+               this column budget exists to prevent. -->
+          <col style="width: 172px" />
+          <col style="width: 108px" />
           <col />
-          <!-- 150, not 100: the freed width went entirely to PATH, which had more than it
-               needed, while SESSION stayed at eleven characters of a uuid — enough to see
-               there is an id, not enough to tell two rows apart, which is what the column is
-               scanned for. -->
-          <col style="width: 150px" />
+          <!-- 132: SESSION shows fifteen characters of an id — enough to tell two rows apart,
+               which is what the column is scanned for; the full id is in the title. -->
+          <col style="width: 132px" />
         </colgroup>
         <thead>
+          <!-- Real buttons inside the header cells. The cells used to be role="button" themselves,
+               which replaced their column-header role: aria-sort was ignored and a screen reader
+               heard a row of buttons instead of a table's columns and which one it was sorted by. -->
           <tr>
-            <th
-              scope="col"
-              class="sortable"
-              data-field="time"
-              role="button"
-              tabindex="0"
-              [attr.aria-sort]="ariaSortFor('time')"
-              [attr.data-dir]="dirFor('time')"
-              [class.sorted]="isSorted('time')"
-              (click)="toggleSort('time')"
-              (keydown)="onHeaderKeydown($event, 'time')"
-            >
-              Time
-              @if (isSorted('time')) {
-                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
-                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
-                        stroke-linecap="round" stroke-linejoin="round"
-                        [class.caret-asc]="dirFor('time') === 'asc'"/>
-                </svg>
+            @for (h of headers; track h.label) {
+              @if (h.field; as field) {
+                <th
+                  scope="col"
+                  [attr.data-field]="field"
+                  [attr.aria-sort]="isSorted(field) ? ariaSortFor(field) : null"
+                  [attr.data-dir]="dirFor(field)"
+                  [class.sorted]="isSorted(field)"
+                >
+                  <button type="button" class="sort" (click)="toggleSort(field)">
+                    {{ h.label }}
+                    @if (isSorted(field)) {
+                      <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+                        <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
+                              stroke-linecap="round" stroke-linejoin="round"
+                              [class.caret-asc]="dirFor(field) === 'asc'"/>
+                      </svg>
+                    }
+                  </button>
+                </th>
+              } @else {
+                <th scope="col">{{ h.label }}</th>
               }
-            </th>
-            <th
-              scope="col"
-              class="sortable"
-              data-field="plane"
-              role="button"
-              tabindex="0"
-              [attr.aria-sort]="ariaSortFor('plane')"
-              [attr.data-dir]="dirFor('plane')"
-              [class.sorted]="isSorted('plane')"
-              (click)="toggleSort('plane')"
-              (keydown)="onHeaderKeydown($event, 'plane')"
-            >
-              Plane
-              @if (isSorted('plane')) {
-                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
-                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
-                        stroke-linecap="round" stroke-linejoin="round"
-                        [class.caret-asc]="dirFor('plane') === 'asc'"/>
-                </svg>
-              }
-            </th>
-            <th
-              scope="col"
-              class="sortable"
-              data-field="detector"
-              role="button"
-              tabindex="0"
-              [attr.aria-sort]="ariaSortFor('detector')"
-              [attr.data-dir]="dirFor('detector')"
-              [class.sorted]="isSorted('detector')"
-              (click)="toggleSort('detector')"
-              (keydown)="onHeaderKeydown($event, 'detector')"
-            >
-              Detector
-              @if (isSorted('detector')) {
-                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
-                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
-                        stroke-linecap="round" stroke-linejoin="round"
-                        [class.caret-asc]="dirFor('detector') === 'asc'"/>
-                </svg>
-              }
-            </th>
-            <th
-              scope="col"
-              class="sortable"
-              data-field="code"
-              role="button"
-              tabindex="0"
-              [attr.aria-sort]="ariaSortFor('code')"
-              [attr.data-dir]="dirFor('code')"
-              [class.sorted]="isSorted('code')"
-              (click)="toggleSort('code')"
-              (keydown)="onHeaderKeydown($event, 'code')"
-            >
-              Code
-              @if (isSorted('code')) {
-                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
-                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
-                        stroke-linecap="round" stroke-linejoin="round"
-                        [class.caret-asc]="dirFor('code') === 'asc'"/>
-                </svg>
-              }
-            </th>
-            <th scope="col">Category</th>
-            <th
-              scope="col"
-              class="sortable"
-              data-field="confidence"
-              role="button"
-              tabindex="0"
-              [attr.aria-sort]="ariaSortFor('confidence')"
-              [attr.data-dir]="dirFor('confidence')"
-              [class.sorted]="isSorted('confidence')"
-              (click)="toggleSort('confidence')"
-              (keydown)="onHeaderKeydown($event, 'confidence')"
-            >
-              Confidence
-              @if (isSorted('confidence')) {
-                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
-                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
-                        stroke-linecap="round" stroke-linejoin="round"
-                        [class.caret-asc]="dirFor('confidence') === 'asc'"/>
-                </svg>
-              }
-            </th>
-            <th scope="col">Path</th>
-            <th
-              scope="col"
-              class="sortable"
-              data-field="session"
-              role="button"
-              tabindex="0"
-              [attr.aria-sort]="ariaSortFor('session')"
-              [attr.data-dir]="dirFor('session')"
-              [class.sorted]="isSorted('session')"
-              (click)="toggleSort('session')"
-              (keydown)="onHeaderKeydown($event, 'session')"
-            >
-              Session
-              @if (isSorted('session')) {
-                <svg class="caret" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
-                  <path d="M1.5 2.8 4 5.3l2.5-2.5" fill="none" stroke="currentColor" stroke-width="1.4"
-                        stroke-linecap="round" stroke-linejoin="round"
-                        [class.caret-asc]="dirFor('session') === 'asc'"/>
-                </svg>
-              }
-            </th>
+            }
           </tr>
         </thead>
         <tbody>
@@ -213,21 +151,20 @@
                   (click)="openRow($event, f)"
                 >{{ f.detector }}</button>
               </td>
-              <td class="code num">{{ f.code ?? '—' }}</td>
+              <td class="code num" [attr.title]="f.code">
+                {{ f.code ?? '—' }}
+                @if (f.detail) {
+                  <!-- Under the code, not beside it: the column is sized for the code, and a
+                       sub-code squeezed onto the same line would ellipsize the code first. -->
+                  <span class="code-detail" [attr.title]="f.detail">{{ f.detail }}</span>
+                }
+              </td>
               <td>
-                @switch (f.category) {
-                  @case ('DIRECT_MUTATION') {
-                    <span class="cat cat-mutation">direct mutation</span>
-                  }
-                  @case ('VCS_RESTORE') {
-                    <span class="cat cat-restore">vcs restore · legitimate</span>
-                  }
-                  @case ('EXTERNAL') {
-                    <span class="cat cat-external">external</span>
-                  }
-                  @default {
-                    <span class="cat cat-none muted">—</span>
-                  }
+                @if (f.category) {
+                  @let chip = categoryChip(f.category);
+                  <span class="cat" [class]="chip.cls">{{ chip.label }}</span>
+                } @else {
+                  <span class="cat cat-none muted">—</span>
                 }
               </td>
               <td class="conf" [class.unattributed]="f.confidence === null" [attr.title]="confidenceTipFor(f.confidence, f.category)">
@@ -290,7 +227,14 @@
     </div>
 
     @if (openDetail() !== null) {
-      <app-finding-detail [detail]="openDetail()!" (close)="close()"></app-finding-detail>
+      <app-finding-detail [detail]="openDetail()!" [context]="openContext()" [contextFailed]="contextFailed()"
+                          [contextReason]="contextFailed() ? store.failure('context') : null" (close)="close()"
+                          (openFinding)="openById($event)"></app-finding-detail>
+    } @else if (detailFailed()) {
+      <aside class="detail-pending" aria-label="Finding detail">
+        <p class="muted">This finding could not be loaded: {{ store.failure('detail') }}</p>
+        <button type="button" class="btn btn-ghost" (click)="close()">Close</button>
+      </aside>
     } @else if (detailLoading()) {
       <aside class="detail-pending" aria-label="Finding detail">
         <p class="muted">Loading finding…</p>

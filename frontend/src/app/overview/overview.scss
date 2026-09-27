@@ -267,6 +267,11 @@
   font-size: 12px;
 }
 
+.code-tail > span { display: block; }
+
+// A kind's dot sits inline in its cell, before the plane's name.
+.kinds .mix-dot { display: inline-block; margin-right: 7px; }
+
 // The board grew a fifth card, which left the last one alone on its row beside a hole.
 // The throughput table is the widest content here anyway, so it takes the whole row.
 .card-wide { grid-column: 1 / -1; }

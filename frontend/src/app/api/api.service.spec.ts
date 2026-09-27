@@ -32,6 +32,20 @@ describe('ApiService', () => {
     req.flush({ total: 0, page: 0, size: 20, items: [] });
   });
 
+  it('sends provider and role with the other shared filters, on every shared read', () => {
+    const filters = { provider: 'demo-gateway', role: 'subagent', model: 'demo-flash-8b' };
+    api.overview(filters).subscribe();
+    api.cohorts('role', undefined, filters).subscribe();
+
+    for (const url of ['/api/overview', '/api/cohorts']) {
+      const req = http.expectOne(r => r.url === url);
+      expect(req.request.params.get('provider'), url).toBe('demo-gateway');
+      expect(req.request.params.get('role'), url).toBe('subagent');
+      expect(req.request.params.get('model'), url).toBe('demo-flash-8b');
+      req.flush({});
+    }
+  });
+
   it('posts the re-index and reports the counts', () => {
     api.runIndex().subscribe();
     http.expectOne('/api/index/run').flush({

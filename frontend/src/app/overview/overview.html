@@ -1,5 +1,8 @@
 <section class="page">
-  @if (tiles()) {
+  <!-- A failed reload hides the previous tiles rather than leaving them under a rail that no
+       longer describes them: the next success elsewhere clears the error bar, and nothing would
+       then say these numbers were stale. -->
+  @if (tiles() && !store.failed('overview')) {
     <div class="tiles">
       @for (t of tiles(); track t.key) {
         <div class="tile">
@@ -17,7 +20,11 @@
           indexed data. Widen it to All time, or re-run the indexer.
         </p>
         <div class="empty-actions">
-          <button type="button" class="btn btn-ghost" (click)="useAllTime()">Use All time</button>
+          <!-- Only when the range is narrower: on an all-time view it navigated to the URL already
+               open and nothing moved. -->
+          @if (store.preset() !== 'all') {
+            <button type="button" class="btn btn-ghost" (click)="useAllTime()">Use All time</button>
+          }
           <button type="button" class="btn btn-ghost" [disabled]="busy()" (click)="runIndexer()">Run indexer</button>
         </div>
       </section>
@@ -89,8 +96,69 @@
               </li>
             }
           </ol>
-          @if (codeTail() > 0) {
-            <p class="code-tail muted">+{{ codeTail() | number }} findings in other codes</p>
+          @if (codeTail() > 0 || uncoded() > 0) {
+            <!-- One statement in two lines: what the list leaves out, and what has no code to list. -->
+            <p class="code-tail muted">
+              @if (codeTail() > 0) {
+                <span class="code-other">+{{ codeTail() | number }} findings in other codes</span>
+              }
+              @if (uncoded() > 0) {
+                <span class="code-uncoded">{{ uncoded() | number }} {{ uncoded() === 1 ? 'finding carries' : 'findings carry' }} no error code</span>
+              }
+            </p>
+          }
+        </div>
+
+        <div class="card card-wide">
+          <h3 class="card-title">Findings by kind</h3>
+          <!-- Not yet answered is not the same as answered with nothing: "no findings" shown while
+               the request is still out is the one wrong answer this tool must never give. -->
+          @if (store.breakdown() === null && store.failed('breakdown')) {
+            <p class="muted card-fallback">The kinds could not be loaded: {{ store.failure('breakdown') }}</p>
+          } @else if (store.breakdown() === null) {
+            <p class="muted card-fallback">Loading…</p>
+          } @else if (kinds().length === 0) {
+            <p class="muted card-fallback">No findings in this selection.</p>
+          } @else {
+            <!-- Each kind is a control, like each code: it opens its detector's rows in the
+                 findings table, with the rail's filters untouched. The label names the kind, but
+                 the backend filters by detector alone, so the control says it opens all of the
+                 detector's findings — not only this row's count of them. -->
+            <table class="tput kinds">
+              <thead>
+                <tr>
+                  <th scope="col">Kind</th>
+                  <th scope="col">Plane</th>
+                  <th scope="col" class="r">Findings</th>
+                  <th scope="col" class="r">Per 1k calls</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (k of kinds(); track $index) {
+                  <tr>
+                    <td>
+                      <button type="button" class="code-open kind-open"
+                              [attr.aria-label]="kindAction(k)" [title]="kindAction(k)"
+                              (click)="openKind(k.row.detector)">
+                        <span class="det-name">{{ k.row.detector }}</span>
+                        @if (k.qualifier) {
+                          <span [class]="k.code ? 'code-name' : 'muted'">{{ k.qualifier }}</span>
+                        }
+                      </button>
+                    </td>
+                    <td>
+                      <span class="mix-dot" [style.background]="PLANE_COLOURS[k.row.plane]"></span>
+                      {{ planeName(k.row.plane) }}
+                    </td>
+                    <td class="num r">{{ k.row.count | number }}</td>
+                    <td class="num r" [class.na]="k.row.perKCalls === null">{{ k.row.perKCalls === null ? 'n/a' : (k.row.perKCalls | number: '1.2-2') }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+            @if (kindTail() > 0) {
+              <p class="code-tail muted"><span class="code-other">+{{ kindTail() | number }} findings in other kinds</span></p>
+            }
           }
         </div>
 
@@ -131,6 +199,13 @@
         </div>
       </div>
     }
+  } @else if (store.failure('overview'); as reason) {
+    <!-- A failed first load used to leave the page blank: no tiles, and "Loading…" only while
+         busy. The reason is stated here, with the way to ask again. -->
+    <p class="muted page-fallback">
+      The overview could not be loaded: {{ reason }}
+      <button type="button" class="btn btn-ghost" (click)="retry()">Try again</button>
+    </p>
   } @else if (busy()) {
     <p class="muted page-fallback">Loading the overview…</p>
   }

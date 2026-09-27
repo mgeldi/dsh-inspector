@@ -78,10 +78,8 @@
 
   &:active { transform: scale(0.96); transition-duration: 0.06s; }
 
-  &:focus-visible {
-    outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
-    outline-offset: 1px;
-  }
+  // No focus rule of its own: the global button:focus-visible ring is this exact ring, and
+  // repeating it here cost the bytes this stylesheet's 4 kB budget no longer has.
 }
 
 .summary {

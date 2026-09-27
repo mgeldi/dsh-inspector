@@ -1,18 +1,43 @@
 <section class="cpage">
-  @if (!loaded()) {
-    <p class="cloading muted">Loading cohorts…</p>
+  <!-- A baseline the server rejected (a shared link, or a cohort a re-index removed) leaves no
+       table, so none of the table's controls: the way out is offered here, above every state. -->
+  @if (staleBaseline(); as stale) {
+    <p class="crecover">
+      <span>There is no cohort <span class="ckey">{{ stale }}</span> in this selection to use as
+        the baseline.</span>
+      <button type="button" class="btn btn-ghost" (click)="resetBaseline()">Use the busiest cohort</button>
+    </p>
+  }
+  <!-- A failed reload is treated like a failed first load: the table it would have replaced
+       described another selection, and a stale table with fresh filters above it is a wrong
+       answer that looks right. A refused baseline is the exception: the table and the Group-by
+       select above it still name the same axis, and the recovery line says what was refused. -->
+  @if (!loaded() || (store.failed('cohorts') && staleBaseline() === null)) {
+    @if (store.failure('cohorts'); as reason) {
+      <p class="cloading muted">
+        The cohorts could not be loaded: {{ reason }}
+        @if (staleBaseline() === null) {
+          <button type="button" class="btn btn-ghost" (click)="retry()">Try again</button>
+        }
+      </p>
+    } @else {
+      <p class="cloading muted">Loading cohorts…</p>
+    }
   } @else {
+    <!-- The selected value is bound per option, never as the select's [value]: that binding is
+         applied before the @for has created the options, so a link or a reload on any axis but
+         the first showed "Harness version" above a table grouped by something else — and
+         choosing Harness version then did nothing, because it already looked chosen. -->
     <div class="ccontrols">
       <div class="cfield">
         <label class="clabel" for="group-by">Group by</label>
         <select
           class="cselect"
           id="group-by"
-          [value]="groupBy()"
           (change)="changeGroup($any($event.target).value)"
         >
           @for (g of groupKeys; track g.key) {
-            <option [value]="g.key">{{ g.label }}</option>
+            <option [value]="g.key" [selected]="g.key === shownAxis()">{{ g.label }}</option>
           }
         </select>
       </div>
@@ -21,11 +46,10 @@
         <select
           class="cselect"
           id="baseline"
-          [value]="baseline()"
           (change)="changeBaseline($any($event.target).value)"
         >
           @for (b of baselineKeys(); track b) {
-            <option [value]="b">{{ b }}</option>
+            <option [value]="b" [selected]="b === baseline()">{{ b }}</option>
           }
         </select>
       </div>
@@ -40,24 +64,44 @@
 
     @if (rows().length === 0) {
       <section class="cempty" aria-label="No cohorts">
-        <p class="cempty-title">The index holds no sessions</p>
-        <p class="cempty-text">
-          Run the indexer from the toolbar, or point the corpus at a directory that holds sessions.
-        </p>
+        @if (filtered()) {
+          <p class="cempty-title">No sessions match the current filters</p>
+          <p class="cempty-text">
+            The time range and the rail facets exclude every session. Widen the range or clear a
+            facet in the rail.
+          </p>
+        } @else {
+          <p class="cempty-title">The index holds no sessions</p>
+          <p class="cempty-text">
+            Run the indexer from the toolbar, or point the corpus at a directory that holds sessions.
+          </p>
+        }
       </section>
     } @else {
+      <!-- The table scrolls sideways inside its own box rather than pushing the page: fifteen
+           columns fit beside the open rail at 1280px only while the numbers stay short, and a
+           clipped delta column would hide the one number the screen exists for. -->
+      <div class="ctable-wrap">
       <table class="ctable" aria-label="Cohort comparison">
+        <colgroup span="3"></colgroup>
+        @for (g of rateGroups; track g.key) {
+          <colgroup span="3"></colgroup>
+        }
         <thead>
           <tr>
-            <th scope="col">Cohort</th>
-            <th scope="col">Sessions</th>
-            <th scope="col">Observed calls</th>
-            <th scope="col">Findings</th>
-            <th scope="col">Guard findings</th>
-            <th scope="col">Findings / 1k</th>
-            <th scope="col">Violation / 1k</th>
-            <th scope="col">Δ findings</th>
-            <th scope="col">Δ violation</th>
+            <th scope="col" rowspan="2">Cohort</th>
+            <th scope="col" rowspan="2">Sessions</th>
+            <th scope="col" rowspan="2">Observed calls</th>
+            @for (g of rateGroups; track g.key) {
+              <th scope="colgroup" colspan="3" class="group-head gstart">{{ g.label }}</th>
+            }
+          </tr>
+          <tr>
+            @for (g of rateGroups; track g.key) {
+              <th scope="col" class="gstart">Count</th>
+              <th scope="col">Per 1k</th>
+              <th scope="col">Δ</th>
+            }
           </tr>
         </thead>
         <tbody>
@@ -71,53 +115,47 @@
               </td>
               <td class="num count">{{ fmt(c.sessions) }}</td>
               <td class="num count">{{ fmt(c.toolCalls) }}</td>
-              <td class="num count">{{ fmt(c.findings) }}</td>
-              <td class="num count">{{ fmt(c.guardFindings) }}</td>
-              <td class="num rate" [class.na]="c.findingsPerKCalls === null">{{ rateText(c.findingsPerKCalls) }}</td>
-              <td class="num rate" [class.na]="c.violationRatePerK === null">{{ rateText(c.violationRatePerK) }}</td>
-              @let dfd = deltaKind(c.findingsPerKCallsDelta);
-              <td
-                class="num delta"
-                [class.delta-up]="dfd === 'up'"
-                [class.delta-down]="dfd === 'down'"
-                [class.zero]="dfd === 'zero'"
-                [class.na]="dfd === 'na'"
-              >
-                @if (dfd === 'up' || dfd === 'down') {
-                  <!-- The caret says direction without leaning on the sign: up means worse, down better. -->
-                  <svg class="tri" [class.tri-down]="dfd === 'down'" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
-                    <path d="M4 1.6 7.1 6.7H0.9z"/>
-                  </svg>
-                }
-                {{ deltaText(c.findingsPerKCallsDelta) }}
-              </td>
-              @let vrd = deltaKind(c.violationRatePerKDelta);
-              <td
-                class="num delta"
-                [class.delta-up]="vrd === 'up'"
-                [class.delta-down]="vrd === 'down'"
-                [class.zero]="vrd === 'zero'"
-                [class.na]="vrd === 'na'"
-              >
-                @if (vrd === 'up' || vrd === 'down') {
-                  <svg class="tri" [class.tri-down]="vrd === 'down'" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
-                    <path d="M4 1.6 7.1 6.7H0.9z"/>
-                  </svg>
-                }
-                {{ deltaText(c.violationRatePerKDelta) }}
-              </td>
+              @for (g of rateGroups; track g.key) {
+                @let rate = g.rate(c);
+                @let delta = g.delta(c);
+                @let kind = deltaKind(delta);
+                <td class="num count gstart" [attr.data-group]="g.key">{{ fmt(g.count(c)) }}</td>
+                <td class="num rate" [attr.data-group]="g.key" [class.na]="rate === null">{{ rateText(rate) }}</td>
+                <td
+                  class="num delta"
+                  [attr.data-group]="g.key"
+                  [class.delta-up]="kind === 'up'"
+                  [class.delta-down]="kind === 'down'"
+                  [class.zero]="kind === 'zero'"
+                  [class.na]="kind === 'na'"
+                >
+                  @if (kind === 'up' || kind === 'down') {
+                    <!-- The caret says direction without leaning on the sign: up means worse, down better. -->
+                    <svg class="tri" [class.tri-down]="kind === 'down'" viewBox="0 0 8 8" aria-hidden="true" focusable="false">
+                      <path d="M4 1.6 7.1 6.7H0.9z"/>
+                    </svg>
+                  }
+                  {{ deltaText(delta) }}
+                </td>
+              }
             </tr>
           }
         </tbody>
       </table>
+      </div>
 
       <p class="units muted">
         Rates are findings per 1,000 observed tool calls — a <code>tool/result</code> whose
-        <code>tool/call</code> never appeared is stored but not counted. Deltas are
-        <strong>percentage points</strong> against the baseline cohort, signed and coloured by
-        direction: lower is better, so improvements render in the accent and regressions in the
-        violation hue. <code>n/a</code> is a cohort with no observed calls.
+        <code>tool/call</code> never appeared is stored but not counted. Every finding belongs to
+        exactly one plane, so the Guard, Model misuse and Infrastructure counts sum to All findings.
+        Deltas are <strong>percentage points</strong> against the baseline cohort, signed and
+        coloured by direction: lower is better, so improvements render in the accent and
+        regressions in the violation hue. <code>n/a</code> is a cohort with no observed calls.
       </p>
+
+      <!-- The judge: the table above says how far apart two cohorts are, this says whether the
+           data can tell them apart at all. Same axis, same baseline, same selection. -->
+      <app-cohort-judge [page]="page()!" />
     }
   }
 </section>

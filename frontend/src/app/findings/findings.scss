@@ -102,12 +102,11 @@ app-finding-detail,
   // The colgroup in the template is only honoured under a fixed layout; auto layout would
   // ignore it and grow the table past the wrapper, pushing SESSION off the right edge.
   table-layout: fixed;
-  // Below this the wrapper scrolls instead of crushing a column into three characters. The
-  // number is deliberately under a 1280 window's usable outlet width (~1000 px): the table
-  // should fit the laptop it is demoed on, and scroll only past that.
-  // 892 px of fixed columns plus a readable minimum for PATH. Raised from 900 when CODE
-  // stopped being the flexible column: the budget has to cover the code in full now.
-  min-width: 1010px;
+  // Below this the wrapper scrolls instead of crushing a column into three characters. It sits
+  // under the ~963px a 1280 window leaves beside the open rail once the wrapper's and the page's
+  // vertical scrollbars are both showing: 888px of fixed columns (the colgroup says where each
+  // comes from) plus 62px for PATH. At 990 it fitted only while neither bar showed.
+  min-width: 950px;
   border-collapse: collapse;
   font-size: 13px;
 }
@@ -118,7 +117,7 @@ app-finding-detail,
   z-index: 2;
   background: $surface-raised;
   border-bottom: 1px solid $hairline;
-  padding: 9px 10px;
+  padding: 9px 8px;
   color: $text-lo;
   font-size: 11px;
   font-weight: 600;
@@ -129,7 +128,7 @@ app-finding-detail,
 }
 
 .ftable tbody td {
-  padding: 8px 10px;
+  padding: 8px;
   // Fixed columns plus nowrap means content can exceed the cell; clipped with an ellipsis
   // is the intended behaviour, overlapping the next column is not.
   overflow: hidden;
@@ -143,7 +142,19 @@ app-finding-detail,
 // Sorting is server-side: the header is the only control, and it says what it asked for.
 // Hover brightens, and the active column is the only header at full text brightness —
 // obvious without shouting. The direction is an inline SVG caret, never a unicode glyph.
-th.sortable {
+// The control is a button filling the cell, so the whole header stays the target; it takes
+// the header's type from the cell rather than the browser's button defaults.
+.sort {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0;
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
   cursor: pointer;
   user-select: none;
   transition: color 0.15s ease, transform 0.12s ease;
@@ -154,7 +165,7 @@ th.sortable {
 
   &:focus-visible {
     outline: 2px solid color-mix(in srgb, $accent 75%, transparent);
-    outline-offset: -2px;
+    outline-offset: 3px;
   }
 }
 

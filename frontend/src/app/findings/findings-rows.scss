@@ -81,6 +81,16 @@
   color: $text-lo;
 }
 
+// The harness sub-code, one line under the code and quieter than it; its own ellipsis, so a
+// long sub-code clips itself and never the code above it.
+.code-detail {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
 // Path and session are long identifiers: monospace, muted, and capped with ellipsis so a
 // long path truncates instead of breaking the grid. The full value is in the title.
 .path,
@@ -113,7 +123,8 @@
   background: color-mix(in srgb, $accent 12%, transparent);
 }
 
-.cat-external {
+.cat-external,
+.cat-miss {
   color: $text-lo;
   background: color-mix(in srgb, $text-lo 12%, transparent);
 }

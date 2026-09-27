@@ -1,6 +1,5 @@
-// The shared filter values, mirroring the backend's InsightFilter (from/to epoch millis,
-// plus schema, model, preset, harnessVersion). Task 3 needed only this shape; the preset
-// logic and its spec are Task 4's.
+// The shared filter values, mirroring the backend's InsightFilter: from/to epoch millis, plus
+// one string per facet in FACET_KEYS.
 //
 // The string facets are `string | null` (still optional): the rail's "Clear" writes null,
 // and absence — not an empty string — is what means "not filtered", because the backend
@@ -11,8 +10,40 @@ export interface FilterValues {
   to?: number | null;
   schema?: string | null;
   model?: string | null;
+  provider?: string | null;
+  role?: string | null;
   preset?: string | null;
   harnessVersion?: string | null;
+}
+
+/**
+ * The string facets of the filter contract, in the order the rail shows them — and the one
+ * list of them. The request params, the URL round-trip, the rail, the "is anything filtered"
+ * checks and the active-filter count all iterate this, so a facet the backend adds is one
+ * entry here rather than five hand-kept copies of the same four words, one of which is
+ * forgotten.
+ */
+export const FACET_KEYS = ['schema', 'model', 'provider', 'role', 'preset', 'harnessVersion'] as const;
+export type FacetKey = (typeof FACET_KEYS)[number];
+
+/**
+ * Whether a facet narrows the selection. `!= null` on purpose: an untouched facet is absent
+ * (undefined) and a cleared one is null, and both mean "not filtered".
+ */
+export function facetIsSet(f: FilterValues, key: FacetKey): boolean {
+  const value = f[key];
+  return value != null && value !== '';
+}
+
+/**
+ * The filters with one facet taken out — the cohort axis, for the cohorts and judge requests.
+ * Grouping by a facet asks for every value of it side by side, and a filter on that facet
+ * would leave one row whose delta against itself is zero. The filter is not dropped from the
+ * URL or the rail: it is the reader's choice for the other screens, and the rail says it is
+ * not applied here.
+ */
+export function withoutFacet<F extends FilterValues>(f: F, key: FacetKey): F {
+  return { ...f, [key]: null };
 }
 
 export type PresetId = '24h' | '7d' | '30d' | 'all';

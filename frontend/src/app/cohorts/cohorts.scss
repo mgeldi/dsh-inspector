@@ -56,6 +56,22 @@
   }
 }
 
+// ---- a refused baseline, and the way out ----
+
+.crecover {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 8px 12px;
+  border: 1px solid color-mix(in srgb, $plane-misuse 40%, $hairline);
+  border-radius: 8px;
+  font-size: 13px;
+  color: $text-lo;
+}
+
+.ckey { color: $text-hi; font-weight: 500; }
+
 // ---- the basis banner ----
 
 // The backend's own sentence about what the table is allowed to claim: it is on
@@ -89,12 +105,17 @@
 
 // ---- the table ----
 
+// The scroll box, not the page: the rounded border moves here so it frames what is visible.
+.ctable-wrap {
+  overflow-x: auto;
+  border: 1px solid $hairline;
+  border-radius: 8px;
+}
+
 .ctable {
   width: 100%;
   border-collapse: collapse;
   background: $surface-raised;
-  border: 1px solid $hairline;
-  border-radius: 8px;
   font-size: 13px;
 }
 
@@ -110,10 +131,24 @@
   text-align: right;
   white-space: nowrap;
 
-  &:first-child {
-    text-align: left;
-  }
+  // The three row-spanning headers sit on the sub-header line, not floating mid-height, and
+  // may wrap into the second row they span: "Observed calls" on one line was the widest header
+  // in a table that already has to fit fifteen columns beside the rail.
+  &[rowspan] { vertical-align: bottom; white-space: normal; }
 }
+
+// Only the cohort column is left-aligned: the second header row's first cell is a count.
+.ctable thead tr:first-child th:first-child { text-align: left; }
+
+// A group label spans its three columns; the rule on its left edge runs down through the
+// body, so a count cannot be read as belonging to the plane beside it.
+.ctable thead th.group-head { text-align: center; }
+.ctable .gstart { border-left: 1px solid $hairline; }
+
+// Twelve grouped columns take 6px sides instead of 10, so the table fits beside the open rail
+// at 1280px on ordinary numbers; the scroll box above catches the wider ones.
+.ctable thead tr + tr th,
+.ctable tbody td[data-group] { padding-left: 6px; padding-right: 6px; }
 
 .ctable tbody td {
   padding: 8px 10px;

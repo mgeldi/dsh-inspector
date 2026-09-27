@@ -50,10 +50,11 @@ const overview: OverviewDto = {
   planeMix: { GUARD: 4, MODEL_MISUSE: 3, INFRASTRUCTURE: 2 },
   topDetectors: [{ detector: 'error-plane', count: 6 }],
   topCodes: [{ code: 'FS_NOT_FOUND', count: 6 }],
+  uncodedFindings: 0,
   series: [{ day: '2026-09-01', findings: 3, toolCalls: 16 }],
   throughput: [],
   vocabulary: {
-    schemas: ['V0', 'V3'], models: ['demo-flash-8b'], presets: ['smoke'],
+    schemas: ['V0', 'V3'], models: ['demo-flash-8b'], providers: [], roles: [], presets: ['smoke'],
     harnessVersions: ['0.1.0'], codes: [], detectors: [],
   },
 };
@@ -94,6 +95,9 @@ describe('App', () => {
     http.expectOne(r => r.url === '/api/overview').flush(overview);
     http.expectOne(r => r.url === '/api/findings').flush({ total: 9, page: 0, size: 20, items: [] });
     await fixture.whenStable();
+    fixture.detectChanges();
+    // The overview screen asks for its own breakdown panel, like the cohorts screen owns its table.
+    http.expectOne(r => r.url === '/api/breakdown').flush([]);
     fixture.detectChanges();
 
     const compiled = fixture.nativeElement as HTMLElement;

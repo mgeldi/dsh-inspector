@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
 import { PLANE_COLOURS } from '../charts/theme';
-import type { Category, FindingDetailDto, FindingDto, Plane, SortDir, SortField } from '../api/types';
+import type { Category, FindingContextDto, FindingDetailDto, FindingDto, Plane, SortDir, SortField } from '../api/types';
 import { InsightsStore } from '../state/insights.store';
-import { FindingDetail, confidenceLabel, confidenceTip, planeLabel, timeShort } from './finding-detail';
+import { FindingDetail } from './finding-detail';
+import { categoryChip, confidenceLabel, confidenceTip, planeLabel, timeShort } from './finding-words';
 import { ViewUrl } from '../state/view-url';
 import { applyPreset } from '../state/filters';
 
@@ -67,9 +68,33 @@ export class Findings {
   });
   readonly detailLoading = computed(() => this.openId() !== null && this.openDetail() === null);
 
+  /** The calls around the open finding, by the same rule: another id's sequence is not this one's. */
+  readonly openContext = computed<FindingContextDto | null>(() => {
+    const id = this.openId();
+    const c = this.store.context();
+    return id !== null && c !== null && c.findingId === id ? c : null;
+  });
+
+  /** Whether the open finding's detail came back as an error: an answer, not a wait. */
+  readonly detailFailed = computed(() => {
+    const id = this.openId();
+    return id !== null && this.openDetail() === null && this.store.detailFailed() === id;
+  });
+
+  /** Whether the open finding's sequence came back as an error rather than as calls. */
+  readonly contextFailed = computed(() => {
+    const id = this.openId();
+    return id !== null && this.store.contextFailed() === id;
+  });
+
   open(f: FindingDto): void {
-    this.openId.set(f.id);
-    this.store.selectFinding(f.id);
+    this.openById(f.id);
+  }
+
+  /** Also how a neighbour in the sequence opens: it may sit on another page of the table. */
+  openById(id: number): void {
+    this.openId.set(id);
+    this.store.selectFinding(id);
   }
 
   /** The row's primary control (the focusable detector cell) calls this, not `open` again. */
@@ -80,7 +105,40 @@ export class Findings {
 
   close(): void { this.openId.set(null); }
 
+  /** Ask again for the page the URL describes, after a failure. */
+  retry(): void { this.store.loadFindings(); }
+
+  constructor() {
+    // The drill-downs narrow this screen and no other, so the badge and the rail's Clear count
+    // them only while it is open. Cleared on teardown, like the cohorts screen's axis.
+    this.store.findingsOpen.set(true);
+    inject(DestroyRef).onDestroy(() => this.store.findingsOpen.set(false));
+
+    // A re-index rebuilds every id and never reuses one, so the open finding and the neighbours
+    // listed in its sequence name rows that are gone: the panel closes rather than offer them.
+    let seen = this.store.lastIndex();
+    effect(() => {
+      const run = this.store.lastIndex();
+      if (run !== seen) {
+        seen = run;
+        this.openId.set(null);
+      }
+    });
+  }
+
   // ---- server-side sort ----
+
+  /** The columns in order; the ones with a field sort on the server. */
+  readonly headers: readonly { label: string; field: SortField | null }[] = [
+    { label: 'Time', field: 'time' },
+    { label: 'Plane', field: 'plane' },
+    { label: 'Detector', field: 'detector' },
+    { label: 'Code', field: 'code' },
+    { label: 'Category', field: null },
+    { label: 'Confidence', field: 'confidence' },
+    { label: 'Path', field: null },
+    { label: 'Session', field: 'session' },
+  ];
 
   toggleSort(field: SortField): void {
     const cur = this.activeSort();
@@ -100,20 +158,12 @@ export class Findings {
     return cur.field === field ? cur.dir : null;
   }
 
-  /** The WAI-ARIA sort state for the header: the caret paints it, the attribute states it. */
+  /** The WAI-ARIA sort state of the sorted header: the caret paints it, the attribute states it. */
   ariaSortFor(field: SortField): 'ascending' | 'descending' | 'none' {
     const dir = this.dirFor(field);
     if (dir === 'asc') { return 'ascending'; }
     if (dir === 'desc') { return 'descending'; }
     return 'none';
-  }
-
-  /** Headers are role="button": Enter and Space trigger the same sort a click does. */
-  onHeaderKeydown(ev: KeyboardEvent, field: SortField): void {
-    if (ev.key === 'Enter' || ev.key === ' ') {
-      ev.preventDefault();
-      this.toggleSort(field);
-    }
   }
 
   // ---- pagination ----
@@ -195,8 +245,22 @@ export class Findings {
     this.url.patch({ code: null, page: 0 });
   }
 
+  /** The overview's kinds panel hands a detector over the same way the codes panel hands a code. */
+  readonly activeDetector = computed(() => this.store.detector());
+
+  /** Which drill-down the server refused, if the newest findings request failed over one. */
+  readonly rejectedDrill = computed<'code' | 'detector' | null>(() => {
+    const r = this.store.rejected();
+    return r !== null && r.lane === 'findings' && (r.filter === 'code' || r.filter === 'detector') ? r.filter : null;
+  });
+
+  clearDetector(): void {
+    this.url.patch({ detector: null, page: 0 });
+  }
+
   confidenceWord(c: number | null, category: Category | null): string { return confidenceLabel(c, category); }
   confidenceTipFor(c: number | null, category: Category | null): string { return confidenceTip(c, category); }
   planeName(p: Plane): string { return planeLabel(p); }
+  categoryChip(c: Category): { label: string; cls: string } { return categoryChip(c); }
   fmtTimeShort = timeShort;
 }

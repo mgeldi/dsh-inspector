@@ -1,11 +1,14 @@
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatToolbarModule } from '@angular/material/toolbar';
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy, Component, DestroyRef, ElementRef, computed, inject, signal, viewChild,
+} from '@angular/core';
 import { ActivatedRoute, NavigationEnd, Router, RouterLink, RouterOutlet } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { filter, map } from 'rxjs';
+import { applyUrlState } from '../state/apply-url';
 import { InsightsStore } from '../state/insights.store';
-import { findingsAxisDiffers, fromParams, sharedFiltersDiffer, type UrlState } from '../state/url-state';
+import { fromParams, type UrlState } from '../state/url-state';
 import { FilterRail } from './filter-rail';
 
 /**
@@ -48,17 +51,10 @@ export class Shell {
    * How much is currently narrowing the view. A collapsed rail must not be able to hide that
    * filtering is happening: an unexplained short table reads as "there is not much here",
    * which is the same wrong answer as an empty dashboard that means "you typed something
-   * wrong". The count rides on the toggle so the fact survives the panel being shut.
+   * wrong". The count rides on the toggle so the fact survives the panel being shut. It is the
+   * store's, because the rail's Clear button is enabled by the same number.
    */
-  readonly activeFilterCount = computed(() => {
-    const f = this.store.filters();
-    let count = f.presetId === 'all' ? 0 : 1;
-    for (const facet of ['schema', 'model', 'preset', 'harnessVersion'] as const) {
-      if (f[facet]) { count += 1; }
-    }
-    if (this.store.code()) { count += 1; }
-    return count;
-  });
+  readonly activeFilterCount = this.store.activeFilterCount;
 
   readonly tabs = [
     { key: 'overview', label: 'Overview', link: '' },
@@ -92,12 +88,25 @@ export class Shell {
     return `${run}, pruned ${li.pruned} ${li.pruned === 1 ? 'stream' : 'streams'}`;
   });
 
+  /** The scrolling pane the routes render into. */
+  private readonly outlet = viewChild<ElementRef<HTMLElement>>('outlet');
+
   constructor() {
     this.router.events.pipe(
       filter(e => e instanceof NavigationEnd),
       map(e => (e as NavigationEnd).urlAfterRedirects),
       takeUntilDestroyed(this.destroyRef),
-    ).subscribe(url => this.currentUrl.set(url));
+    ).subscribe(url => {
+      // A new screen starts at its top. The pane is the element that scrolls, not the window, so
+      // the router's own scroll restoration never reaches it: a drill-down from a scrolled
+      // overview opened Findings with its banner under the toolbar, 14px of it showing. A change
+      // of query alone (a page, a sort, a facet) keeps the reader where they are.
+      if (pathOf(url) !== pathOf(this.currentUrl())) {
+        const pane = this.outlet()?.nativeElement;
+        if (pane) { pane.scrollTop = 0; }
+      }
+      this.currentUrl.set(url);
+    });
     // The URL is upstream of the data. The shell reads it, writes the store, and asks for
     // exactly the loads the change requires — so the initial load, a shared link, a reload
     // and the back button all arrive through the same path instead of three of them being
@@ -107,28 +116,11 @@ export class Shell {
       .subscribe(map => this.applyUrl(fromParams(key => map.get(key))));
   }
 
-  /**
-   * Feed the store from the URL, then load what actually changed. A page change must not
-   * re-ask the overview: it describes the same population as before, and the cohorts screen
-   * re-asks itself through the filters signal it already watches.
-   */
+  /** Feed the store from the URL and load what changed; `applyUrlState` says how. */
   private applyUrl(next: UrlState): void {
     const previous = this.applied;
     this.applied = next;
-
-    this.store.filters.set(next.filters);
-    this.store.code.set(next.code);
-    this.store.sort.set(next.sort);
-    this.store.page.set(next.page);
-    this.store.size.set(next.size);
-
-    if (previous === null || sharedFiltersDiffer(previous, next)) {
-      this.store.loadAll();
-      return;
-    }
-    if (findingsAxisDiffers(previous, next)) {
-      this.store.loadFindings();
-    }
+    applyUrlState(this.store, previous, next);
   }
 
   tabActive(key: string): boolean {
@@ -152,6 +144,11 @@ export class Shell {
   reindex(): void { this.store.reindex(); }
   dismissError(): void { this.store.dismissError(); }
   dismissNotice(): void { this.store.dismissNotice(); }
+}
+
+/** The path of a router URL, without its query or fragment. */
+function pathOf(url: string): string {
+  return url.split(/[?#]/)[0];
 }
 
 const RAIL_KEY = 'dsh-inspector.rail';

@@ -1,69 +1,10 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { PLANE_COLOURS } from '../charts/theme';
-import type { Category, FindingDetailDto, Plane } from '../api/types';
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-function pad2(n: number): string { return String(n).padStart(2, '0'); }
-
-/**
- * Local-time date formatting without DatePipe: the pipe's locale table gets hoisted into
- * the initial bundle by linker dedupe (measured: one extra ɵpipe and ~11 kB in main),
- * while these cells are not an i18n surface. The helpers cost nothing in the bundle.
- */
-export function timeShort(ms: number): string {
-  const d = new Date(ms);
-  return `${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
-
-export function timeLong(ms: number): string {
-  const d = new Date(ms);
-  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
-
-const PLANE_LABELS: Record<Plane, string> = {
-  GUARD: 'Guard',
-  MODEL_MISUSE: 'Model misuse',
-  INFRASTRUCTURE: 'Infrastructure',
-};
-
-export function planeLabel(p: Plane): string {
-  return PLANE_LABELS[p];
-}
-
-/**
- * The §5.3 confidence tier as a word: 0.9 → high, 0.6 → medium. A null confidence is
- * never a dash and never 0 — a zero would assert "the model is certainly not the cause",
- * the opposite of what null means.
- *
- * <p>But null means two different things, and rendering both as 'unattributed' was a lie
- * the backend had already forbidden in prose: {@code ErrorPlaneDetector} says the UI
- * "distinguishes these by detector, not by rendering every null as 'unattributed'", and
- * the UI did exactly that. A finding from a detector that performs no attribution at all
- * was labelled as one whose attribution had been attempted and had failed.
- *
- * <p>The signal is `category`, not the detector id: stamp-guard is the only detector that
- * attributes, and it always records which of the three outcomes it reached, while the
- * other three pass null. So a null category is "no attribution model applies here" —
- * a fact about the row rather than a name the frontend has to know.
- */
-export function confidenceLabel(c: number | null, category: Category | null): string {
-  if (c === null) { return category === null ? 'n/a' : 'unattributed'; }
-  if (c >= 0.9) { return 'high'; }
-  if (c >= 0.6) { return 'medium'; }
-  return 'low';
-}
-
-/** The tooltip on a confidence label: what each tier measured, per §5.3. */
-export function confidenceTip(c: number | null, category: Category | null): string {
-  switch (confidenceLabel(c, category)) {
-    case 'high': return 'high: absolute-path match plus a mutating verb';
-    case 'medium': return 'medium: basename match plus a mutating verb';
-    case 'low': return 'low: text-pattern fallback';
-    case 'unattributed': return 'unattributed: a cause was looked for in the window and none was found — not that none existed';
-    default: return 'not applicable: this detector reports the error, it does not attribute a cause — only stamp-guard does';
-  }
-}
+import type { FindingContextDto, FindingDetailDto } from '../api/types';
+import { FindingSequence } from './finding-sequence';
+import {
+  categoryChip, chainSteps, confidenceLabel, confidenceTip, planeLabel, timeLong,
+} from './finding-words';
 
 /**
  * The side panel for one finding — the only place evidence text appears (§4.1).
@@ -76,6 +17,7 @@ export function confidenceTip(c: number | null, category: Category | null): stri
   selector: 'app-finding-detail',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [FindingSequence],
   template: `
     @let d = detail();
     @let f = d.finding;
@@ -93,6 +35,14 @@ export function confidenceTip(c: number | null, category: Category | null): stri
           @if (f.code) {
             <span class="chip code-chip">{{ f.code }}</span>
           }
+          @if (f.detail) {
+            <!-- The harness sub-code behind the code: "SERVER" says who failed, this says how.
+                 Styled as a code (the stylesheet sits at its 4 kB budget, so no rule of its own). -->
+            <span class="chip code-chip detail-chip" [attr.title]="'detail: ' + f.detail">{{ f.detail }}</span>
+          }
+          @if (f.category) {
+            <span class="chip cat-chip">{{ categoryChip(f.category).label }}</span>
+          }
           <span class="chip conf" [class.unattributed]="f.confidence === null" [attr.title]="confidenceTip(f.confidence, f.category)">{{ confidenceLabel(f.confidence, f.category) }}</span>
           @if (f.pathHint) {
             <span class="chip path-chip" [attr.title]="f.pathHint">{{ f.pathHint }}</span>
@@ -103,36 +53,27 @@ export function confidenceTip(c: number | null, category: Category | null): stri
         }
       </header>
 
-      @if (f.staleSeq !== null || f.causeSeq !== null || f.seq !== null) {
+      @let steps = chainSteps(f);
+      @if (steps.length > 0) {
         <!-- The chain is one reading: a timeline the eye follows top to bottom, the dots in
              the finding's plane colour, the hairline connecting them. -->
         <section class="chain" aria-label="Causal chain" [style.--plane]="PLANE_COLOURS[f.plane]">
           <h3 class="section-title">Causal chain</h3>
           <ol class="chain-steps">
-            @if (f.staleSeq !== null) {
-              <li class="chain-step">
+            @for (s of steps; track s.label) {
+              <li class="chain-step" [class.final]="s.final">
                 <span class="chain-dot"></span>
-                <span class="chain-seq num">{{ f.staleSeq }}</span>
-                <span class="chain-label">stamped at {{ f.staleSeq }}</span>
-              </li>
-            }
-            @if (f.causeSeq !== null) {
-              <li class="chain-step">
-                <span class="chain-dot"></span>
-                <span class="chain-seq num">{{ f.causeSeq }}</span>
-                <span class="chain-label">changed at {{ f.causeSeq }}</span>
-              </li>
-            }
-            @if (f.seq !== null) {
-              <li class="chain-step final">
-                <span class="chain-dot"></span>
-                <span class="chain-seq num">{{ f.seq }}</span>
-                <span class="chain-label">refused at {{ f.seq }}</span>
+                <span class="chain-seq num">{{ s.seq }}</span>
+                <span class="chain-label">{{ s.label }}</span>
               </li>
             }
           </ol>
         </section>
       }
+
+      <!-- What the stream did around it, in order: the chain names three calls, this shows the
+           ones between and beside them. Its own component, with its own style budget. -->
+      <app-finding-sequence [finding]="f" [context]="context()" [failed]="contextFailed()" [reason]="contextReason()" (openFinding)="openFinding.emit($event)" />
 
       @if (f.category !== 'EXTERNAL') {
         @if (d.evidence.length > 0) {
@@ -159,7 +100,7 @@ export function confidenceTip(c: number | null, category: Category | null): stri
           </section>
         } @else {
           <p class="no-evidence muted">
-            No evidence attached — evidence is recorded for stamp-guard findings only.
+            No evidence attached — evidence is recorded for stamp-guard and shell-edit findings only.
           </p>
         }
       } @else {
@@ -174,9 +115,18 @@ export function confidenceTip(c: number | null, category: Category | null): stri
 })
 export class FindingDetail {
   readonly detail = input.required<FindingDetailDto>();
+  /** The calls around the finding; null while it is on its way, or when it could not be had. */
+  readonly context = input<FindingContextDto | null>(null);
+  readonly contextFailed = input(false);
+  /** Why the sequence failed, shown in its place. */
+  readonly contextReason = input<string | null>(null);
   readonly close = output<void>();
+  /** A neighbour in the sequence was chosen: the host opens it like a row. */
+  readonly openFinding = output<number>();
   readonly PLANE_COLOURS = PLANE_COLOURS;
   readonly planeLabel = planeLabel;
+  readonly categoryChip = categoryChip;
+  readonly chainSteps = chainSteps;
   readonly confidenceLabel = confidenceLabel;
   readonly confidenceTip = confidenceTip;
   readonly fmtTime = timeLong;

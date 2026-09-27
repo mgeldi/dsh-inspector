@@ -14,10 +14,11 @@ const overview: OverviewDto = {
   planeMix: { GUARD: 4, MODEL_MISUSE: 3, INFRASTRUCTURE: 2 },
   topDetectors: [{ detector: 'error-plane', count: 6 }],
   topCodes: [{ code: 'FS_NOT_FOUND', count: 6 }],
+  uncodedFindings: 0,
   series: [{ day: '2026-09-01', findings: 3, toolCalls: 16 }],
   throughput: [],
   vocabulary: {
-    schemas: ['V0', 'V3'], models: ['demo-flash-8b'], presets: ['unknown', 'smoke'],
+    schemas: ['V0', 'V3'], models: ['demo-flash-8b'], providers: [], roles: [], presets: ['unknown', 'smoke'],
     harnessVersions: ['0.1.0', '0.2.0'], codes: [], detectors: [],
   },
 };
@@ -278,7 +279,12 @@ describe('Shell', () => {
     store.code.set('FS_STALE_VERSION');
     fixture.detectChanges();
 
-    // the range, the facet and the code drill-down
+    // the range and the facet: the code drill-down narrows the Findings screen, not this one
+    expect(el.querySelector('.rail-badge')!.textContent!.trim()).toBe('2');
+
+    // on the Findings screen it does narrow, and it counts
+    store.findingsOpen.set(true);
+    fixture.detectChanges();
     expect(el.querySelector('.rail-badge')!.textContent!.trim()).toBe('3');
     expect(toggle().getAttribute('aria-label')).toBe('Hide filters (3 active)');
 
@@ -286,8 +292,61 @@ describe('Shell', () => {
     fixture.detectChanges();
     expect(el.querySelector('.rail-badge')!.textContent!.trim()).toBe('3');
     expect(toggle().getAttribute('aria-label')).toBe('Show filters (3 active)');
+    store.findingsOpen.set(false);
+
+    // on the cohorts screen, a facet that is the grouping axis is not applied, and is not counted
+    store.cohortAxis.set('schema');
+    fixture.detectChanges();
+    expect(el.querySelector('.rail-badge')!.textContent!.trim(), 'the range only').toBe('1');
+    store.cohortAxis.set(null);
+    fixture.detectChanges();
 
     // writing the signals above does not itself fetch; nothing may be left in flight
+    http.verify();
+  });
+
+  it('counts provider and role on the toggle like every other facet', () => {
+    store.filters.update(f => ({ ...f, provider: 'demo-gateway', role: 'orchestrator' }));
+    fixture.detectChanges();
+    expect(el.querySelector('.rail-badge')!.textContent!.trim()).toBe('2');
+
+    // a facet cleared to null narrows nothing and is not counted
+    store.filters.update(f => ({ ...f, provider: null }));
+    fixture.detectChanges();
+    expect(el.querySelector('.rail-badge')!.textContent!.trim()).toBe('1');
+    http.verify();
+  });
+
+  /**
+   * The filters live in the query string, and a plain routerLink writes none: every tab switch
+   * opened the next screen unfiltered while the rail — which had just been reset from the bare
+   * URL — gave no sign that anything had changed. The tabs carry the query with them now.
+   */
+  it('keeps the query string when a tab is followed, so the filters survive the switch', async () => {
+    const router = TestBed.inject(Router);
+    await router.navigateByUrl('/findings?schema=V3&range=7d');
+    fixture.detectChanges();
+    for (const req of http.match(() => true)) {
+      req.flush(req.request.url.includes('overview') ? overview : emptyFindings);
+    }
+    fixture.detectChanges();
+
+    const hrefs = Array.from(el.querySelectorAll('a.tab')).map(a => a.getAttribute('href'));
+    expect(hrefs).toEqual(['/?schema=V3&range=7d', '/findings?schema=V3&range=7d', '/cohorts?schema=V3&range=7d']);
+  });
+
+  /**
+   * The tabs carry the drill-downs to every screen, and on Overview and Cohorts they narrow
+   * nothing. Counted there, the badge announced a filter those screens were not applying.
+   */
+  it('counts a detector drill-down only on the screen it narrows', () => {
+    store.detector.set('edit-miss');
+    fixture.detectChanges();
+    expect(el.querySelector('.rail-badge'), 'on Overview it filters nothing').toBeNull();
+
+    store.findingsOpen.set(true);
+    fixture.detectChanges();
+    expect(el.querySelector('.rail-badge')!.textContent!.trim()).toBe('1');
     http.verify();
   });
 });

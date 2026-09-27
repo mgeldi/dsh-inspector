@@ -1,9 +1,10 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import type { FilterValues } from '../state/filters';
+import { FACET_KEYS, type FilterValues } from '../state/filters';
 import type {
-  CohortPageDto, FindingDetailDto, FindingsPageDto, IndexSummaryDto, OverviewDto, SortDir, SortField,
+  BreakdownRow, CohortPageDto, FindingContextDto, FindingDetailDto, FindingsPageDto, IndexSummaryDto,
+  JudgeDto, OverviewDto, SortDir, SortField,
 } from './types';
 
 export interface FindingsRequest {
@@ -36,10 +37,26 @@ export class ApiService {
     return this.http.get<FindingDetailDto>(`/api/findings/${id}`);
   }
 
+  /** The calls around a finding. No filters: the window is a fact of the finding's own stream. */
+  context(id: number, window = CONTEXT_WINDOW): Observable<FindingContextDto> {
+    return this.http.get<FindingContextDto>(`/api/findings/${id}/context`, {
+      params: new HttpParams().set('window', String(window)),
+    });
+  }
+
   cohorts(groupBy: string, baseline?: string, filters?: FilterValues): Observable<CohortPageDto> {
     let params = toParams(filters).set('groupBy', groupBy);
-    if (baseline) { params = params.set('baseline', baseline); }
+    params = set(params, 'baseline', baseline);
     return this.http.get<CohortPageDto>('/api/cohorts', { params });
+  }
+
+  judge(groupBy: string, baseline: string, candidate: string, filters?: FilterValues): Observable<JudgeDto> {
+    const params = toParams(filters).set('groupBy', groupBy).set('baseline', baseline).set('candidate', candidate);
+    return this.http.get<JudgeDto>('/api/judge', { params });
+  }
+
+  breakdown(filters?: FilterValues): Observable<BreakdownRow[]> {
+    return this.http.get<BreakdownRow[]>('/api/breakdown', { params: toParams(filters) });
   }
 
   runIndex(): Observable<IndexSummaryDto> {
@@ -47,12 +64,15 @@ export class ApiService {
   }
 }
 
+/** Calls on each side of a finding: the API's own default. It allows up to 50. */
+export const CONTEXT_WINDOW = 12;
+
 function toParams(filters?: FilterValues): HttpParams {
   let p = new HttpParams();
   if (!filters) { return p; }
   p = set(p, 'from', filters.from == null ? null : String(filters.from));
   p = set(p, 'to', filters.to == null ? null : String(filters.to));
-  for (const key of ['schema', 'model', 'preset', 'harnessVersion'] as const) {
+  for (const key of FACET_KEYS) {
     p = set(p, key, filters[key]);
   }
   return p;

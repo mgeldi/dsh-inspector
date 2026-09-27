@@ -7,6 +7,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import type { FindingsPageDto, OverviewDto } from '../api/types';
 import { InsightsStore } from '../state/insights.store';
 import { Shell } from './shell';
+import { Cohorts } from '../cohorts/cohorts';
+import type { CohortPageDto } from '../api/types';
 
 /**
  * The loop the whole URL change rests on: the address bar is upstream of the data. A control
@@ -17,9 +19,9 @@ import { Shell } from './shell';
 
 const overview: OverviewDto = {
   tiles: { sessions: 12, findings: 40, toolCalls: 300, steps: 90 },
-  planeMix: {}, topDetectors: [], topCodes: [], series: [], throughput: [],
+  planeMix: {}, topDetectors: [], topCodes: [], uncodedFindings: 0, series: [], throughput: [],
   vocabulary: {
-    schemas: ['V0', 'V3'], models: [], presets: [], harnessVersions: [],
+    schemas: ['V0', 'V3'], models: [], providers: [], roles: [], presets: [], harnessVersions: [],
     codes: ['FS_STALE_VERSION'], detectors: [],
   },
 };
@@ -134,5 +136,62 @@ describe('Shell URL loop', () => {
     });
 
     expect(location.path()).toBe('/findings');
+  });
+});
+
+/**
+ * The same loop with the real cohorts screen in the outlet. The shell used to write a fresh
+ * filters object on every URL change, and the cohorts screen watches that signal: a candidate
+ * change — a key no population depends on — re-asked the cohort table, and the new table
+ * re-asked the judge. Three requests for one verdict; one is what the change needs.
+ */
+describe('Shell URL loop on the cohorts screen', () => {
+  let http: HttpTestingController;
+  let router: Router;
+
+  const cohorts: CohortPageDto = {
+    groupBy: 'harnessVersion', baseline: '0.1.0', basisNote: null,
+    cohorts: ['0.1.0', '0.2.0', '0.3.0'].map(key => ({
+      key, sessions: 2, toolCalls: 100, findings: 1, guardFindings: 1, misuseFindings: 0, infraFindings: 0,
+      findingsPerKCalls: 10, violationRatePerK: 10, misuseRatePerK: 0, infraRatePerK: 0,
+      findingsPerKCallsDelta: 0, violationRatePerKDelta: 0, misuseRatePerKDelta: 0, infraRatePerKDelta: 0,
+    })),
+  };
+
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [Shell],
+      providers: [
+        provideHttpClient(withFetch()),
+        provideHttpClientTesting(),
+        provideRouter([{ path: 'cohorts', component: Cohorts }, { path: '**', children: [] }]),
+      ],
+    }).compileComponents();
+    http = TestBed.inject(HttpTestingController);
+    router = TestBed.inject(Router);
+  });
+
+  it('asks once for the verdict when only the candidate changes, and not again for the table', async () => {
+    await router.navigateByUrl('/cohorts');
+    const fixture = TestBed.createComponent(Shell);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    for (const req of http.match(r => r.url === '/api/overview')) { req.flush(overview); }
+    for (const req of http.match(r => r.url === '/api/findings')) { req.flush(findings); }
+    http.expectOne(r => r.url === '/api/cohorts').flush(cohorts);
+    fixture.detectChanges();
+    // three cohorts and no candidate yet: nothing to judge
+    expect(http.match(r => r.url === '/api/judge')).toHaveLength(0);
+
+    await router.navigate([], { queryParams: { candidate: '0.2.0' }, queryParamsHandling: 'merge' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(http.match(r => r.url === '/api/cohorts'), 'the table describes the same selection').toHaveLength(0);
+    const judges = http.match(r => r.url === '/api/judge');
+    expect(judges).toHaveLength(1);
+    expect(judges[0].request.params.get('candidate')).toBe('0.2.0');
+    judges[0].flush(null);
+    expect(http.match(() => true), 'and nothing else').toHaveLength(0);
   });
 });

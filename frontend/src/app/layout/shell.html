@@ -23,8 +23,12 @@
       </button>
       <span class="app-name">DSH Inspector</span>
       <nav class="tabs" aria-label="Sections">
+        <!-- queryParamsHandling="preserve": the filters live in the query string, and a plain
+             routerLink writes none, so every tab switch used to open the next screen unfiltered
+             while the reader believed the rail still applied. -->
         @for (t of tabs; track t.key) {
-          <a class="tab" [class.tab-active]="tabActive(t.key)" [routerLink]="t.link">{{ t.label }}</a>
+          <a class="tab" [class.tab-active]="tabActive(t.key)" [routerLink]="t.link"
+             queryParamsHandling="preserve">{{ t.label }}</a>
         }
       </nav>
       <span class="spacer"></span>
@@ -86,7 +90,7 @@
         <app-filter-rail />
       </aside>
     }
-    <main class="outlet-pane">
+    <main class="outlet-pane" #outlet>
       <router-outlet />
     </main>
   </div>
