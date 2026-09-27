@@ -269,9 +269,9 @@ attribution a loop can make precise by appending one entry per change (§12).
 
 ### 3.5 Model and context window come from an event, not the header
 
-`request/context` carries `{provider, model, contextWindow}`: `local-impl/local-router`
-(72), `local/model-27b-q6` (42), `local/local-router` (28),
-`model-27b-alt-q6` (12) and others. A session can carry more than one pair — two sessions
+`request/context` carries `{provider, model, contextWindow}`: on the measured install four
+provider/model pairs cover most sessions (72, 42, 28 and 12 of them), two of which report the same
+router alias as the model and differ only in the provider. A session can carry more than one pair — two sessions
 here have several, one has four — so **last-seen wins**, which keeps the filter vocabulary
 one-valued per session instead of turning the rail into a set. `context_window` is stored
 alongside it. Sessions with no such
@@ -622,8 +622,8 @@ Confidence is a property of the evidence, never a guess: absolute path plus muta
 `high`, basename plus mutating verb is `medium`, anything else is `external` and stores
 `confidence = NULL`, which the UI renders as **unattributed** rather than a percentage bar.
 
-**Measured false positive, kept as a regression fixture.** `audit-report.mjs` was
-flagged with `node scripts/audit-report.mjs` as its last in-window mention — *executing*
+**Measured false positive, kept as a regression fixture.** A script (`audit-report.mjs` in the
+fixture) was flagged with `node scripts/audit-report.mjs` as its last in-window mention — *executing*
 a script does not touch its mtime. Basename matching fired wrongly.
 
 **Known limits, stated before someone finds them:**
@@ -631,8 +631,8 @@ a script does not touch its mtime. Basename matching fired wrongly.
 - Attribution is **abductive**. The log never records what modified the file. Findings say
   "consistent with", never "caused by", and the UI shows the evidence instead of asking for
   trust in the label.
-- **Script opacity.** When a script mutates a file (`bash regen.sh` rewriting
-  `sim.mjs`), the command text never says so. This yields a false *negative*, and no
+- **Script opacity.** When a script mutates a file (`bash regen.sh` rewriting `sim.mjs`), the
+  command text never says so. This yields a false *negative*, and no
   amount of pattern work fixes it — the information is not in the log.
 - **Windows can be enormous.** Real sampled windows span 61k–174k seqs. Candidate search is
   bounded by the touched-set index, not by scanning the window.

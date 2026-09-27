@@ -72,12 +72,12 @@ record.
   permission model, the web UI on `:3080`. It is also the subject of this project. The
   session logs this dashboard indexes are DSH's own, written by the sessions that wrote
   the code.
-- **local-router** — the local inference layer in front of DSH, serving on `:8081`, with a
-  control socket that swaps the served model mid-session.
-- **Model:** served under the alias `local-router`; the checkpoint in service is
+- **The inference router** — the local inference layer in front of DSH, serving on `:8081`,
+  with a control socket that swaps the served model mid-session.
+- **Model:** served under one alias; the checkpoint in service is
   Qwen3.8-Flash-Next (NVFP4 quantisation), 262k context, reasoning effort `xhigh` by
   default. Worth noting for this project specifically: the session logs record the *alias*,
-  not the checkpoint — `request/context.model` is `local-router` in all six of this
+  not the checkpoint — `request/context.model` is that alias in all six of this
   repository's own sessions. A harness whose point is swapping models mid-session cannot
   currently tell you which one produced a given turn, which is a gap in the subject, not in
   the dashboard. *(Rev 5 closes the half of that gap the log allows: `request/context` also
