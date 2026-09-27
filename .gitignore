@@ -55,3 +55,9 @@ docs/tasks/
 
 # browser-automation scratch output (snapshots, screenshots, console logs)
 .playwright-mcp/
+
+# The operator's harness timeline (harness-timeline.example.yml shows the shape) and the
+# headless report: both describe a real setup. The timeline is anchored to the root:
+# backend/fixtures/harness-timeline.yml is the synthetic one the demo ships with.
+/harness-timeline.yml
+inspector-report*.json

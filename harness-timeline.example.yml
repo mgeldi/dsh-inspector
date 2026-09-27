@@ -1,0 +1,17 @@
+# Which harness version was live from when — the one fact about a session its log does not record.
+#
+# Copy this to harness-timeline.yml (gitignored) and add one entry every time the harness changes:
+# the instruction file, a route or its model, a timeout, a tool. run.sh imports it in every mode,
+# and the index gives each session the version of the last entry that is not after the session's
+# start. Then /api/cohorts?groupBy=harnessVersion and /api/judge compare "before" with "after".
+#
+# `since` is ISO-8601 with an offset or Z. The entries may be in any order. Sessions older than the
+# first entry keep inspector.harness-version (default: unknown). Everything below is invented.
+inspector:
+  harness-timeline:
+    - since: 2026-01-10T09:00:00Z
+      version: instructions-v1
+    - since: 2026-01-17T18:30:00+01:00
+      version: instructions-v2-read-before-edit
+    - since: 2026-01-24T08:00:00Z
+      version: subagent-route-swapped

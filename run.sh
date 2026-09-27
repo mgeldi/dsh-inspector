@@ -2,8 +2,22 @@
 #
 # DSH Inspector — one command, both processes, no manual step.
 #
-#   ./run.sh demo [corpus]   the committed synthetic fixtures (default)
-#   ./run.sh live [corpus]   your real DSH session logs, read-only
+#   ./run.sh demo [corpus]          the committed synthetic fixtures (default)
+#   ./run.sh live [corpus]          your real DSH session logs, read-only
+#   ./run.sh report [corpus] [out]  index, write one JSON analysis snapshot, exit — no ports
+#
+# report is the headless shape for an agent working on the harness between two changes: it
+# binds nothing, starts no frontend, and leaves one file (default backend/inspector-report.json)
+# with the board, findings by kind, the cohort tables and the judge's verdicts. The judge's pair
+# comes from INSPECTOR_BASELINE / INSPECTOR_CANDIDATE (and INSPECTOR_GROUP_BY, default
+# harnessVersion) when set. Like live, it defaults to ~/.dsh/sessions and its output describes
+# real sessions: a file to read, not to publish.
+#
+# live and report import harness-timeline.yml from the repository root when it exists (it is
+# gitignored; harness-timeline.example.yml shows the shape): the harness versions, one entry per
+# change, that the session logs do not record themselves. demo imports the committed synthetic
+# backend/fixtures/harness-timeline.yml instead, so a fresh clone's cohorts and judge have two
+# versions to compare — the operator's real timeline has no business describing the fixtures.
 #
 # demo is the default because it is the only corpus that can travel with the repo:
 # it is generated, it holds invented paths and project names, and a fresh clone can
@@ -34,33 +48,72 @@
 # — verified against a HOME holding no angular config, where the prompt otherwise fires.
 #
 set -euo pipefail
+# A path the caller typed is relative to where they typed it, not to this script's directory.
+caller=$PWD
+from_caller() {
+  case "$1" in
+    /*) printf '%s' "$1" ;;
+    *)  printf '%s/%s' "$caller" "$1" ;;
+  esac
+}
 cd "$(dirname "$0")"
 
 mode=${1:-demo}
 case "$mode" in
   demo)
-    # resolved against the JVM's working directory, which is backend/
-    corpus=${2:-fixtures/sessions}
+    # the default is resolved against the JVM's working directory, which is backend/; a path the
+    # caller gives is resolved against the caller's directory, like live and report
+    if [ -n "${2:-}" ]; then corpus=$(from_caller "$2"); else corpus=fixtures/sessions; fi
     db=inspector.sqlite
     banner="fixture corpus — synthetic data, safe to screenshot and publish"
     ;;
   live)
     # absolute, because the JVM starts inside backend/
-    corpus=${2:-"$HOME/.dsh/sessions"}
+    corpus=$(from_caller "${2:-"$HOME/.dsh/sessions"}")
     if [ ! -d "$corpus" ]; then
       echo "no session directory at '$corpus'" >&2
       echo "pass one as the second argument, or copy logs somewhere and point at it" >&2
       exit 1
     fi
-    corpus=$(realpath "$corpus")
+    corpus=$(cd "$corpus" && pwd -P)
     db=inspector-live.sqlite
     banner="LIVE corpus: $corpus — findings contain real paths and commands; do not publish screenshots of this run"
     ;;
+  report)
+    corpus=$(from_caller "${2:-"$HOME/.dsh/sessions"}")
+    if [ ! -d "$corpus" ]; then
+      echo "no session directory at '$corpus'" >&2
+      exit 1
+    fi
+    corpus=$(cd "$corpus" && pwd -P)
+    db=inspector-report.sqlite
+    # "-" is standard output, as for the application (ReportProperties), not a file named "-".
+    # Standard output then carries the JSON and nothing else: from here on every line this script
+    # or a build prints goes to stderr, and fd 3 keeps the real stdout for the report itself.
+    if [ "${3:-}" = - ]; then out=-; exec 3>&1 1>&2
+    elif [ -n "${3:-}" ]; then out=$(from_caller "$3"); else out="$PWD/backend/inspector-report.json"; fi
+    banner="REPORT from $corpus — the file describes real sessions; do not publish it"
+    ;;
   *)
     echo "usage: $(basename "$0") [demo|live] [corpus-directory]" >&2
+    echo "       $(basename "$0") report [corpus-directory] [output.json]" >&2
     exit 2
     ;;
 esac
+
+# The harness timeline: the fixtures' own in demo, the operator's when they keep one otherwise.
+# optional: a missing file is not an error.
+timeline=()
+if [ "$mode" = demo ]; then
+  timeline=(--spring.config.import="optional:file:$PWD/backend/fixtures/harness-timeline.yml")
+elif [ -f harness-timeline.yml ]; then
+  timeline=(--spring.config.import="optional:file:$PWD/harness-timeline.yml")
+fi
+
+# sqlite-jdbc loads its native library through System.load, and the JVM warns about that on every
+# start, quoting the jar's path — which sits under the user's home. Granting the access is what the
+# warning asks for, and it keeps the path out of the output.
+jvm=(--enable-native-access=ALL-UNNAMED)
 
 # Refuse to start on top of a running instance — before anything is built or launched.
 #
@@ -76,20 +129,42 @@ esac
 #
 # The probe is a request rather than a socket listing because `ss` and `lsof` are not both
 # present on the platforms this script is meant to run on, and curl already is.
-for probe in "backend http://127.0.0.1:8091/api/overview" "frontend http://127.0.0.1:4300/"; do
+shopt -s nullglob
+jars=( backend/target/*.jar )
+
+# A jar older than the source it was built from is not the application in this checkout: the
+# script used to build only when no jar existed, so after a pull or an edit it kept starting the
+# previous build, and the screen described code that was no longer there.
+needs_build=0
+if [ ${#jars[@]} -eq 0 ]; then
+  needs_build=1
+elif [ -n "$(find backend/src/main backend/pom.xml -newer "${jars[0]}" -print -quit)" ]; then
+  needs_build=1
+fi
+
+# demo and live bind both ports; report binds none, so to it only a backend JVM matters, and only
+# when the jar it may be running from has to be rebuilt. A dev server holds no jar.
+probes=()
+[ "$mode" != report ] && probes+=("frontend http://127.0.0.1:4300/")
+if [ "$mode" != report ] || [ "$needs_build" -eq 1 ]; then
+  probes+=("backend http://127.0.0.1:8091/api/overview")
+fi
+for probe in ${probes[@]+"${probes[@]}"}; do
   what=${probe%% *}
   url=${probe#* }
   if curl -sf -m 2 -o /dev/null "$url" 2>/dev/null; then
     printf '%s already answers on %s\n' "$what" "$url" >&2
-    printf 'stop that instance first: repackaging the jar under a running JVM corrupts its classpath\n' >&2
+    if [ "$what" = backend ] && [ "$needs_build" -eq 1 ]; then
+      printf 'stop that instance first: repackaging the jar under a running JVM corrupts its classpath\n' >&2
+    else
+      printf 'stop that instance first: this mode serves on the same port\n' >&2
+    fi
     exit 1
   fi
 done
 
-shopt -s nullglob
-jars=( backend/target/*.jar )
-if [ ${#jars[@]} -eq 0 ]; then
-  echo "no packaged jar under backend/target — building (mvn -q -DskipTests package)"
+if [ "$needs_build" -eq 1 ]; then
+  echo "no current jar under backend/target — building (mvn -q -DskipTests package)"
   ( cd backend && mvn -q -DskipTests package )
   jars=( backend/target/*.jar )
   if [ ${#jars[@]} -eq 0 ]; then
@@ -98,6 +173,32 @@ if [ ${#jars[@]} -eq 0 ]; then
   fi
 fi
 jar_path="target/${jars[0]##*/}"
+
+if [ "$mode" = report ]; then
+  judge=()
+  [ -n "${INSPECTOR_GROUP_BY:-}" ] && judge+=(--inspector.report.group-by="$INSPECTOR_GROUP_BY")
+  [ -n "${INSPECTOR_BASELINE:-}" ] && judge+=(--inspector.report.baseline="$INSPECTOR_BASELINE")
+  [ -n "${INSPECTOR_CANDIDATE:-}" ] && judge+=(--inspector.report.candidate="$INSPECTOR_CANDIDATE")
+  dest=$out
+  if [ "$out" = - ]; then
+    # The application logs to stdout (already sent to stderr above), so it writes the report to a
+    # private temporary file (mktemp: mode 0600) that is printed to fd 3 and removed at the end,
+    # or removed on failure.
+    dest=$(mktemp "${TMPDIR:-/tmp}/inspector-report.XXXXXX")
+    trap 'rm -f "$dest"' EXIT
+  fi
+  echo "corpus:   $banner"
+  ( cd backend && java "${jvm[@]}" -jar "$jar_path" --spring.main.web-application-type=none \
+      --reindex --inspector.corpus="$corpus" --inspector.db="$db" --inspector.report.path="$dest" \
+      ${timeline[@]+"${timeline[@]}"} ${judge[@]+"${judge[@]}"} ) < /dev/null
+  if [ "$out" = - ]; then
+    cat "$dest" >&3
+    echo "report:   standard output"
+  else
+    echo "report:   $out"
+  fi
+  exit 0
+fi
 
 # set -m puts every background job in its own process group, led by the job's pid. The
 # group ids are what the trap kills; with plain job control the children (the JVM, the
@@ -114,10 +215,11 @@ set -m
 # makes "the port answers" mean "the data is complete". The server boot that follows does no
 # re-index — the corpus recorded in the database matches, so its gate skips.
 echo "indexing ($mode) ..."
-( cd backend && java -jar "$jar_path" --spring.main.web-application-type=none \
-    --inspector.corpus="$corpus" --inspector.db="$db" ) < /dev/null
+( cd backend && java "${jvm[@]}" -jar "$jar_path" --spring.main.web-application-type=none \
+    --inspector.corpus="$corpus" --inspector.db="$db" ${timeline[@]+"${timeline[@]}"} ) < /dev/null
 
-( cd backend && exec java -jar "$jar_path" --inspector.corpus="$corpus" --inspector.db="$db" ) < /dev/null &
+( cd backend && exec java "${jvm[@]}" -jar "$jar_path" --inspector.corpus="$corpus" --inspector.db="$db" \
+    ${timeline[@]+"${timeline[@]}"} ) < /dev/null &
 BE=$!
 
 if [ ! -d frontend/node_modules ]; then
