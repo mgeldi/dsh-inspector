@@ -12,14 +12,17 @@ with no request leaving it. Later it was worked on with a hosted assistant as we
 are true, the split is not tidy, and the interesting part is where the line actually falls
 — so it is drawn here rather than summarised.
 
-**Built locally, and not touched since:** the specification, the data model, the detection
-model and every decision in it. `inspector.ingest` — the layer that sees raw session lines
-and the one the privacy boundary is drawn around — has no commit from the hosted assistant
-at all. Neither has `StampGuardDetector`, the causal attribution that is the only real
-domain reasoning in the program. The cut list, the measured numbers and the plane mapping
-are local decisions.
+**Built locally:** the specification through rev 4, the data model, the detection model and
+every decision in it up to that point. `StampGuardDetector`'s attribution — the only real
+domain reasoning in the program — is the local stack's; the hosted assistant's only edit to it
+in rev 5 was mechanical (one new constructor argument, `null`, where a `Finding` is built). The
+cut list, the measured numbers through rev 4 and the plane mapping are local decisions.
 
-**Where the hosted assistant worked, in three rounds:**
+*An earlier version of this paragraph said `inspector.ingest` had no commit from the hosted
+assistant at all. Rev 5 made that false, and the paragraph is corrected rather than left to
+describe a tree that moved: see the fourth round below.*
+
+**Where the hosted assistant worked, in four rounds:**
 
 - **A review pass.** It read the finished codebase and reported defects. Every one of the
   fifteen fixes in §3 was then written by the local stack, and two of them corrected the
@@ -35,6 +38,17 @@ are local decisions.
   fixes it found by running the tool on a real corpus: an unmapped error code landing on
   the wrong plane, a filter facet that could not select its own `unknown` bucket, and a
   confidence label that described a search which never ran.
+- **Rev 5: the inspector as a judge, and a JPA store** (DESIGN.md's rev-5 note lists every
+  section). This round did reach into `inspector.ingest`, and changed behaviour there: it fixed
+  the fatal-turn parse (the ingestor read a field DSH does not write, so every real fatal turn
+  had been stored without a code), kept `request/context.provider`, and split the shell
+  analyzer's mutating verb into write forms. It added the edit-miss and shell-edit detectors, the
+  harness timeline, the judge with its statistics, the breakdown and the finding context, the
+  headless report, parallel ingest, and moved the store from `JdbcTemplate` to Spring Data JPA —
+  a reversal of rev 4's argument that the owner asked for, recorded in DESIGN.md §4.2 with what it
+  cost rather than silently. The frontend half ran as a separate delegated lane. The owner set the
+  direction and approved it; the design and the code in this round are the hosted assistant's,
+  and the commits say so.
 
 **This is checkable rather than asserted.** Every commit that hosted assistance touched
 carries a `Co-Authored-By` trailer, so the split is a query rather than a claim:
@@ -66,7 +80,9 @@ record.
   not the checkpoint — `request/context.model` is `local-router` in all six of this
   repository's own sessions. A harness whose point is swapping models mid-session cannot
   currently tell you which one produced a given turn, which is a gap in the subject, not in
-  the dashboard.
+  the dashboard. *(Rev 5 closes the half of that gap the log allows: `request/context` also
+  carries the provider route, and on this install the route names the model — DESIGN.md §3.5.
+  The checkpoint behind a route is still not in the log.)*
 - **Hardware:** RTX 5090 (32 GB), Ryzen 7 9800X3D, 96 GB RAM. The model served the agent on
   the same GPU the agent was running beside — which is the direct reason for the port and
   process rules in the checkout's `AGENTS.md`, and for the incident in §4: an agent that can
@@ -162,6 +178,10 @@ signals force-ignored for background jobs. Each was preceded by a green run.
 | Re-index against an old schema → HTTP 500 | Review of the version gate; `meta.schema_version` check now wipes and re-indexes in one transaction | Any schema evolution between two runs of one clone: the Index button returning a stack trace |
 | `@SpringBootTest` runs `ApplicationRunner` beans under Boot 4, against the author's belief that it does not | The implementer verified it empirically; every test context now passes `--no-index` | Every store-touching test running the indexer against whatever the classpath holds — slow, flaky, machine-dependent |
 | `/api/cohorts` accepted the shared filter parameters and ignored them: the store sent them, the client encoded them, the controller did not declare them, the repository had no `WHERE` at all. Concealed by an HTTP test double that answers whatever it is handed, and by the spec asserting the contract was shared | Running the shipped artifact: filtering to one of five models returned byte-identical totals to the unfiltered read, and a value that exists nowhere was answered with HTTP 200 | A comparison screen showing unfiltered rates under any filter — the cohorts view answering a question about this window with the whole corpus, with no error and no warning |
+| The judge's verdicts moved with its estimator four times. A pooled Pearson φ and then a sandwich φ on the normal quantile both called failed edits "worse" after the 27B swap (the first also called shell edits "better"). An uncapped t then called file-not-found "worse" on one baseline session. At six sessions a side the normal quantile gave a false verdict in 8–15% of simulated no-difference comparisons, the uncapped t in 7–12%, against a nominal 5% | Two adversarial re-verifies that simulated the estimator under no difference. The unit tests checked the arithmetic each estimator was written to do, and passed every time | The harness loop's first lesson, "the swap made edits worse", written into the docs and the agent's memory as a result, on evidence that cannot carry it |
+| The first t-quantile fix gave zero degrees of freedom to every side whose findings sat in one session, a single finding included. A code that fell from twenty to none could be called "better"; one that fell to one never could | Looking at the rendered judge on the fixtures: intervals of [0.00–1.7×10⁹] on single-finding rows | A judge unable to confirm a fix in exactly the rows where the fix worked |
+| A quoted-string regex that recursed once per character overflowed an ingest worker's stack on one long command in the real corpus. It happened on some runs and not others, depending on how large the JIT made the frames | A corpus re-measure after an unrelated change. The previous run of the same code had passed | "Clone and index" failing intermittently with a StackOverflowError, on exactly the long commands the shell detectors exist for |
+| Once the overflow was fixed, the path pattern behind it backtracked quadratically on a long token, and cubically when the token held `~` or `+`. A 1 MB payload stalled a worker for 20 s, and the branch's own regression test took 220 s | A re-verify that timed hostile inputs. The suite's running time had said so for two rounds, and nobody read it | Indexing that stalls instead of crashing. That is slower to notice, and the index waits on its workers in order |
 ### The external review pass
 
 A hosted assistant read the finished codebase and reported defects; the fixes were written
@@ -393,7 +413,9 @@ The five defects added in this revision repeat the launcher table's shape: each 
   one configured property, `version_inferred = 1` for all — and the two-corpus,
   two-versions index exists only in the test fixtures. The cohorts screen's one-row
   banner is the honest rendering of that gap, but a spec sentence should not out-run its
-  generator.
+  generator. (Closed in rev 5, from the other side: the demo imports
+  `backend/fixtures/harness-timeline.yml`, which gives the fixture sessions two synthetic
+  versions by start time, and the judge screenshot is taken on exactly that.)
 - Brief the implementer on the run.sh process-group problem as a *known hazard*, with
   the `ss -ltnp` evidence, instead of letting it rediscover it. It is the one defect
   where the machine's own job control was the trap, and the environment is exactly what

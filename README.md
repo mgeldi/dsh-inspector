@@ -3,8 +3,9 @@
 DSH Inspector indexes the local session logs of the DeepSeek Harness (DSH) — the agent's
 own infrastructure — and renders them as a read-only web dashboard of failure rates and
 attributed causes. It answers two questions: "is this build worse than the last one?",
-answered as a rate against a baseline cohort, and "why did this one go wrong?", answered as
-the causal chain behind a single finding.
+answered as a rate against a baseline cohort — and, since rev 5, as a verdict with a
+confidence interval behind it — and "why did this one go wrong?", answered as the causal chain
+behind a single finding and the sequence of tool calls around it.
 
 ## Quickstart
 
@@ -15,7 +16,7 @@ cd "DSH Inspector"
 ```
 
 Open http://127.0.0.1:4300. That is the whole manual step: the script builds the jar if
-`backend/target/*.jar` is missing, installs the frontend dependencies if they are missing,
+`backend/target/*.jar` is missing or older than the source, installs the frontend dependencies if they are missing,
 indexes the committed fixture corpus, and only then starts the two processes — so the
 dashboard arrives populated and complete, with no database, no jar and no flag to remember.
 Ctrl-C stops both.
@@ -28,7 +29,7 @@ a filtered view is a link. Opening a finding gives the second question its answe
 that went stale, the command that moved it, and the refusal, in sequence order, with the
 command excerpt truncated and credential-masked before it was ever stored.
 
-![A stamp-guard finding with its causal chain and redacted evidence](docs/finding-detail.png)
+![A stamp-guard finding with its causal chain, the tool calls around it, and redacted evidence](docs/finding-detail.png)
 
 ## Decisions and trade-offs
 
@@ -42,12 +43,14 @@ command excerpt truncated and credential-masked before it was ever stored.
 - Rates are findings per 1,000 *observed* tool calls, excluding the 794 of 17,244 rows that
   are a result with no matching call, because a denominator that counted them would
   understate every rate and shift whenever the harness writes a result line.
-- Storage is one SQLite file with a schema-version gate that wipes and re-indexes instead of
-  a migration engine: the index is derived and disposable, so migrations would be machinery
-  more expensive than the data they protect.
+- Storage is one SQLite file behind Spring Data JPA, with `schema.sql` as the DDL that Hibernate
+  validates against and a schema-version gate that rebuilds instead of a migration engine: the
+  index is derived and disposable, so migrations would be machinery more expensive than the data
+  they protect. The gate runs before validation, because on a file an older build wrote, a
+  validation failure is a failed boot where the right answer is a rebuild.
 - There is no authentication, no incremental indexing, no datepicker and no mobile layout;
   each is named with its reason in docs/DESIGN.md, and a full re-index of the measured
-  168 stream corpus takes about 4 s, which is why re-indexing is the shipped answer to most
+  168 stream corpus takes about 2 s, which is why re-indexing is the shipped answer to most
   of them.
 
 ## What it refuses to do
@@ -71,7 +74,7 @@ main class and fails if a content type or a content field name appears outside
   until a session id could actually leave the machine (docs/DESIGN.md, "Not built, by
   decision", and §10).
 - **Incremental indexing / file watching.** A full re-index of the measured 173 MB, 168
-  stream corpus takes 4.3 s, so watching would be machinery to hide a wait that does not
+  stream corpus takes about 2 s (ingest runs in parallel, writes stay serial), so watching would be machinery to hide a wait that does not
   exist (docs/DESIGN.md §2, §12).
 - **A datepicker.** Four presets (24 h / 7 d / 30 d / all time) cover the click-to-filter
   interaction; `from`/`to` remain in the API, so it is a UI-only cut (docs/DESIGN.md §8).
@@ -81,6 +84,44 @@ main class and fails if a content type or a content field name appears outside
 - **Migrations.** One SQLite file, with a schema-version gate that wipes and re-indexes. A
   migration engine is deferred until a second schema version is real (docs/DESIGN.md §4.2,
   §9).
+
+## Judging a harness change
+
+The dashboard's cohorts say what the rates are; a loop that changes the harness needs to know
+whether a difference is real. Four pieces, all over the same filter as every other screen:
+
+- **A harness timeline.** Session logs do not record which harness version they ran under. Copy
+  `harness-timeline.example.yml` to `harness-timeline.yml` (gitignored) and add one entry per
+  change — instruction file, route, model, timeout. Every `run.sh` mode imports it, and each
+  session gets the version that was live when it started.
+- **The judge** — `GET /api/judge?groupBy=harnessVersion&baseline=…&candidate=…`. Per code, per
+  plane and in total: both rates per 1,000 calls, the rate ratio with a 95% interval widened for
+  failures that cluster in a few sessions (and read on a t quantile, so evidence from one or two
+  sessions cannot decide anything), and a verdict (`better`, `worse`, `inconclusive`, or
+  `no-data` when a side has no calls) read from the interval, never from the point estimate. `?role=orchestrator` or `?provider=…` narrows
+  it to one model on a setup that serves several under one model id.
+- **Findings by kind** — `GET /api/breakdown`: detector, category, code and detail, each with its
+  rate. A failed edit is split by what came before it (the model's own edit, a read, the same
+  failed edit), and a shell command that rewrote a tracked file is counted on its own.
+- **The sequence around a finding** — `GET /api/findings/{id}/context`: the tool calls of its
+  stream before and after it, structure only.
+
+![The judge on the committed fixtures: two synthetic harness versions, and seventeen findings
+that cannot tell them apart](docs/judge.png)
+
+On the fixtures every verdict is "inconclusive", and that is the point of the screen: seventeen
+findings cannot tell two harness versions apart, and a tool that let a reader believe otherwise
+would be the dangerous kind.
+
+For an agent running between two changes there is a headless form that binds no port:
+
+```bash
+INSPECTOR_BASELINE=v1 INSPECTOR_CANDIDATE=v2 ./run.sh report [corpus] [out.json]
+```
+
+It indexes, writes one JSON snapshot (board, breakdown, cohorts by version, model, provider and
+role, the judge's verdicts, recent findings) and exits. It describes real sessions: read it, do not
+publish it.
 
 ## Looking at your own sessions
 
@@ -118,8 +159,8 @@ corpus".
 ## Tests, ports and the two backend surfaces
 
 ```bash
-cd backend && mvn test                 # 247 tests, 1 skipped
-cd frontend && npm test -- --watch=false   # 95 tests; Vitest 4 + jsdom, run through the Angular builder
+cd backend && mvn test                 # 323 tests, 1 skipped (the corpus smoke: -Dinspector.smoke=true)
+cd frontend && npm test -- --watch=false   # 181 tests; Vitest 4 + jsdom, run through the Angular builder
 ```
 
 | Port | What |
